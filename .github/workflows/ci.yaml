@@ -1,0 +1,73 @@
+name: Java CI with Maven
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # ------------------------------------------------------------
+  # Build & Test
+  # ------------------------------------------------------------
+  build:
+    name: Build & Test (JaCoCo)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 and Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Ejecuta compilación, tests y verificación
+      - name: Compile, Test and Verify
+        run: mvn -B clean verify
+
+      # Sube los reportes de surefire
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+
+      # Sube el reporte HTML de cobertura de JaCoCo
+      - name: Upload JaCoCo Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+
+  # ------------------------------------------------------------
+  # Dependency Graph
+  # ------------------------------------------------------------
+  dependency-submission:
+    name: Dependency Submission
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 and Maven
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Submit dependency graph to GitHub
+        uses: advanced-security/maven-dependency-submission-action@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
