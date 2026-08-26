@@ -71,4 +71,4 @@ jobs:
       - name: Submit dependency graph to GitHub
         uses: advanced-security/maven-dependency-submission-action@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
