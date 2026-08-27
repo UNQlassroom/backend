@@ -1,6 +1,8 @@
 package com.ar.edu.unq.unqlassroom.github
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
@@ -22,7 +24,9 @@ import java.util.Base64
 @Component
 class GitHubAppClient(
     private val properties: GitHubAppProperties,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: ObjectMapper = ObjectMapper()
+        .findAndRegisterModules()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
 ) {
     private val httpClient: HttpClient = HttpClient.newHttpClient()
 
@@ -161,9 +165,10 @@ class GitHubAppClient(
         ?: throw IllegalStateException("github.app.private-key-path must point to the PEM file in the project root")
 }
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GitHubInstallationTokenResponse(
-    val token: String,
-    @JsonProperty("expires_at") val expiresAt: Instant,
+    @JsonProperty("token") val token: String = "",
+    @JsonProperty("expires_at") val expiresAt: String = "",
     @JsonProperty("permissions") val permissions: Map<String, String>? = null,
     @JsonProperty("repository_selection") val repositorySelection: String? = null,
 )
