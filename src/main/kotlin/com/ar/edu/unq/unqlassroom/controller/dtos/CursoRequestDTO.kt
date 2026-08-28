@@ -5,8 +5,8 @@ import com.ar.edu.unq.unqlassroom.model.Curso
 data class CursoRequestDTO(
     val materia: String,
     val anio: Int,
-    val semestre: String,
-    val comision: String,
+    val semestre: Int,
+    val comision: Int,
     val descripcion: String
 ) {
     fun aModelo(): Curso = Curso(

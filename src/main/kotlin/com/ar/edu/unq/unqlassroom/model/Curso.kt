@@ -17,11 +17,22 @@ class Curso (
     var anio: Int,
 
     @Column(nullable = false)
-    var semestre: String,
+    var semestre: Int,
 
     @Column(nullable = false)
-    var comision: String,
+    var comision: Int,
 
     @Column(nullable = true)
-    var descripcion: String? = null
-)
+    var descripcion: String? = null,
+
+    @Column(nullable = true)
+    var githubTeamId: Long? = null,
+
+    @Column(nullable = true)
+    var githubTeamSlug: String? = null
+) {
+    fun generarNombreTeam(): String {
+        val mat = materia.lowercase().trim().replace("\\s+".toRegex(), "_")
+        return "${anio}s${semestre}_c${comision}_${mat}"
+    }
+}
