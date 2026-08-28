@@ -13,7 +13,7 @@ class CursoServiceImpl (
     private val cursoRepository: CursoRepository)
     : CursoService {
 
-    override fun crear(dto: CursoRequestDTO): CursoResponseDTO {
+    override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
         val curso = dto.aModelo()
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)

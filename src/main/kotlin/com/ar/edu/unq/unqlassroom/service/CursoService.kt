@@ -5,6 +5,6 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 
 interface CursoService {
 
-    fun crear(dto: CursoRequestDTO): CursoResponseDTO
+    fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO
 
 }
