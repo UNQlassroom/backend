@@ -35,4 +35,6 @@ class Curso (
         val mat = materia.lowercase().trim().replace("\\s+".toRegex(), "_")
         return "${anio}s${semestre}_c${comision}_${mat}"
     }
+
+    fun generarDescripcionTeam(): String = "Curso de $materia - Año $anio - Semestre $semestre - Comisión $comision"
 }

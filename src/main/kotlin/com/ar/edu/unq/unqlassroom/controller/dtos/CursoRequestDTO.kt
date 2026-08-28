@@ -7,13 +7,15 @@ data class CursoRequestDTO(
     val anio: Int,
     val semestre: Int,
     val comision: Int,
-    val descripcion: String
 ) {
-    fun aModelo(): Curso = Curso(
-        materia = this.materia,
-        anio = this.anio,
-        semestre = this.semestre,
-        comision = this.comision,
-        descripcion = this.descripcion
-    )
+    fun aModelo(): Curso {
+        val curso = Curso(
+            materia = this.materia,
+            anio = this.anio,
+            semestre = this.semestre,
+            comision = this.comision,
+        )
+        curso.descripcion = curso.generarDescripcionTeam()
+        return curso
+    }
 }
