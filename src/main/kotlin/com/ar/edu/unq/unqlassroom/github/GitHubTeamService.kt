@@ -18,7 +18,7 @@ class GitHubTeamService(
     @JvmOverloads
     fun createTeam(
         name: String,
-        description: String,
+        description: String? = null,
         privacy: String = "closed", // TODO esto deberia ser secret
         org: String? = null,
     ): GitHubTeamResponse {
