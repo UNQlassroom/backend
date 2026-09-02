@@ -23,7 +23,7 @@ class Curso (
     var comision: Int,
 
     @Column(nullable = true)
-    var descripcion: String,
+    var descripcion: String? = null,
 
     @Column(nullable = true)
     var githubTeamId: Long? = null,
