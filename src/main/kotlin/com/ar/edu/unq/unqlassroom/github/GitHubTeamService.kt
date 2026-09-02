@@ -19,7 +19,7 @@ class GitHubTeamService(
     fun createTeam(
         name: String,
         description: String? = null,
-        privacy: String = "closed",
+        privacy: String = "closed", // TODO esto deberia ser secret
         org: String? = null,
     ): GitHubTeamResponse {
         val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()

@@ -20,6 +20,7 @@ class CursoServiceImpl (
         val teamResponse = gitHubTeamService.createTeam(
             name = curso.generarNombreTeam(),
             description = curso.generarDescripcionTeam()
+            // TODO aca falta pasar como team maintainer al profesor
         )
         curso.githubTeamId = teamResponse.id
         curso.githubTeamSlug = teamResponse.slug
