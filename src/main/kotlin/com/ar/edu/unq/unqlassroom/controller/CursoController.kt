@@ -19,7 +19,7 @@ class CursoController (
     val cursoService: CursoService
 )   {
 
-    @PostMapping
+    @PostMapping("/crear")
     fun crearCurso(@RequestBody @Valid cursoRequest: CursoRequestDTO
     ): ResponseEntity<CursoResponseDTO> {
         val response = cursoService.crearCurso(cursoRequest)
