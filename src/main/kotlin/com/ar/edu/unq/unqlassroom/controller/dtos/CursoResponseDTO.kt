@@ -19,7 +19,7 @@ data class CursoResponseDTO(
             anio = curso.anio,
             semestre = curso.semestre,
             comision = curso.comision,
-            descripcion = curso.descripcion,
+            descripcion = curso.descripcion ?: "",
             githubTeamId = curso.githubTeamId,
             githubTeamSlug = curso.githubTeamSlug,
         )
