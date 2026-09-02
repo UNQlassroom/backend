@@ -8,4 +8,5 @@ data class GitHubAppProperties(
     val installationId: String = "",
     val privateKeyPath: String = "",
     val apiBaseUrl: String = "https://api.github.com",
+    val organization: String = "",
 )
