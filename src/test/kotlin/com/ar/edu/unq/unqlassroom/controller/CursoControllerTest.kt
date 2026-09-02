@@ -58,7 +58,7 @@ class CursoControllerTest {
         `when`(cursoService.crearCurso(requestDTO)).thenReturn(responseDTO)
 
         mockMvc.perform(
-            post("/cursos")
+            post("/cursos/crear")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
