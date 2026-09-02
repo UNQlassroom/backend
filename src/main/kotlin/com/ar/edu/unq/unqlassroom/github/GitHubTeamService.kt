@@ -38,6 +38,25 @@ class GitHubTeamService(
         )
     }
 
+    @JvmOverloads
+    fun addMemberToTeam(
+        teamSlug: String,
+        username: String,
+        role: String = "member",
+        org: String? = null,
+    ): GitHubTeamMembershipResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            TeamMembershipRequest(role = role),
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "PUT",
+            path = "/orgs/$targetOrg/teams/$teamSlug/memberships/$username",
+            responseType = GitHubTeamMembershipResponse::class.java,
+            body = requestBody,
+        )
+    }
+
     private fun requiredOrganization(): String = properties.organization.trim().takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -58,4 +77,16 @@ data class GitHubTeamResponse(
     @JsonProperty("description") val description: String? = null,
     @JsonProperty("privacy") val privacy: String? = null,
     @JsonProperty("html_url") val htmlUrl: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class TeamMembershipRequest(
+    @JsonProperty("role") val role: String = "member",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubTeamMembershipResponse(
+    @JsonProperty("url") val url: String = "",
+    @JsonProperty("role") val role: String = "",
+    @JsonProperty("state") val state: String = "",
 )
