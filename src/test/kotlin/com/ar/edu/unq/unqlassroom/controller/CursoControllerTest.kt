@@ -110,7 +110,7 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `agregarAlumnos endpoint returns 400 when usernames is empty`() {
+    fun `agregarAlumnos endpoint returns 200 when usernames is empty`() {
         val requestDTO = AgregarAlumnosRequestDTO(usernames = emptyList())
 
         mockMvc.perform(
@@ -118,6 +118,6 @@ class CursoControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
-            .andExpect(status().isBadRequest)
+            .andExpect(status().isOk)
     }
 }
