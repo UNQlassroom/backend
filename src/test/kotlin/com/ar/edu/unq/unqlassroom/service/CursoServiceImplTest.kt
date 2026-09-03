@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamMembershipResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
@@ -19,8 +20,6 @@ import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
-import org.springframework.http.HttpStatus
-import org.springframework.web.server.ResponseStatusException
 import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
@@ -181,14 +180,14 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `agregarAlumnos throws 404 NOT_FOUND when curso does not exist`() {
+    fun `agregarAlumnos throws CursoNotFoundException when curso does not exist`() {
         `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
 
-        val exception = assertThrows<ResponseStatusException> {
+        val exception = assertThrows<com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException> {
             cursoService.agregarAlumnos(99L, AgregarAlumnosRequestDTO(listOf("alumno1")))
         }
 
-        assertEquals(HttpStatus.NOT_FOUND, exception.statusCode)
+        assertEquals("Curso no encontrado", exception.message)
     }
 
     @Test
@@ -203,10 +202,10 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(2L)).thenReturn(Optional.of(curso))
 
-        val exception = assertThrows<ResponseStatusException> {
+        val exception = assertThrows<CursoSinGitHubTeamAsociadoException> {
             cursoService.agregarAlumnos(2L, AgregarAlumnosRequestDTO(listOf("alumno1")))
         }
 
-        assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+        assertEquals("Curso sin GitHub Team asociado", exception.message)
     }
 }
