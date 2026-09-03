@@ -85,4 +85,53 @@ class GitHubTeamServiceTest {
 
         assertEquals("github.app.organization must be configured with the GitHub Organization name", exception.message)
     }
+
+    @Test
+    fun `addMemberToTeam sends PUT request to team memberships endpoint`() {
+        val expectedResponse = GitHubTeamMembershipResponse(
+            url = "https://api.github.com/organizations/1/team/240358/memberships/octocat",
+            role = "member",
+            state = "active"
+        )
+
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(GitHubTeamMembershipResponse::class.java),
+                body = anyString()
+            )
+        ).thenReturn(expectedResponse)
+
+        val result = gitHubTeamService.addMemberToTeam(
+            teamSlug = "2026s1_c1_intro",
+            username = "octocat"
+        )
+
+        assertNotNull(result)
+        assertEquals("member", result.role)
+        assertEquals("active", result.state)
+
+        verify(gitHubAppClient).executeInstallationRequest(
+            method = anyString(),
+            path = anyString(),
+            responseType = anyClass(GitHubTeamMembershipResponse::class.java),
+            body = anyString()
+        )
+    }
+
+    @Test
+    fun `addMemberToTeam throws exception when organization is blank and not provided`() {
+        `when`(properties.organization).thenReturn("")
+
+        val exception = assertThrows<IllegalStateException> {
+            gitHubTeamService.addMemberToTeam(
+                teamSlug = "2026s1_c1_intro",
+                username = "octocat"
+            )
+        }
+
+        assertEquals("github.app.organization must be configured with the GitHub Organization name", exception.message)
+    }
 }

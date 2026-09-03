@@ -1,6 +1,9 @@
 package com.ar.edu.unq.unqlassroom.service
 
+import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
+import com.ar.edu.unq.unqlassroom.github.GitHubTeamMembershipResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
 import com.ar.edu.unq.unqlassroom.model.Curso
@@ -9,6 +12,7 @@ import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.InjectMocks
 import org.mockito.Mock
@@ -16,6 +20,7 @@ import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
 class CursoServiceImplTest {
@@ -125,5 +130,82 @@ class CursoServiceImplTest {
             comision = 1
         )
         assertEquals("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1", curso.generarDescripcionTeam())
+    }
+
+    @Test
+    fun `agregarAlumnos calls gitHubTeamService for each distinct username and returns response`() {
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubTeamId = 123456L,
+            githubTeamSlug = "2026s1_c1_estructuras_de_datos"
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val membership1 = GitHubTeamMembershipResponse(
+            url = "url/alumno1",
+            role = "member",
+            state = "active"
+        )
+        val membership2 = GitHubTeamMembershipResponse(
+            url = "url/alumno2",
+            role = "member",
+            state = "pending"
+        )
+
+        `when`(gitHubTeamService.addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null))
+            .thenReturn(membership1)
+        `when`(gitHubTeamService.addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno2", "member", null))
+            .thenReturn(membership2)
+
+        val request = AgregarAlumnosRequestDTO(
+            usernames = listOf("alumno1", "alumno2", "alumno1 ")
+        )
+
+        val response = cursoService.agregarAlumnos(1L, request)
+
+        assertEquals(1L, response.cursoId)
+        assertEquals("2026s1_c1_estructuras_de_datos", response.teamSlug)
+        assertEquals(2, response.alumnos.size)
+        assertEquals("alumno1", response.alumnos[0].username)
+        assertEquals("active", response.alumnos[0].state)
+        assertEquals("alumno2", response.alumnos[1].username)
+        assertEquals("pending", response.alumnos[1].state)
+
+        verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null)
+        verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno2", "member", null)
+    }
+
+    @Test
+    fun `agregarAlumnos throws CursoNotFoundException when curso does not exist`() {
+        `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val exception = assertThrows<com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException> {
+            cursoService.agregarAlumnos(99L, AgregarAlumnosRequestDTO(listOf("alumno1")))
+        }
+
+        assertEquals("Curso no encontrado", exception.message)
+    }
+
+    @Test
+    fun `agregarAlumnos throws 400 BAD_REQUEST when curso has no github team slug`() {
+        val curso = Curso(
+            id = 2L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubTeamSlug = null
+        )
+        `when`(cursoRepository.findById(2L)).thenReturn(Optional.of(curso))
+
+        val exception = assertThrows<CursoSinGitHubTeamAsociadoException> {
+            cursoService.agregarAlumnos(2L, AgregarAlumnosRequestDTO(listOf("alumno1")))
+        }
+
+        assertEquals("Curso sin GitHub Team asociado", exception.message)
     }
 }

@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.controller
 
+import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
@@ -8,6 +10,7 @@ import lombok.RequiredArgsConstructor
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CrossOrigin
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -28,6 +31,12 @@ class CursoController (
         return ResponseEntity.status(HttpStatus.CREATED).body(response)
     }
 
-
-
+    @PostMapping("/{id}/alumnos")
+    fun agregarAlumnos(
+        @PathVariable id: Long,
+        @RequestBody @Valid request: AgregarAlumnosRequestDTO,
+    ): ResponseEntity<AgregarAlumnosResponseDTO> {
+        val response = cursoService.agregarAlumnos(id, request)
+        return ResponseEntity.ok(response)
+    }
 }

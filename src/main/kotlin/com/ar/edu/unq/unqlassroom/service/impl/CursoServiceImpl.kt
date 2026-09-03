@@ -1,5 +1,10 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
+import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
+import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
+import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
@@ -27,5 +32,38 @@ class CursoServiceImpl (
 
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)
+    }
+
+    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AgregarAlumnosResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
+            ?: throw CursoSinGitHubTeamAsociadoException()
+
+        val distinctUsernames = dto.usernames
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val alumnosAgregados = distinctUsernames.map { username ->
+            val membership = gitHubTeamService.addMemberToTeam(
+                teamSlug = teamSlug,
+                username = username,
+                role = "member",
+            )
+            AlumnoTeamMembershipDTO(
+                username = username,
+                role = membership.role,
+                state = membership.state,
+            )
+        }
+
+        return AgregarAlumnosResponseDTO(
+            cursoId = cursoId,
+            teamSlug = teamSlug,
+            alumnos = alumnosAgregados,
+        )
     }
 }
