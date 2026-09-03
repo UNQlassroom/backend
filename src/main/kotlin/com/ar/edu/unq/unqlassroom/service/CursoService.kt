@@ -10,4 +10,6 @@ interface CursoService {
     fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO
 
     fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AgregarAlumnosResponseDTO
+
+    fun obtenerCursos(): List<CursoResponseDTO>
 }

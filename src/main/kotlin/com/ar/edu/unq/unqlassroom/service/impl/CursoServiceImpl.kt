@@ -13,6 +13,7 @@ import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 
+
 @Service
 @Transactional
 class CursoServiceImpl (
@@ -32,6 +33,10 @@ class CursoServiceImpl (
 
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)
+    }
+
+    override fun obtenerCursos(): List<CursoResponseDTO> {
+        return cursoRepository.findAll().map { CursoResponseDTO.desdeModelo(it) }
     }
 
     override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AgregarAlumnosResponseDTO {

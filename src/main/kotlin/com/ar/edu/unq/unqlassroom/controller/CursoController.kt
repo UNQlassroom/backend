@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CrossOrigin
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -38,5 +39,11 @@ class CursoController (
     ): ResponseEntity<AgregarAlumnosResponseDTO> {
         val response = cursoService.agregarAlumnos(id, request)
         return ResponseEntity.ok(response)
+    }
+
+    @GetMapping
+    fun obtenerCursos(): ResponseEntity<List<CursoResponseDTO>> {
+        val cursos = cursoService.obtenerCursos()
+        return ResponseEntity.ok(cursos)
     }
 }
