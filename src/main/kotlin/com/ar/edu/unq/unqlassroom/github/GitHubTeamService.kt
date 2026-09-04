@@ -57,6 +57,20 @@ class GitHubTeamService(
         )
     }
 
+    @JvmOverloads
+    fun getTeamMembers(teamSlug: String,
+                       org: String? = null,
+                       role: String = "member"
+    ): List<GitHubTeamMemberResponse> {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        return gitHubAppClient.executeInstallationRequest(
+            method = "GET",
+            path = "/orgs/$targetOrg/teams/$teamSlug/members?role=all&per_page=100", // TODO aca tenemos role=all, por ende estamos trayendo maintainers tambien (por ahora). despues cambiamos a role=member
+            responseType = Array<GitHubTeamMemberResponse>::class.java,
+        ).toList()
+    }
+
+
     private fun requiredOrganization(): String = properties.organization.trim().takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -89,4 +103,11 @@ data class GitHubTeamMembershipResponse(
     @JsonProperty("url") val url: String = "",
     @JsonProperty("role") val role: String = "",
     @JsonProperty("state") val state: String = "",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubTeamMemberResponse(
+    @JsonProperty("login") val username: String = "",
+    @JsonProperty("role") val role: String = "",
+    @JsonProperty("state") val state: String = "active",
 )

@@ -4,9 +4,11 @@ import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMemberDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
@@ -69,6 +71,31 @@ class CursoServiceImpl (
             cursoId = cursoId,
             teamSlug = teamSlug,
             alumnos = alumnosAgregados,
+        )
+    }
+
+    override fun obtenerAlumnos(cursoId: Long): ObtenerAlumnosResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
+            ?: throw CursoSinGitHubTeamAsociadoException()
+
+        val members = gitHubTeamService.getTeamMembers(teamSlug)
+
+        val alumnos = members.map { member ->
+            AlumnoTeamMemberDTO(
+                username = member.username,
+                role = member.role,
+                state = member.state,
+            )
+        }
+
+        return ObtenerAlumnosResponseDTO(
+            cursoId = cursoId,
+            teamSlug = teamSlug,
+            alumnos = alumnos,
         )
     }
 }
