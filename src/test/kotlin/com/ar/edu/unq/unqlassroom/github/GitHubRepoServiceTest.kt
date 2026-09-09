@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.github
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -25,6 +26,11 @@ class GitHubRepoServiceTest {
 
     private fun anyString(): String {
         Mockito.anyString()
+        return ""
+    }
+
+    private fun eqString(value: String): String {
+        Mockito.eq(value)
         return ""
     }
 
@@ -176,5 +182,168 @@ class GitHubRepoServiceTest {
         }
 
         assertEquals("github.app.organization must be configured with the GitHub Organization name", exception.message)
+    }
+
+    @Test
+    fun `getRepository sends GET request to repo endpoint`() {
+        val expected = GitHubRepoResponse(
+            id = 123L,
+            name = "test_repo",
+            fullName = "UNQlassroom/test_repo",
+            htmlUrl = "https://github.com/UNQlassroom/test_repo"
+        )
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(GitHubRepoResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(expected)
+
+        val repo = gitHubRepoService.getRepository("test_repo")
+        assertEquals("test_repo", repo.name)
+        assertEquals("https://github.com/UNQlassroom/test_repo", repo.htmlUrl)
+    }
+
+    @Test
+    fun `getUltimoCommit returns latest commit info when commits exist`() {
+        val commitResponse = arrayOf(
+            GitHubCommitResponse(
+                sha = "abc1234",
+                commit = GitHubCommitData(
+                    message = "Initial commit",
+                    committer = GitHubCommitAuthor(name = "Dev", date = "2026-09-09T18:00:00Z")
+                )
+            )
+        )
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(Array<GitHubCommitResponse>::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(commitResponse)
+
+        val commit = gitHubRepoService.getUltimoCommit("test_repo")
+        assertNotNull(commit)
+        assertEquals("abc1234", commit?.sha)
+        assertEquals("Initial commit", commit?.commit?.message)
+        assertEquals("2026-09-09T18:00:00Z", commit?.commit?.committer?.date)
+    }
+
+    @Test
+    fun `getUltimoCommit returns null when exception occurs or empty`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(Array<GitHubCommitResponse>::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenThrow(RuntimeException("Repo empty"))
+
+        val commit = gitHubRepoService.getUltimoCommit("test_repo")
+        assertNull(commit)
+    }
+
+    @Test
+    fun `getEstadoCI returns success when all check runs succeed`() {
+        val checkRunsResponse = GitHubCheckRunsResponse(
+            totalCount = 1,
+            checkRuns = listOf(
+                GitHubCheckRunItem(name = "build", status = "completed", conclusion = "success")
+            )
+        )
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(GitHubCheckRunsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(checkRunsResponse)
+
+        val status = gitHubRepoService.getEstadoCI("test_repo", "abc1234")
+        assertEquals("success", status)
+    }
+
+    @Test
+    fun `getEstadoCI returns failure when check run fails`() {
+        val checkRunsResponse = GitHubCheckRunsResponse(
+            totalCount = 1,
+            checkRuns = listOf(
+                GitHubCheckRunItem(name = "build", status = "completed", conclusion = "failure")
+            )
+        )
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(GitHubCheckRunsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(checkRunsResponse)
+
+        val status = gitHubRepoService.getEstadoCI("test_repo", "abc1234")
+        assertEquals("failure", status)
+    }
+
+    @Test
+    fun `getEstadoCI returns sin_ci when sha is null`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        val status = gitHubRepoService.getEstadoCI("test_repo", null)
+        assertEquals("sin_ci", status)
+    }
+
+    @Test
+    fun `obtenerInformacionRepositorio consolidates commit and CI status`() {
+        val commitResponse = arrayOf(
+            GitHubCommitResponse(
+                sha = "abc1234",
+                commit = GitHubCommitData(
+                    message = "Add README",
+                    committer = GitHubCommitAuthor(name = "Dev", date = "2026-09-09T19:30:00Z")
+                )
+            )
+        )
+        val checkRunsResponse = GitHubCheckRunsResponse(
+            totalCount = 1,
+            checkRuns = listOf(
+                GitHubCheckRunItem(name = "test", status = "completed", conclusion = "success")
+            )
+        )
+
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = eqString("/repos/UNQlassroom/test_repo/commits?per_page=1"),
+                responseType = anyClass(Array<GitHubCommitResponse>::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(commitResponse)
+
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = eqString("/repos/UNQlassroom/test_repo/commits/abc1234/check-runs"),
+                responseType = anyClass(GitHubCheckRunsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(checkRunsResponse)
+
+        val info = gitHubRepoService.obtenerInformacionRepositorio("test_repo")
+        assertEquals("test_repo", info.nombre)
+        assertEquals("https://github.com/UNQlassroom/test_repo", info.htmlUrl)
+        assertEquals("Add README", info.ultimoCommit)
+        assertEquals("2026-09-09T19:30:00Z", info.fechaUltimoCommit)
+        assertEquals("success", info.estadoCI)
     }
 }
