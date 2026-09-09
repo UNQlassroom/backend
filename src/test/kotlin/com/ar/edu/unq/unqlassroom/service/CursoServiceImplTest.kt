@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.service
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
+import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamMembershipResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
@@ -30,6 +31,9 @@ class CursoServiceImplTest {
 
     @Mock
     private lateinit var gitHubTeamService: GitHubTeamService
+
+    @Mock
+    private lateinit var gitHubRepoService: GitHubRepoService
 
     @InjectMocks
     private lateinit var cursoService: CursoServiceImpl
@@ -161,6 +165,15 @@ class CursoServiceImplTest {
         `when`(gitHubTeamService.addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno2", "member", null))
             .thenReturn(membership2)
 
+        `when`(gitHubRepoService.generarNombreRepo(curso, "alumno1"))
+            .thenReturn("2026s1_c1_estructuras_de_datos_alumno1")
+        `when`(gitHubRepoService.generarNombreRepo(curso, "alumno2"))
+            .thenReturn("2026s1_c1_estructuras_de_datos_alumno2")
+        `when`(gitHubRepoService.generarDescripcionRepo(curso, "alumno1"))
+            .thenReturn("desc alumno1")
+        `when`(gitHubRepoService.generarDescripcionRepo(curso, "alumno2"))
+            .thenReturn("desc alumno2")
+
         val request = AgregarAlumnosRequestDTO(
             usernames = listOf("alumno1", "alumno2", "alumno1 ")
         )
@@ -177,6 +190,28 @@ class CursoServiceImplTest {
 
         verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null)
         verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno2", "member", null)
+        verify(gitHubRepoService).createOrgRepository(
+            name = "2026s1_c1_estructuras_de_datos_alumno1",
+            description = "desc alumno1",
+            private = true,
+            autoInit = true,
+        )
+        verify(gitHubRepoService).addCollaborator(
+            repoName = "2026s1_c1_estructuras_de_datos_alumno1",
+            username = "alumno1",
+            permission = "push",
+        )
+        verify(gitHubRepoService).createOrgRepository(
+            name = "2026s1_c1_estructuras_de_datos_alumno2",
+            description = "desc alumno2",
+            private = true,
+            autoInit = true,
+        )
+        verify(gitHubRepoService).addCollaborator(
+            repoName = "2026s1_c1_estructuras_de_datos_alumno2",
+            username = "alumno2",
+            permission = "push",
+        )
     }
 
     @Test
@@ -207,5 +242,105 @@ class CursoServiceImplTest {
         }
 
         assertEquals("Curso sin GitHub Team asociado", exception.message)
+    }
+
+    @Test
+    fun `agregarAlumnos no genera repo si el alumno ya tiene un repo para el curso actual`() {
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubTeamId = 123456L,
+            githubTeamSlug = "2026s1_c1_estructuras_de_datos"
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val membership1 = GitHubTeamMembershipResponse(
+            url = "url/alumno1",
+            role = "member",
+            state = "active"
+        )
+
+        `when`(gitHubTeamService.addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null))
+            .thenReturn(membership1)
+        `when`(gitHubRepoService.generarNombreRepo(curso, "alumno1"))
+            .thenReturn("2026s1_c1_estructuras_de_datos_alumno1")
+        `when`(gitHubRepoService.repositoryExists("2026s1_c1_estructuras_de_datos_alumno1"))
+            .thenReturn(true)
+
+        val request = AgregarAlumnosRequestDTO(usernames = listOf("alumno1"))
+        val response = cursoService.agregarAlumnos(1L, request)
+
+        assertEquals(1, response.alumnos.size)
+        assertEquals("alumno1", response.alumnos[0].username)
+
+        verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null)
+        verify(gitHubRepoService, Mockito.never()).createOrgRepository(
+            name = Mockito.anyString(),
+            description = Mockito.any(),
+            private = Mockito.anyBoolean(),
+            autoInit = Mockito.anyBoolean(),
+            org = Mockito.any()
+        )
+        verify(gitHubRepoService, Mockito.never()).addCollaborator(
+            repoName = Mockito.anyString(),
+            username = Mockito.anyString(),
+            permission = Mockito.anyString(),
+            org = Mockito.any()
+        )
+    }
+
+    @Test
+    fun `crearCurso remueve tildes de materia al crear team en github y guardar curso`() {
+        val requestDTO = CursoRequestDTO(
+            materia = "Programación Funcional",
+            anio = 2026,
+            semestre = 2,
+            comision = 3,
+        )
+
+        val teamResponse = GitHubTeamResponse(
+            id = 777L,
+            nodeId = "MDQ6VGVhbTc3Nw==",
+            name = "2026s2_c3_programacion_funcional",
+            slug = "2026s2_c3_programacion_funcional",
+            description = "Curso de Programación Funcional - Año 2026 - Semestre 2 - Comisión 3"
+        )
+
+        `when`(gitHubTeamService.createTeam(
+            name = anyString(),
+            description = anyString(),
+            privacy = anyString(),
+            org = Mockito.isNull()
+        )).thenReturn(teamResponse)
+
+        `when`(cursoRepository.save(anyCurso())).thenAnswer { invocation ->
+            val curso = invocation.getArgument<Curso>(0)
+            Curso(
+                id = 5L,
+                materia = curso.materia,
+                anio = curso.anio,
+                semestre = curso.semestre,
+                comision = curso.comision,
+                descripcion = curso.descripcion,
+                githubTeamId = curso.githubTeamId,
+                githubTeamSlug = curso.githubTeamSlug
+            )
+        }
+
+        val result = cursoService.crearCurso(requestDTO)
+
+        assertNotNull(result)
+        assertEquals("Programación Funcional", result.materia)
+        assertEquals("2026s2_c3_programacion_funcional", result.githubTeamSlug)
+
+        verify(gitHubTeamService).createTeam(
+            name = "2026s2_c3_programacion_funcional",
+            description = "Curso de Programación Funcional - Año 2026 - Semestre 2 - Comisión 3",
+            privacy = "closed",
+            org = null
+        )
     }
 }

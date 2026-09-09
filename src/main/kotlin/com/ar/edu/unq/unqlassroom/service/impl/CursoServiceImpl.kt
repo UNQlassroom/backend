@@ -9,9 +9,12 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
+import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
+import com.ar.edu.unq.unqlassroom.util.removerTildes
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
     private val gitHubTeamService: GitHubTeamService,
+    private val gitHubRepoService: GitHubRepoService,
 ) : CursoService {
 
     override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
@@ -60,6 +64,9 @@ class CursoServiceImpl (
                 username = username,
                 role = "member",
             )
+
+            generarRepoParaAlumno(curso, username)
+
             AlumnoTeamMembershipDTO(
                 username = username,
                 role = membership.role,
@@ -73,6 +80,30 @@ class CursoServiceImpl (
             alumnos = alumnosAgregados,
         )
     }
+
+    private fun generarRepoParaAlumno(curso: Curso, username: String) {
+        val repoName = gitHubRepoService.generarNombreRepo(curso, username)
+        if (alumnoTieneRepoParaMateria(curso, username, repoName)) {
+            return
+        }
+            gitHubRepoService.createOrgRepository(
+                name = repoName,
+                description = gitHubRepoService.generarDescripcionRepo(curso, username),
+                private = true,
+                autoInit = true,
+            )
+            gitHubRepoService.addCollaborator(
+                repoName = repoName,
+                username = username,
+                permission = "push",
+            )
+
+    }
+
+    private fun alumnoTieneRepoParaMateria(curso: Curso, username: String, repoNameCursoActual: String): Boolean {
+        return gitHubRepoService.repositoryExists(repoNameCursoActual)
+    }
+
 
     override fun obtenerAlumnos(cursoId: Long): ObtenerAlumnosResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {

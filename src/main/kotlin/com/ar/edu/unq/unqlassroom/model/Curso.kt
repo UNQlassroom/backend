@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
+import com.ar.edu.unq.unqlassroom.util.removerTildes
 import jakarta.persistence.*
 
 @Entity
@@ -31,8 +32,12 @@ class Curso (
     @Column(nullable = true)
     var githubTeamSlug: String? = null
 ) {
+    init {
+        materia = materia.trim()
+    }
+
     fun generarNombreTeam(): String {
-        val mat = materia.lowercase().trim().replace("\\s+".toRegex(), "_")
+        val mat = materia.removerTildes().lowercase().trim().replace("\\s+".toRegex(), "_")
         return "${anio}s${semestre}_c${comision}_${mat}"
     }
 
