@@ -82,7 +82,36 @@ class GitHubAppClient(
             )
         }
 
+        if (response.body().isNullOrBlank()) {
+            if (responseType == Unit::class.java || responseType == Void::class.java || responseType == java.lang.Void::class.java) {
+                @Suppress("UNCHECKED_CAST")
+                return Unit as T
+            }
+            @Suppress("UNCHECKED_CAST")
+            return null as T
+        }
+
         return objectMapper.readValue(response.body(), responseType)
+    }
+
+    fun checkResourceExists(path: String): Boolean {
+        val token = createInstallationToken().token
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("${properties.apiBaseUrl}/${path.trimStart('/')}"))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.discarding())
+        return when (response.statusCode()) {
+            200 -> true
+            404 -> false
+            else -> throw IllegalStateException(
+                "GitHub API request failed with status ${response.statusCode()}",
+            )
+        }
     }
 
     private fun createAppJwt(): String {
