@@ -4,14 +4,20 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
+import com.ar.edu.unq.unqlassroom.github.GitHubTeamMemberResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamMembershipResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
+import com.ar.edu.unq.unqlassroom.github.RepositorioInfo
+import com.ar.edu.unq.unqlassroom.model.Alumno
 import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.Repositorio
+import com.ar.edu.unq.unqlassroom.repository.AlumnoRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
@@ -28,6 +34,9 @@ class CursoServiceImplTest {
 
     @Mock
     private lateinit var cursoRepository: CursoRepository
+
+    @Mock
+    private lateinit var alumnoRepository: AlumnoRepository
 
     @Mock
     private lateinit var gitHubTeamService: GitHubTeamService
@@ -137,7 +146,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `agregarAlumnos calls gitHubTeamService for each distinct username and returns response`() {
+    fun `agregarAlumnos calls gitHubTeamService for each distinct username and returns response with repositorio`() {
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -174,6 +183,29 @@ class CursoServiceImplTest {
         `when`(gitHubRepoService.generarDescripcionRepo(curso, "alumno2"))
             .thenReturn("desc alumno2")
 
+        val repoInfo1 = RepositorioInfo(
+            nombre = "2026s1_c1_estructuras_de_datos_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
+            ultimoCommit = "Initial commit",
+            fechaUltimoCommit = "2026-09-09T18:00:00Z",
+            estadoCI = "sin_ci"
+        )
+        val repoInfo2 = RepositorioInfo(
+            nombre = "2026s1_c1_estructuras_de_datos_alumno2",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno2",
+            ultimoCommit = "Initial commit",
+            fechaUltimoCommit = "2026-09-09T18:00:00Z",
+            estadoCI = "sin_ci"
+        )
+
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno1"))
+            .thenReturn(repoInfo1)
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno2"))
+            .thenReturn(repoInfo2)
+
+        `when`(alumnoRepository.findByCursoIdAndUsername(Mockito.anyLong(), Mockito.anyString())).thenReturn(null)
+        `when`(alumnoRepository.save(Mockito.any(Alumno::class.java))).thenAnswer { it.getArgument(0) }
+
         val request = AgregarAlumnosRequestDTO(
             usernames = listOf("alumno1", "alumno2", "alumno1 ")
         )
@@ -185,8 +217,15 @@ class CursoServiceImplTest {
         assertEquals(2, response.alumnos.size)
         assertEquals("alumno1", response.alumnos[0].username)
         assertEquals("active", response.alumnos[0].state)
+        assertNotNull(response.alumnos[0].repositorio)
+        assertEquals("2026s1_c1_estructuras_de_datos_alumno1", response.alumnos[0].repositorio?.nombre)
+        assertEquals("Initial commit", response.alumnos[0].repositorio?.ultimoCommit)
+        assertEquals("2026-09-09T18:00:00Z", response.alumnos[0].repositorio?.fechaUltimoCommit)
+        assertEquals("sin_ci", response.alumnos[0].repositorio?.estadoCI)
+
         assertEquals("alumno2", response.alumnos[1].username)
         assertEquals("pending", response.alumnos[1].state)
+        assertNotNull(response.alumnos[1].repositorio)
 
         verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null)
         verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno2", "member", null)
@@ -212,6 +251,7 @@ class CursoServiceImplTest {
             username = "alumno2",
             permission = "push",
         )
+        verify(alumnoRepository, Mockito.times(2)).save(Mockito.any(Alumno::class.java))
     }
 
     @Test
@@ -245,7 +285,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `agregarAlumnos no genera repo si el alumno ya tiene un repo para el curso actual`() {
+    fun `agregarAlumnos no genera repo si el alumno ya tiene un repo para el curso actual pero guarda y retorna repositorio`() {
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -270,11 +310,27 @@ class CursoServiceImplTest {
         `when`(gitHubRepoService.repositoryExists("2026s1_c1_estructuras_de_datos_alumno1"))
             .thenReturn(true)
 
+        val repoInfo = RepositorioInfo(
+            nombre = "2026s1_c1_estructuras_de_datos_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
+            ultimoCommit = "Segundo commit",
+            fechaUltimoCommit = "2026-09-09T19:00:00Z",
+            estadoCI = "success"
+        )
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno1"))
+            .thenReturn(repoInfo)
+
+        `when`(alumnoRepository.findByCursoIdAndUsername(1L, "alumno1")).thenReturn(null)
+        `when`(alumnoRepository.save(Mockito.any(Alumno::class.java))).thenAnswer { it.getArgument(0) }
+
         val request = AgregarAlumnosRequestDTO(usernames = listOf("alumno1"))
         val response = cursoService.agregarAlumnos(1L, request)
 
         assertEquals(1, response.alumnos.size)
         assertEquals("alumno1", response.alumnos[0].username)
+        assertNotNull(response.alumnos[0].repositorio)
+        assertEquals("Segundo commit", response.alumnos[0].repositorio?.ultimoCommit)
+        assertEquals("success", response.alumnos[0].repositorio?.estadoCI)
 
         verify(gitHubTeamService).addMemberToTeam("2026s1_c1_estructuras_de_datos", "alumno1", "member", null)
         verify(gitHubRepoService, Mockito.never()).createOrgRepository(
@@ -290,6 +346,60 @@ class CursoServiceImplTest {
             permission = Mockito.anyString(),
             org = Mockito.any()
         )
+        verify(alumnoRepository).save(Mockito.any(Alumno::class.java))
+    }
+
+    @Test
+    fun `obtenerAlumnos returns members with repositorio from DB`() {
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubTeamId = 123456L,
+            githubTeamSlug = "2026s1_c1_estructuras_de_datos"
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val teamMembers = listOf(
+            GitHubTeamMemberResponse(username = "alumno1", role = "member", state = "active"),
+            GitHubTeamMemberResponse(username = "alumno2", role = "member", state = "active")
+        )
+        `when`(gitHubTeamService.getTeamMembers("2026s1_c1_estructuras_de_datos")).thenReturn(teamMembers)
+
+        val alumnoPersistido1 = Alumno(
+            username = "alumno1",
+            role = "member",
+            state = "active",
+            curso = curso,
+            repositorio = Repositorio(
+                nombre = "2026s1_c1_estructuras_de_datos_alumno1",
+                htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
+                ultimoCommit = "Fix tests",
+                fechaUltimoCommit = "2026-09-09T20:00:00Z",
+                estadoCI = "success"
+            )
+        )
+        `when`(alumnoRepository.findByCursoId(1L)).thenReturn(listOf(alumnoPersistido1))
+
+        `when`(gitHubRepoService.generarNombreRepo(curso, "alumno2"))
+            .thenReturn("2026s1_c1_estructuras_de_datos_alumno2")
+        `when`(gitHubRepoService.repositoryExists("2026s1_c1_estructuras_de_datos_alumno2"))
+            .thenReturn(false)
+
+        val response = cursoService.obtenerAlumnos(1L)
+
+        assertEquals(1L, response.cursoId)
+        assertEquals(2, response.alumnos.size)
+
+        val a1 = response.alumnos.first { it.username == "alumno1" }
+        assertNotNull(a1.repositorio)
+        assertEquals("Fix tests", a1.repositorio?.ultimoCommit)
+        assertEquals("success", a1.repositorio?.estadoCI)
+
+        val a2 = response.alumnos.first { it.username == "alumno2" }
+        assertNull(a2.repositorio)
     }
 
     @Test

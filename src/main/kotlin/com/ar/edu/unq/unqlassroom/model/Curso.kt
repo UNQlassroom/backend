@@ -30,7 +30,10 @@ class Curso (
     var githubTeamId: Long? = null,
 
     @Column(nullable = true)
-    var githubTeamSlug: String? = null
+    var githubTeamSlug: String? = null,
+
+    @OneToMany(mappedBy = "curso", cascade = [CascadeType.ALL], orphanRemoval = true)
+    var alumnos: MutableList<Alumno> = mutableListOf()
 ) {
     init {
         materia = materia.trim()

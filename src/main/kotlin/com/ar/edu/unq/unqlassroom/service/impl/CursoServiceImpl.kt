@@ -1,7 +1,5 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
-import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMemberDTO
@@ -9,20 +7,25 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
+import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
+import com.ar.edu.unq.unqlassroom.model.Alumno
 import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.Repositorio
+import com.ar.edu.unq.unqlassroom.repository.AlumnoRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
-import com.ar.edu.unq.unqlassroom.util.removerTildes
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
-
 
 @Service
 @Transactional
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
+    private val alumnoRepository: AlumnoRepository,
     private val gitHubTeamService: GitHubTeamService,
     private val gitHubRepoService: GitHubRepoService,
 ) : CursoService {
@@ -31,7 +34,7 @@ class CursoServiceImpl (
         val curso = dto.aModelo()
         val teamResponse = gitHubTeamService.createTeam(
             name = curso.generarNombreTeam(),
-            description = curso.generarDescripcionTeam()
+            description = curso.generarDescripcionTeam(),
             // TODO aca falta pasar como team maintainer al profesor
         )
         curso.githubTeamId = teamResponse.id
@@ -65,12 +68,30 @@ class CursoServiceImpl (
                 role = "member",
             )
 
-            generarRepoParaAlumno(curso, username)
+            val repositorio = generarRepoParaAlumno(curso, username)
+
+            val alumnoExistente = alumnoRepository.findByCursoIdAndUsername(cursoId, username)
+            val alumnoAGuardar = if (alumnoExistente != null) {
+                alumnoExistente.role = membership.role
+                alumnoExistente.state = membership.state
+                alumnoExistente.repositorio = repositorio
+                alumnoExistente
+            } else {
+                Alumno(
+                    username = username,
+                    role = membership.role,
+                    state = membership.state,
+                    curso = curso,
+                    repositorio = repositorio,
+                )
+            }
+            val alumnoGuardado = alumnoRepository.save(alumnoAGuardar)
 
             AlumnoTeamMembershipDTO(
-                username = username,
-                role = membership.role,
-                state = membership.state,
+                username = alumnoGuardado.username,
+                role = alumnoGuardado.role,
+                state = alumnoGuardado.state,
+                repositorio = alumnoGuardado.repositorio?.let { RepositorioDTO.desdeModelo(it) },
             )
         }
 
@@ -81,11 +102,9 @@ class CursoServiceImpl (
         )
     }
 
-    private fun generarRepoParaAlumno(curso: Curso, username: String) {
+    private fun generarRepoParaAlumno(curso: Curso, username: String): Repositorio {
         val repoName = gitHubRepoService.generarNombreRepo(curso, username)
-        if (alumnoTieneRepoParaMateria(curso, username, repoName)) {
-            return
-        }
+        if (!alumnoTieneRepoParaMateria(curso, username, repoName)) {
             gitHubRepoService.createOrgRepository(
                 name = repoName,
                 description = gitHubRepoService.generarDescripcionRepo(curso, username),
@@ -97,13 +116,21 @@ class CursoServiceImpl (
                 username = username,
                 permission = "push",
             )
+        }
 
+        val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
+        return Repositorio(
+            nombre = info.nombre,
+            htmlUrl = info.htmlUrl,
+            ultimoCommit = info.ultimoCommit,
+            fechaUltimoCommit = info.fechaUltimoCommit,
+            estadoCI = info.estadoCI,
+        )
     }
 
     private fun alumnoTieneRepoParaMateria(curso: Curso, username: String, repoNameCursoActual: String): Boolean {
         return gitHubRepoService.repositoryExists(repoNameCursoActual)
     }
-
 
     override fun obtenerAlumnos(cursoId: Long): ObtenerAlumnosResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
@@ -114,12 +141,30 @@ class CursoServiceImpl (
             ?: throw CursoSinGitHubTeamAsociadoException()
 
         val members = gitHubTeamService.getTeamMembers(teamSlug)
+        val alumnosPersistidos = alumnoRepository.findByCursoId(cursoId).associateBy { it.username }
 
         val alumnos = members.map { member ->
+            val alumnoPersistido = alumnosPersistidos[member.username]
+            val repoDTO = alumnoPersistido?.repositorio?.let { RepositorioDTO.desdeModelo(it) }
+                ?: run {
+                    val repoName = gitHubRepoService.generarNombreRepo(curso, member.username)
+                    if (gitHubRepoService.repositoryExists(repoName)) {
+                        val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
+                        RepositorioDTO(
+                            nombre = info.nombre,
+                            htmlUrl = info.htmlUrl,
+                            ultimoCommit = info.ultimoCommit,
+                            fechaUltimoCommit = info.fechaUltimoCommit,
+                            estadoCI = info.estadoCI,
+                        )
+                    } else null
+                }
+
             AlumnoTeamMemberDTO(
                 username = member.username,
                 role = member.role,
                 state = member.state,
+                repositorio = repoDTO,
             )
         }
 
