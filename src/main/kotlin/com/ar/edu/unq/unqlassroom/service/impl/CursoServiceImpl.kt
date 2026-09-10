@@ -145,20 +145,26 @@ class CursoServiceImpl (
 
         val alumnos = members.map { member ->
             val alumnoPersistido = alumnosPersistidos[member.username]
-            val repoDTO = alumnoPersistido?.repositorio?.let { RepositorioDTO.desdeModelo(it) }
-                ?: run {
-                    val repoName = gitHubRepoService.generarNombreRepo(curso, member.username)
-                    if (gitHubRepoService.repositoryExists(repoName)) {
-                        val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                        RepositorioDTO(
-                            nombre = info.nombre,
-                            htmlUrl = info.htmlUrl,
-                            ultimoCommit = info.ultimoCommit,
-                            fechaUltimoCommit = info.fechaUltimoCommit,
-                            estadoCI = info.estadoCI,
-                        )
-                    } else null
+            val repoName = alumnoPersistido?.repositorio?.nombre
+                ?: gitHubRepoService.generarNombreRepo(curso, member.username)
+
+            val repoExiste = alumnoPersistido?.repositorio != null || gitHubRepoService.repositoryExists(repoName)
+
+            val repoDTO = if (repoExiste) {
+                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
+                alumnoPersistido?.repositorio?.apply { // TODO cuando tengamos webhook configurado, tenemos q sincronizar los cambios apenas haya cambios
+                    ultimoCommit = info.ultimoCommit
+                    fechaUltimoCommit = info.fechaUltimoCommit
+                    estadoCI = info.estadoCI
                 }
+                RepositorioDTO(
+                    nombre = info.nombre,
+                    htmlUrl = info.htmlUrl,
+                    ultimoCommit = info.ultimoCommit,
+                    fechaUltimoCommit = info.fechaUltimoCommit,
+                    estadoCI = info.estadoCI,
+                )
+            } else null
 
             AlumnoTeamMemberDTO(
                 username = member.username,

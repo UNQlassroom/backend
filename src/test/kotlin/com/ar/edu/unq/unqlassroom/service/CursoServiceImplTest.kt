@@ -350,7 +350,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `obtenerAlumnos returns members with repositorio from DB`() {
+    fun `obtenerAlumnos returns members with updated repositorio from GitHub and updates DB entity`() {
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -383,6 +383,16 @@ class CursoServiceImplTest {
         )
         `when`(alumnoRepository.findByCursoId(1L)).thenReturn(listOf(alumnoPersistido1))
 
+        val updatedRepoInfo = RepositorioInfo(
+            nombre = "2026s1_c1_estructuras_de_datos_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
+            ultimoCommit = "Nuevo commit",
+            fechaUltimoCommit = "2026-09-10T10:00:00Z",
+            estadoCI = "failure"
+        )
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno1"))
+            .thenReturn(updatedRepoInfo)
+
         `when`(gitHubRepoService.generarNombreRepo(curso, "alumno2"))
             .thenReturn("2026s1_c1_estructuras_de_datos_alumno2")
         `when`(gitHubRepoService.repositoryExists("2026s1_c1_estructuras_de_datos_alumno2"))
@@ -395,11 +405,57 @@ class CursoServiceImplTest {
 
         val a1 = response.alumnos.first { it.username == "alumno1" }
         assertNotNull(a1.repositorio)
-        assertEquals("Fix tests", a1.repositorio?.ultimoCommit)
-        assertEquals("success", a1.repositorio?.estadoCI)
+        assertEquals("Nuevo commit", a1.repositorio?.ultimoCommit)
+        assertEquals("2026-09-10T10:00:00Z", a1.repositorio?.fechaUltimoCommit)
+        assertEquals("failure", a1.repositorio?.estadoCI)
+        assertEquals("Nuevo commit", alumnoPersistido1.repositorio?.ultimoCommit)
 
         val a2 = response.alumnos.first { it.username == "alumno2" }
         assertNull(a2.repositorio)
+    }
+
+    @Test
+    fun `obtenerAlumnos returns members not persisted in DB but with repo existing in GitHub`() {
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubTeamId = 123456L,
+            githubTeamSlug = "2026s1_c1_estructuras_de_datos"
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val teamMembers = listOf(
+            GitHubTeamMemberResponse(username = "alumno_github_only", role = "member", state = "active")
+        )
+        `when`(gitHubTeamService.getTeamMembers("2026s1_c1_estructuras_de_datos")).thenReturn(teamMembers)
+        `when`(alumnoRepository.findByCursoId(1L)).thenReturn(emptyList())
+
+        `when`(gitHubRepoService.generarNombreRepo(curso, "alumno_github_only"))
+            .thenReturn("2026s1_c1_estructuras_de_datos_alumno_github_only")
+        `when`(gitHubRepoService.repositoryExists("2026s1_c1_estructuras_de_datos_alumno_github_only"))
+            .thenReturn(true)
+
+        val repoInfo = RepositorioInfo(
+            nombre = "2026s1_c1_estructuras_de_datos_alumno_github_only",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno_github_only",
+            ultimoCommit = "Commit inicial",
+            fechaUltimoCommit = "2026-09-10T09:00:00Z",
+            estadoCI = "pending"
+        )
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno_github_only"))
+            .thenReturn(repoInfo)
+
+        val response = cursoService.obtenerAlumnos(1L)
+
+        assertEquals(1, response.alumnos.size)
+        val a = response.alumnos.first()
+        assertEquals("alumno_github_only", a.username)
+        assertNotNull(a.repositorio)
+        assertEquals("Commit inicial", a.repositorio?.ultimoCommit)
+        assertEquals("pending", a.repositorio?.estadoCI)
     }
 
     @Test
