@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Keys and Credentials ###
+*.pem
+.env

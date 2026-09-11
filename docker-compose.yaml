@@ -20,6 +20,10 @@ services:
     container_name: unqlassroom_app
     ports:
       - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./unqlassroom.private-key.pem:/app/unqlassroom.private-key.pem:ro
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/unqlassroom
       - SPRING_DATASOURCE_USERNAME=postgres
