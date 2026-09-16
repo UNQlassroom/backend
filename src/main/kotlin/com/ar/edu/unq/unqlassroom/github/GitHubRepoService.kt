@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.github
 
+import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.util.removerTildes
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -54,24 +55,6 @@ class GitHubRepoService(
         )
     }
 
-    @JvmOverloads
-    fun addCollaborator(
-        repoName: String,
-        username: String,
-        permission: String = "push",
-        org: String? = null,
-    ) {
-        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
-        val requestBody = objectMapper.writeValueAsString(
-            AddCollaboratorRequest(permission = permission),
-        )
-        gitHubAppClient.executeInstallationRequest(
-            method = "PUT",
-            path = "/repos/$targetOrg/$repoName/collaborators/$username",
-            responseType = Unit::class.java,
-            body = requestBody,
-        )
-    }
 
     @JvmOverloads
     fun repositoryExists(
@@ -197,8 +180,8 @@ class GitHubRepoService(
         )
     }
 
-    fun generarNombreRepo(curso: com.ar.edu.unq.unqlassroom.model.Curso, username: String): String =
-        "${curso.generarNombreTeam()}_${username.trim().removerTildes()}"
+    fun generarNombreRepo(curso: Curso, username: String): String =
+        "${curso.generarNombreRepo()}_${username.trim().removerTildes()}"
 
     fun generarDescripcionRepo(curso: com.ar.edu.unq.unqlassroom.model.Curso, username: String): String =
         "Repositorio individual de ${username.trim()} para el curso ${curso.materia} - Año ${curso.anio} - Semestre ${curso.semestre} - Comisión ${curso.comision}"
@@ -213,11 +196,6 @@ data class CreateRepoRequest(
     @JsonProperty("description") val description: String? = null,
     @JsonProperty("private") val private: Boolean = true,
     @JsonProperty("auto_init") val autoInit: Boolean = true,
-)
-
-@JsonIgnoreProperties(ignoreUnknown = true)
-data class AddCollaboratorRequest(
-    @JsonProperty("permission") val permission: String = "push",
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -287,3 +265,4 @@ data class GitHubWorkflowRunItem(
     @JsonProperty("status") val status: String = "",
     @JsonProperty("conclusion") val conclusion: String? = null,
 )
+

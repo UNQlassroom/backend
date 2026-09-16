@@ -83,32 +83,6 @@ class GitHubRepoServiceTest {
     }
 
     @Test
-    fun `addCollaborator sends PUT request to repo collaborators endpoint`() {
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(
-            gitHubAppClient.executeInstallationRequest(
-                method = anyString(),
-                path = anyString(),
-                responseType = anyClass(Unit::class.java),
-                body = anyString()
-            )
-        ).thenReturn(Unit)
-
-        gitHubRepoService.addCollaborator(
-            repoName = "2026s2_c3_programacion_funcional_userDeGithub",
-            username = "userDeGithub",
-            permission = "push"
-        )
-
-        verify(gitHubAppClient).executeInstallationRequest(
-            method = anyString(),
-            path = anyString(),
-            responseType = anyClass(Unit::class.java),
-            body = anyString()
-        )
-    }
-
-    @Test
     fun `createOrgRepository throws exception when organization is blank`() {
         `when`(properties.organization).thenReturn("")
 
