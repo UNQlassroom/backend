@@ -27,10 +27,10 @@ class Curso (
     var descripcion: String? = null,
 
     @Column(nullable = true)
-    var githubTeamId: Long? = null,
+    var githubRepoId: Long? = null,
 
     @Column(nullable = true)
-    var githubTeamSlug: String? = null,
+    var githubRepoName: String? = null,
 
     @OneToMany(mappedBy = "curso", cascade = [CascadeType.ALL], orphanRemoval = true)
     var alumnos: MutableList<Alumno> = mutableListOf()
@@ -39,10 +39,10 @@ class Curso (
         materia = materia.trim()
     }
 
-    fun generarNombreTeam(): String {
+    fun generarNombreRepo(): String {
         val mat = materia.removerTildes().lowercase().trim().replace("\\s+".toRegex(), "_")
         return "${anio}s${semestre}_c${comision}_${mat}"
     }
 
-    fun generarDescripcionTeam(): String = "Curso de $materia - Año $anio - Semestre $semestre - Comisión $comision"
+    fun generarDescripcionRepo(): String = "Curso de $materia - Año $anio - Semestre $semestre - Comisión $comision"
 }
