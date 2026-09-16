@@ -1,17 +1,15 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMemberDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoMiembroDeUnCursoDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
+import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubRepoAsociadoException
+import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
-import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
 import com.ar.edu.unq.unqlassroom.model.Alumno
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Repositorio
@@ -26,19 +24,21 @@ import org.springframework.stereotype.Service
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
     private val alumnoRepository: AlumnoRepository,
-    private val gitHubTeamService: GitHubTeamService,
     private val gitHubRepoService: GitHubRepoService,
+    private val gitHubCollaboratorService: GitHubCollaboratorService,
 ) : CursoService {
 
     override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
         val curso = dto.aModelo()
-        val teamResponse = gitHubTeamService.createTeam(
-            name = curso.generarNombreTeam(),
-            description = curso.generarDescripcionTeam(),
+        val repoResponse = gitHubRepoService.createOrgRepository(
+            name = curso.generarNombreRepo(),
+            description = curso.generarDescripcionRepo(),
+            private = true,
+            autoInit = true,
             // TODO aca falta pasar como team maintainer al profesor
         )
-        curso.githubTeamId = teamResponse.id
-        curso.githubTeamSlug = teamResponse.slug
+        curso.githubRepoId = repoResponse.id
+        curso.githubRepoName = repoResponse.name
 
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)
@@ -48,13 +48,13 @@ class CursoServiceImpl (
         return cursoRepository.findAll().map { CursoResponseDTO.desdeModelo(it) }
     }
 
-    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AgregarAlumnosResponseDTO {
+    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
-            ?: throw CursoSinGitHubTeamAsociadoException()
+        val repoName = curso.githubRepoName?.takeIf { it.isNotBlank() }
+            ?: throw CursoSinGitHubRepoAsociadoException()
 
         val distinctUsernames = dto.usernames
             .map { it.trim() }
@@ -62,10 +62,10 @@ class CursoServiceImpl (
             .distinct()
 
         val alumnosAgregados = distinctUsernames.map { username ->
-            val membership = gitHubTeamService.addMemberToTeam(
-                teamSlug = teamSlug,
+            val membership = gitHubCollaboratorService.addCollaborator(
+                repoName = repoName,
                 username = username,
-                role = "member",
+                permission = "push", // TODO esto deberia ser pull, asi los miembros no tienen write sobre el repo main del curso
             )
 
             val repositorio = generarRepoParaAlumno(curso, username)
@@ -87,7 +87,7 @@ class CursoServiceImpl (
             }
             val alumnoGuardado = alumnoRepository.save(alumnoAGuardar)
 
-            AlumnoTeamMembershipDTO(
+            AlumnoMiembroDeUnCursoDTO(
                 username = alumnoGuardado.username,
                 role = alumnoGuardado.role,
                 state = alumnoGuardado.state,
@@ -95,9 +95,9 @@ class CursoServiceImpl (
             )
         }
 
-        return AgregarAlumnosResponseDTO(
+        return AlumnosDeUnCursoResponseDTO(
             cursoId = cursoId,
-            teamSlug = teamSlug,
+            repoName = repoName,
             alumnos = alumnosAgregados,
         )
     }
@@ -111,7 +111,7 @@ class CursoServiceImpl (
                 private = true,
                 autoInit = true,
             )
-            gitHubRepoService.addCollaborator(
+            gitHubCollaboratorService.addCollaborator(
                 repoName = repoName,
                 username = username,
                 permission = "push",
@@ -132,15 +132,15 @@ class CursoServiceImpl (
         return gitHubRepoService.repositoryExists(repoNameCursoActual)
     }
 
-    override fun obtenerAlumnos(cursoId: Long): ObtenerAlumnosResponseDTO {
+    override fun obtenerAlumnos(cursoId: Long): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
-            ?: throw CursoSinGitHubTeamAsociadoException()
+        val repoName = curso.githubRepoName?.takeIf { it.isNotBlank() }
+            ?: throw CursoSinGitHubRepoAsociadoException()
 
-        val members = gitHubTeamService.getTeamMembers(teamSlug)
+        val members = gitHubCollaboratorService.getRepoMembers(repoName)
         val alumnosPersistidos = alumnoRepository.findByCursoId(cursoId).associateBy { it.username }
 
         val alumnos = members.map { member ->
@@ -166,7 +166,7 @@ class CursoServiceImpl (
                 )
             } else null
 
-            AlumnoTeamMemberDTO(
+            AlumnoMiembroDeUnCursoDTO(
                 username = member.username,
                 role = member.role,
                 state = member.state,
@@ -174,9 +174,9 @@ class CursoServiceImpl (
             )
         }
 
-        return ObtenerAlumnosResponseDTO(
+        return AlumnosDeUnCursoResponseDTO(
             cursoId = cursoId,
-            teamSlug = teamSlug,
+            repoName = repoName,
             alumnos = alumnos,
         )
     }

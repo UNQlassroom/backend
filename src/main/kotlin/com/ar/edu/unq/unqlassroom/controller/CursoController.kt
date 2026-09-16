@@ -1,10 +1,9 @@
 package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.validation.Valid
 import lombok.RequiredArgsConstructor
@@ -37,7 +36,7 @@ class CursoController (
     fun agregarAlumnos(
         @PathVariable id: Long,
         @RequestBody @Valid request: AgregarAlumnosRequestDTO,
-    ): ResponseEntity<AgregarAlumnosResponseDTO> {
+    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
         val response = cursoService.agregarAlumnos(id, request)
         return ResponseEntity.ok(response)
     }
@@ -49,7 +48,7 @@ class CursoController (
     }
 
     @GetMapping("/{id}/alumnos")
-    fun obtenerAlumnos(@PathVariable id: Long): ResponseEntity<ObtenerAlumnosResponseDTO> {
+    fun obtenerAlumnos(@PathVariable id: Long): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
         val alumnos = cursoService.obtenerAlumnos(id)
         return ResponseEntity.ok(alumnos)
     }
