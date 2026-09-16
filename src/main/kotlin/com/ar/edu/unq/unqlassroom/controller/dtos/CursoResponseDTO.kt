@@ -9,8 +9,8 @@ data class CursoResponseDTO(
     val semestre: Int,
     val comision: Int,
     val descripcion: String,
-    val githubTeamId: Long? = null,
-    val githubTeamSlug: String? = null,
+    val githubRepoId: Long? = null,
+    val githubRepoName: String? = null,
 ) {
     companion object {
         fun desdeModelo(curso: Curso): CursoResponseDTO = CursoResponseDTO(
@@ -20,8 +20,8 @@ data class CursoResponseDTO(
             semestre = curso.semestre,
             comision = curso.comision,
             descripcion = curso.descripcion ?: "",
-            githubTeamId = curso.githubTeamId,
-            githubTeamSlug = curso.githubTeamSlug,
+            githubRepoId = curso.githubRepoId,
+            githubRepoName = curso.githubRepoName,
         )
     }
 }
