@@ -10,11 +10,13 @@ import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubRepoAsociadoException
 import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
-import com.ar.edu.unq.unqlassroom.model.Alumno
 import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.model.Repositorio
-import com.ar.edu.unq.unqlassroom.repository.AlumnoRepository
+import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
+import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
+import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
@@ -23,13 +25,19 @@ import org.springframework.stereotype.Service
 @Transactional
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
-    private val alumnoRepository: AlumnoRepository,
+    private val usuarioRepository: UsuarioRepository,
+    private val inscripcionRepository: InscripcionRepository,
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
 ) : CursoService {
 
     override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
-        val curso = dto.aModelo()
+        val curso = dto.aModelo() // TODO esto deberia tener userDetails y obtener el owner de ahi
+        if (!dto.ownerUsername.isNullOrBlank()) {
+            val owner = usuarioRepository.findByUsername(dto.ownerUsername.trim())
+                ?: usuarioRepository.save(Usuario(username = dto.ownerUsername.trim(), esDocente = true))
+            curso.owner = owner
+        }
         val repoResponse = gitHubRepoService.createOrgRepository(
             name = curso.generarNombreRepo(),
             description = curso.generarDescripcionRepo(),
@@ -62,7 +70,7 @@ class CursoServiceImpl (
             .distinct()
 
         val alumnosAgregados = distinctUsernames.map { username ->
-            val membership = gitHubCollaboratorService.addCollaborator(
+            val collaborator = gitHubCollaboratorService.addCollaborator(
                 repoName = repoName,
                 username = username,
                 permission = "push", // TODO esto deberia ser pull, asi los miembros no tienen write sobre el repo main del curso
@@ -70,28 +78,31 @@ class CursoServiceImpl (
 
             val repositorio = generarRepoParaAlumno(curso, username)
 
-            val alumnoExistente = alumnoRepository.findByCursoIdAndUsername(cursoId, username)
-            val alumnoAGuardar = if (alumnoExistente != null) {
-                alumnoExistente.role = membership.role
-                alumnoExistente.state = membership.state
-                alumnoExistente.repositorio = repositorio
-                alumnoExistente
+            val usuario = usuarioRepository.findByUsername(username)
+                ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
+
+            val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
+            val inscripcionAGuardar = if (inscripcionExistente != null) {
+                inscripcionExistente.githubRole = collaborator.role
+                inscripcionExistente.githubState = collaborator.state
+                inscripcionExistente.repositorio = repositorio
+                inscripcionExistente
             } else {
-                Alumno(
-                    username = username,
-                    role = membership.role,
-                    state = membership.state,
+                Inscripcion(
                     curso = curso,
+                    usuario = usuario,
+                    githubRole = collaborator.role,
+                    githubState = collaborator.state,
                     repositorio = repositorio,
                 )
             }
-            val alumnoGuardado = alumnoRepository.save(alumnoAGuardar)
+            val inscripcionGuardada = inscripcionRepository.save(inscripcionAGuardar)
 
             AlumnoMiembroDeUnCursoDTO(
-                username = alumnoGuardado.username,
-                role = alumnoGuardado.role,
-                state = alumnoGuardado.state,
-                repositorio = alumnoGuardado.repositorio?.let { RepositorioDTO.desdeModelo(it) },
+                username = inscripcionGuardada.usuario.username,
+                role = inscripcionGuardada.githubRole,
+                state = inscripcionGuardada.githubState,
+                repositorio = inscripcionGuardada.repositorio?.let { RepositorioDTO.desdeModelo(it) },
             )
         }
 
@@ -141,18 +152,18 @@ class CursoServiceImpl (
             ?: throw CursoSinGitHubRepoAsociadoException()
 
         val members = gitHubCollaboratorService.getRepoMembers(repoName)
-        val alumnosPersistidos = alumnoRepository.findByCursoId(cursoId).associateBy { it.username }
+        val inscripcionesPersistidas = inscripcionRepository.findByCursoId(cursoId).associateBy { it.usuario.username }
 
         val alumnos = members.map { member ->
-            val alumnoPersistido = alumnosPersistidos[member.username]
-            val repoName = alumnoPersistido?.repositorio?.nombre
+            val inscripcionPersistida = inscripcionesPersistidas[member.username]
+            val repoName = inscripcionPersistida?.repositorio?.nombre
                 ?: gitHubRepoService.generarNombreRepo(curso, member.username)
 
-            val repoExiste = alumnoPersistido?.repositorio != null || gitHubRepoService.repositoryExists(repoName)
+            val repoExiste = inscripcionPersistida?.repositorio != null || gitHubRepoService.repositoryExists(repoName)
 
             val repoDTO = if (repoExiste) {
                 val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                alumnoPersistido?.repositorio?.apply { // TODO cuando tengamos webhook configurado, tenemos q sincronizar los cambios apenas haya cambios
+                inscripcionPersistida?.repositorio?.apply { // TODO cuando tengamos webhook configurado, tenemos q sincronizar los cambios apenas haya cambios
                     ultimoCommit = info.ultimoCommit
                     fechaUltimoCommit = info.fechaUltimoCommit
                     estadoCI = info.estadoCI

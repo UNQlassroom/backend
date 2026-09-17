@@ -7,6 +7,7 @@ data class CursoRequestDTO(
     val anio: Int,
     val semestre: Int,
     val comision: Int,
+    val ownerUsername: String? = null,
 ) {
     fun aModelo(): Curso {
         val curso = Curso(

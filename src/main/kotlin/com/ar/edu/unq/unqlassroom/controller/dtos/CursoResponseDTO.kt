@@ -11,6 +11,7 @@ data class CursoResponseDTO(
     val descripcion: String,
     val githubRepoId: Long? = null,
     val githubRepoName: String? = null,
+    val ownerUsername: String? = null,
 ) {
     companion object {
         fun desdeModelo(curso: Curso): CursoResponseDTO = CursoResponseDTO(
@@ -22,6 +23,7 @@ data class CursoResponseDTO(
             descripcion = curso.descripcion ?: "",
             githubRepoId = curso.githubRepoId,
             githubRepoName = curso.githubRepoName,
+            ownerUsername = curso.owner?.username,
         )
     }
 }
