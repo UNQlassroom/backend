@@ -9,6 +9,7 @@ import com.ar.edu.unq.unqlassroom.service.JwtService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -43,6 +44,16 @@ class SecurityIntegrationTest {
 
     private val docente = Usuario(id = 1L, username = "profe", esDocente = true)
     private val alumno = Usuario(id = 2L, username = "alumno", esDocente = false)
+
+    private fun anyCursoRequest(): CursoRequestDTO {
+        Mockito.any(CursoRequestDTO::class.java)
+        return CursoRequestDTO(materia = "", anio = 0, semestre = 1, comision = 1)
+    }
+
+    private fun eqString(value: String): String {
+        Mockito.eq(value)
+        return value
+    }
 
     @BeforeEach
     fun setUp() {
@@ -120,7 +131,7 @@ class SecurityIntegrationTest {
             ownerUsername = "profe"
         )
 
-        `when`(cursoService.crearCurso(requestDTO, "profe")).thenReturn(responseDTO)
+        `when`(cursoService.crearCurso(anyCursoRequest(), eqString("profe"))).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/crear")

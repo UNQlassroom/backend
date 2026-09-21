@@ -13,11 +13,10 @@ import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.model.Repositorio
-import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
-import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
+import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 
@@ -25,22 +24,16 @@ import org.springframework.stereotype.Service
 @Transactional
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
-    private val usuarioRepository: UsuarioRepository,
+    private val usuarioService: UsuarioService,
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
 ) : CursoService {
 
-    override fun crearCurso(dto: CursoRequestDTO, ownerUsername: String?): CursoResponseDTO {
+    override fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO {
         val curso = dto.aModelo()
-        val finalOwnerUsername = ownerUsername?.takeIf { it.isNotBlank() }
-            ?: dto.ownerUsername?.takeIf { it.isNotBlank() }
+        curso.owner = usuarioService.obtenerDocente(ownerUsername)
 
-        if (finalOwnerUsername != null) {
-            val owner = usuarioRepository.findByUsername(finalOwnerUsername.trim())
-                ?: usuarioRepository.save(Usuario(username = finalOwnerUsername.trim(), esDocente = true))
-            curso.owner = owner
-        }
         val repoResponse = gitHubRepoService.createOrgRepository(
             name = curso.generarNombreRepo(),
             description = curso.generarDescripcionRepo(),
@@ -52,8 +45,8 @@ class CursoServiceImpl (
         curso.githubRepoName = repoResponse.name
 
         gitHubCollaboratorService.addCollaborator(
-            repoName = curso.githubRepoName!!, // TODO verificar si usar ownerusername u userdetails
-            username = ownerUsername!!,
+            repoName = curso.githubRepoName!!,
+            username = ownerUsername,
             permission = "push",
         )
 
@@ -87,8 +80,7 @@ class CursoServiceImpl (
 
             val repositorio = generarRepoParaAlumno(curso, username)
 
-            val usuario = usuarioRepository.findByUsername(username)
-                ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
+            val usuario = usuarioService.obtenerOCrearAlumno(username)
 
             val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
             val inscripcionAGuardar = if (inscripcionExistente != null) {

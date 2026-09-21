@@ -29,7 +29,7 @@ class CursoController (
         @RequestBody @Valid cursoRequest: CursoRequestDTO,
         authentication: Authentication
     ): ResponseEntity<CursoResponseDTO> {
-        val response = cursoService.crearCurso(cursoRequest, authentication)
+        val response = cursoService.crearCurso(cursoRequest, authentication.name)
         return ResponseEntity.created(URI.create("/cursos" + response.id)).body(response)
     }
 

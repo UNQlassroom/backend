@@ -14,9 +14,11 @@ import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.Usuario
+import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
+import com.ar.edu.unq.unqlassroom.errors.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
-import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -39,7 +41,7 @@ class CursoServiceImplTest {
     private lateinit var cursoRepository: CursoRepository
 
     @Mock
-    private lateinit var usuarioRepository: UsuarioRepository
+    private lateinit var usuarioService: UsuarioService
 
     @Mock
     private lateinit var inscripcionRepository: InscripcionRepository
@@ -72,6 +74,9 @@ class CursoServiceImplTest {
             comision = 1,
         )
 
+        val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
+
         val repoResponse = GitHubRepoResponse(
             id = 123456L,
             name = "2026s1_c1_estructuras_de_datos",
@@ -101,7 +106,7 @@ class CursoServiceImplTest {
             )
         }
 
-        val result = cursoService.crearCurso(requestDTO)
+        val result = cursoService.crearCurso(requestDTO, "profe_test")
 
         assertNotNull(result)
         assertEquals(1L, result.id)
@@ -214,7 +219,7 @@ class CursoServiceImplTest {
         `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno2"))
             .thenReturn(repoInfo2)
 
-        `when`(usuarioRepository.findByUsername(Mockito.anyString())).thenAnswer { invocation ->
+        `when`(usuarioService.obtenerOCrearAlumno(Mockito.anyString())).thenAnswer { invocation ->
             val u = invocation.getArgument<String>(0)
             Usuario(id = 1L, username = u, esDocente = false)
         }
@@ -305,7 +310,7 @@ class CursoServiceImplTest {
         `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_alumno1"))
             .thenReturn(repoInfo)
 
-        `when`(usuarioRepository.findByUsername("alumno1")).thenReturn(Usuario(id = 1L, username = "alumno1", esDocente = false))
+        `when`(usuarioService.obtenerOCrearAlumno("alumno1")).thenReturn(Usuario(id = 1L, username = "alumno1", esDocente = false))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno1")).thenReturn(null)
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
 
@@ -430,6 +435,9 @@ class CursoServiceImplTest {
             comision = 3,
         )
 
+        val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
+
         val repoResponse = GitHubRepoResponse(
             id = 777L,
             name = "2026s2_c3_programacion_funcional",
@@ -459,7 +467,7 @@ class CursoServiceImplTest {
             )
         }
 
-        val result = cursoService.crearCurso(requestDTO)
+        val result = cursoService.crearCurso(requestDTO, "profe_test")
 
         assertNotNull(result)
         assertEquals("Programación Funcional", result.materia)
@@ -475,13 +483,12 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `crearCurso assigns owner when ownerUsername is provided`() {
+    fun `crearCurso assigns owner from authenticated user`() {
         val requestDTO = CursoRequestDTO(
             materia = "Sistemas Distribuidos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            ownerUsername = "profe_juan",
         )
 
         val repoResponse = GitHubRepoResponse(
@@ -500,7 +507,7 @@ class CursoServiceImplTest {
         )).thenReturn(repoResponse)
 
         val docente = Usuario(id = 99L, username = "profe_juan", esDocente = true)
-        `when`(usuarioRepository.findByUsername("profe_juan")).thenReturn(docente)
+        `when`(usuarioService.obtenerDocente("profe_juan")).thenReturn(docente)
 
         `when`(cursoRepository.save(anyCurso())).thenAnswer { invocation ->
             val c = invocation.getArgument<Curso>(0)
@@ -517,10 +524,44 @@ class CursoServiceImplTest {
             )
         }
 
-        val result = cursoService.crearCurso(requestDTO)
+        val result = cursoService.crearCurso(requestDTO, "profe_juan")
 
         assertNotNull(result)
         assertEquals("profe_juan", result.ownerUsername)
+    }
+
+    @Test
+    fun `crearCurso propagates ForbiddenException when owner is not docente`() {
+        val requestDTO = CursoRequestDTO(
+            materia = "Redes",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+        )
+        `when`(usuarioService.obtenerDocente("alumno_infiltrado"))
+            .thenThrow(ForbiddenException("El usuario alumno_infiltrado no tiene permisos de docente"))
+
+        val ex = assertThrows<ForbiddenException> {
+            cursoService.crearCurso(requestDTO, "alumno_infiltrado")
+        }
+        assertEquals("El usuario alumno_infiltrado no tiene permisos de docente", ex.message)
+    }
+
+    @Test
+    fun `crearCurso propagates UsuarioNotFoundException when owner does not exist`() {
+        val requestDTO = CursoRequestDTO(
+            materia = "Redes",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+        )
+        `when`(usuarioService.obtenerDocente("fantasma"))
+            .thenThrow(UsuarioNotFoundException("Usuario no encontrado: fantasma"))
+
+        val ex = assertThrows<UsuarioNotFoundException> {
+            cursoService.crearCurso(requestDTO, "fantasma")
+        }
+        assertEquals("Usuario no encontrado: fantasma", ex.message)
     }
 
     @Test
