@@ -27,9 +27,9 @@ class CursoController (
     @PostMapping("/crear")
     fun crearCurso(
         @RequestBody @Valid cursoRequest: CursoRequestDTO,
-        authentication: Authentication? = null
+        authentication: Authentication
     ): ResponseEntity<CursoResponseDTO> {
-        val response = cursoService.crearCurso(cursoRequest, authentication?.name)
+        val response = cursoService.crearCurso(cursoRequest, authentication)
         return ResponseEntity.created(URI.create("/cursos" + response.id)).body(response)
     }
 
