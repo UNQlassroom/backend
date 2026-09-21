@@ -60,7 +60,7 @@ class CursoControllerTest {
             githubRepoName = "2026s1_c1_estructuras_de_datos"
         )
 
-        `when`(cursoService.crearCurso(requestDTO)).thenReturn(responseDTO)
+        `when`(cursoService.crearCurso(requestDTO, null)).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/crear")

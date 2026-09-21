@@ -31,11 +31,14 @@ class CursoServiceImpl (
     private val gitHubCollaboratorService: GitHubCollaboratorService,
 ) : CursoService {
 
-    override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
-        val curso = dto.aModelo() // TODO esto deberia tener userDetails y obtener el owner de ahi
-        if (!dto.ownerUsername.isNullOrBlank()) {
-            val owner = usuarioRepository.findByUsername(dto.ownerUsername.trim())
-                ?: usuarioRepository.save(Usuario(username = dto.ownerUsername.trim(), esDocente = true))
+    override fun crearCurso(dto: CursoRequestDTO, ownerUsername: String?): CursoResponseDTO {
+        val curso = dto.aModelo()
+        val finalOwnerUsername = ownerUsername?.takeIf { it.isNotBlank() }
+            ?: dto.ownerUsername?.takeIf { it.isNotBlank() }
+
+        if (finalOwnerUsername != null) {
+            val owner = usuarioRepository.findByUsername(finalOwnerUsername.trim())
+                ?: usuarioRepository.save(Usuario(username = finalOwnerUsername.trim(), esDocente = true))
             curso.owner = owner
         }
         val repoResponse = gitHubRepoService.createOrgRepository(
@@ -47,6 +50,12 @@ class CursoServiceImpl (
         )
         curso.githubRepoId = repoResponse.id
         curso.githubRepoName = repoResponse.name
+
+        gitHubCollaboratorService.addCollaborator(
+            repoName = curso.githubRepoName!!, // TODO verificar si usar ownerusername u userdetails
+            username = ownerUsername!!,
+            permission = "push",
+        )
 
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)
