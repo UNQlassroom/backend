@@ -32,8 +32,12 @@ class Curso (
     @Column(nullable = true)
     var githubRepoName: String? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = true)
+    var owner: Usuario? = null,
+
     @OneToMany(mappedBy = "curso", cascade = [CascadeType.ALL], orphanRemoval = true)
-    var alumnos: MutableList<Alumno> = mutableListOf()
+    var inscripciones: MutableList<Inscripcion> = mutableListOf()
 ) {
     init {
         materia = materia.trim()

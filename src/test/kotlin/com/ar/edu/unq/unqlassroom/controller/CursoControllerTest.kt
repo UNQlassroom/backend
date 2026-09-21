@@ -16,6 +16,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -60,10 +61,12 @@ class CursoControllerTest {
             githubRepoName = "2026s1_c1_estructuras_de_datos"
         )
 
-        `when`(cursoService.crearCurso(requestDTO)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(cursoService.crearCurso(requestDTO, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/crear")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )

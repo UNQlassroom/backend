@@ -4,10 +4,9 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
-
 interface CursoService {
 
-    fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO
+    fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO
 
     fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AlumnosDeUnCursoResponseDTO
 
