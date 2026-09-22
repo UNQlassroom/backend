@@ -199,4 +199,30 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.size()").value(1))
             .andExpect(jsonPath("$[0].materia").value("Redes"))
     }
+
+    @Test
+    fun `obtenerCurso endpoint returns 200 and curso details`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val curso = CursoResponseDTO(
+            id = 1L,
+            materia = "Estructuras",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            descripcion = "desc",
+            githubRepoId = 123L,
+            githubRepoName = "2026s1_c1_estructuras",
+            ownerUsername = "profe"
+        )
+        `when`(cursoService.obtenerCurso(1L, "profe")).thenReturn(curso)
+
+        mockMvc.perform(
+            get("/cursos/1")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.materia").value("Estructuras"))
+            .andExpect(jsonPath("$.ownerUsername").value("profe"))
+    }
 }

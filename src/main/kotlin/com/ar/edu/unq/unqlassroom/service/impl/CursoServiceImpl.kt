@@ -64,6 +64,21 @@ class CursoServiceImpl (
         return cursos.map { CursoResponseDTO.desdeModelo(it) }
     }
 
+    override fun obtenerCurso(id: Long, solicitanteUsername: String): CursoResponseDTO {
+        val curso = cursoRepository.findById(id).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para acceder a este curso")
+        }
+
+        return CursoResponseDTO.desdeModelo(curso)
+    }
+
     override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
