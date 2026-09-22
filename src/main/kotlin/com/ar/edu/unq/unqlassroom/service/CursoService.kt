@@ -12,5 +12,7 @@ interface CursoService {
 
     fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO>
 
+    fun obtenerCurso(id: Long, solicitanteUsername: String): CursoResponseDTO
+
     fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
 }

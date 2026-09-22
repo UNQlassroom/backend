@@ -52,6 +52,15 @@ class CursoController (
         return ResponseEntity.ok(cursos)
     }
 
+    @GetMapping("/{id}")
+    fun obtenerCurso(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<CursoResponseDTO> {
+        val curso = cursoService.obtenerCurso(id, authentication.name)
+        return ResponseEntity.ok(curso)
+    }
+
     @GetMapping("/{id}/alumnos")
     fun obtenerAlumnos(
         @PathVariable id: Long,

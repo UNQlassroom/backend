@@ -671,4 +671,84 @@ class CursoServiceImplTest {
         verify(cursoRepository).findCursosParaAlumno("alumno_test")
         verify(cursoRepository, Mockito.never()).findCursosParaDocente(Mockito.anyString())
     }
+
+    @Test
+    fun `obtenerCurso returns curso when solicitante is owner`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            descripcion = "desc",
+            githubRepoId = 123L,
+            githubRepoName = "2026s1_c1_estructuras",
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val result = cursoService.obtenerCurso(1L, "profe_owner")
+
+        assertNotNull(result)
+        assertEquals(1L, result.id)
+        assertEquals("Estructuras de Datos", result.materia)
+        assertEquals("profe_owner", result.ownerUsername)
+    }
+
+    @Test
+    fun `obtenerCurso returns curso when solicitante is enrolled alumno`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            descripcion = "desc",
+            githubRepoId = 123L,
+            githubRepoName = "2026s1_c1_estructuras",
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
+        val inscripcion = Inscripcion(curso = curso, usuario = alumno)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
+
+        val result = cursoService.obtenerCurso(1L, "alumno_inscripto")
+
+        assertNotNull(result)
+        assertEquals(1L, result.id)
+        assertEquals("Estructuras de Datos", result.materia)
+    }
+
+    @Test
+    fun `obtenerCurso throws CursoNotFoundException when curso does not exist`() {
+        `when`(cursoRepository.findById(999L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<CursoNotFoundException> {
+            cursoService.obtenerCurso(999L, "cualquiera")
+        }
+        assertEquals("Curso no encontrado", ex.message)
+    }
+
+    @Test
+    fun `obtenerCurso throws ForbiddenException when solicitante is neither owner nor enrolled alumno`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
+
+        val ex = assertThrows<ForbiddenException> {
+            cursoService.obtenerCurso(1L, "infiltrado")
+        }
+        assertEquals("No tiene permisos para acceder a este curso", ex.message)
+    }
 }
