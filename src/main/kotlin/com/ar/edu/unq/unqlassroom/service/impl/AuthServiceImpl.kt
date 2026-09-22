@@ -29,6 +29,7 @@ class AuthServiceImpl(
         val usuarioAGuardar = if (usuarioExistente != null) {
             perfil.email?.let { usuarioExistente.email = it }
             perfil.name?.let { usuarioExistente.nombreCompleto = it }
+            usuarioExistente.esDocente = dto.esDocente == true
             usuarioExistente
         } else {
             Usuario(

@@ -107,7 +107,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    fun `loginConGitHub preserves existing role for existing user`() {
+    fun `loginConGitHub does not preserves existing role for existing user`() {
         val dto = GitHubLoginRequestDTO(code = "oauth-code-existing", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "profe_existente",
@@ -134,7 +134,7 @@ class AuthServiceImplTest {
         val response = authService.loginConGitHub(dto)
 
         assertEquals("jwt-token-docente", response.token)
-        assertTrue(response.user.esDocente)
+        assertFalse(response.user.esDocente)
         assertEquals("profe.actualizado@unq.edu.ar", existingDocente.email)
     }
 

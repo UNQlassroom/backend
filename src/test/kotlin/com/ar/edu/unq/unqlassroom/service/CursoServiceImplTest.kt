@@ -159,6 +159,7 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos calls gitHubRepoService addCollaborator for each distinct username and saves alumno with repositorio`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -166,7 +167,8 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             githubRepoId = 123456L,
-            githubRepoName = "2026s1_c1_estructuras_de_datos"
+            githubRepoName = "2026s1_c1_estructuras_de_datos",
+            owner = owner
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -230,7 +232,7 @@ class CursoServiceImplTest {
             usernames = listOf("alumno1", "alumno2", "alumno1 ")
         )
 
-        val response = cursoService.agregarAlumnos(1L, request)
+        val response = cursoService.agregarAlumnos(1L, request, "profe_test")
 
         assertEquals(1L, response.cursoId)
         assertEquals("2026s1_c1_estructuras_de_datos", response.repoName)
@@ -276,6 +278,7 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos no genera repo si el alumno ya tiene un repo para el curso actual pero guarda y retorna repositorio`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -283,7 +286,8 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             githubRepoId = 123456L,
-            githubRepoName = "2026s1_c1_estructuras_de_datos"
+            githubRepoName = "2026s1_c1_estructuras_de_datos",
+            owner = owner
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -315,7 +319,7 @@ class CursoServiceImplTest {
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
 
         val request = AgregarAlumnosRequestDTO(usernames = listOf("alumno1"))
-        val response = cursoService.agregarAlumnos(1L, request)
+        val response = cursoService.agregarAlumnos(1L, request, "profe_test")
 
         assertEquals(1, response.alumnos.size)
         assertEquals("alumno1", response.alumnos[0].username)
@@ -339,7 +343,7 @@ class CursoServiceImplTest {
         `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
 
         val exception = assertThrows<CursoNotFoundException> {
-            cursoService.agregarAlumnos(99L, AgregarAlumnosRequestDTO(listOf("alumno1")))
+            cursoService.agregarAlumnos(99L, AgregarAlumnosRequestDTO(listOf("alumno1")), "profe_test")
         }
 
         assertEquals("Curso no encontrado", exception.message)
@@ -347,25 +351,48 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos throws 400 BAD_REQUEST when curso has no github repo name`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 2L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            githubRepoName = null
+            githubRepoName = null,
+            owner = owner
         )
         `when`(cursoRepository.findById(2L)).thenReturn(Optional.of(curso))
 
         val exception = assertThrows<CursoSinGitHubRepoAsociadoException> {
-            cursoService.agregarAlumnos(2L, AgregarAlumnosRequestDTO(listOf("alumno1")))
+            cursoService.agregarAlumnos(2L, AgregarAlumnosRequestDTO(listOf("alumno1")), "profe_test")
         }
 
         assertEquals("Curso sin repositorio de GitHub asociado", exception.message)
     }
 
     @Test
+    fun `agregarAlumnos throws ForbiddenException when solicitante is not the owner`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        val exception = assertThrows<ForbiddenException> {
+            cursoService.agregarAlumnos(1L, AgregarAlumnosRequestDTO(listOf("alumno1")), "otro_profe")
+        }
+
+        assertEquals("Solo el docente a cargo del curso puede agregar alumnos", exception.message)
+    }
+
+    @Test
     fun `obtenerAlumnos returns members from GitHub and correlates with DB entity`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -373,7 +400,8 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             githubRepoId = 123456L,
-            githubRepoName = "2026s1_c1_estructuras_de_datos"
+            githubRepoName = "2026s1_c1_estructuras_de_datos",
+            owner = owner
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -409,7 +437,7 @@ class CursoServiceImplTest {
         `when`(gitHubRepoService.obtenerInformacionRepositorio("2026s1_c1_estructuras_de_datos_tp1_alumno1"))
             .thenReturn(updatedRepoInfo)
 
-        val response = cursoService.obtenerAlumnos(1L)
+        val response = cursoService.obtenerAlumnos(1L, "profe_test")
 
         assertEquals(1L, response.cursoId)
         assertEquals("2026s1_c1_estructuras_de_datos", response.repoName)
@@ -572,5 +600,75 @@ class CursoServiceImplTest {
 
         assertEquals("push", inscripcion.githubRole)
         assertEquals("pending", inscripcion.githubState)
+    }
+
+    @Test
+    fun `obtenerAlumnos returns members when solicitante is enrolled alumno`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            githubRepoName = "2026s1_c1_estructuras_de_datos",
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
+        val inscripcion = Inscripcion(curso = curso, usuario = alumno)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
+        `when`(gitHubCollaboratorService.getRepoMembers("2026s1_c1_estructuras_de_datos")).thenReturn(emptyList())
+        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(emptyList())
+
+        val response = cursoService.obtenerAlumnos(1L, "alumno_inscripto")
+        assertNotNull(response)
+        assertEquals(1L, response.cursoId)
+    }
+
+    @Test
+    fun `obtenerAlumnos throws ForbiddenException when solicitante is neither owner nor enrolled alumno`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
+
+        val ex = assertThrows<ForbiddenException> {
+            cursoService.obtenerAlumnos(1L, "infiltrado")
+        }
+        assertEquals("No tiene permisos para ver los alumnos de este curso", ex.message)
+    }
+
+    @Test
+    fun `obtenerCursos for docente calls findCursosParaDocente and returns DTOs`() {
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1)
+        `when`(cursoRepository.findCursosParaDocente("profe_test")).thenReturn(listOf(curso))
+
+        val result = cursoService.obtenerCursos("profe_test", true)
+
+        assertEquals(1, result.size)
+        assertEquals("Estructuras", result[0].materia)
+        verify(cursoRepository).findCursosParaDocente("profe_test")
+        verify(cursoRepository, Mockito.never()).findCursosParaAlumno(Mockito.anyString())
+    }
+
+    @Test
+    fun `obtenerCursos for alumno calls findCursosParaAlumno and returns DTOs`() {
+        val curso = Curso(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2)
+        `when`(cursoRepository.findCursosParaAlumno("alumno_test")).thenReturn(listOf(curso))
+
+        val result = cursoService.obtenerCursos("alumno_test", false)
+
+        assertEquals(1, result.size)
+        assertEquals("Redes", result[0].materia)
+        verify(cursoRepository).findCursosParaAlumno("alumno_test")
+        verify(cursoRepository, Mockito.never()).findCursosParaDocente(Mockito.anyString())
     }
 }

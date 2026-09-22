@@ -8,9 +8,9 @@ interface CursoService {
 
     fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO
 
-    fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AlumnosDeUnCursoResponseDTO
+    fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
 
-    fun obtenerCursos(): List<CursoResponseDTO>
+    fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO>
 
-    fun obtenerAlumnos(cursoId: Long): AlumnosDeUnCursoResponseDTO
+    fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
 }

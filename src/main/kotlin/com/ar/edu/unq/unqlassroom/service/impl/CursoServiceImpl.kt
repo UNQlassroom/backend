@@ -8,6 +8,7 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubRepoAsociadoException
+import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Curso
@@ -54,13 +55,22 @@ class CursoServiceImpl (
         return CursoResponseDTO.desdeModelo(cursoGuardado)
     }
 
-    override fun obtenerCursos(): List<CursoResponseDTO> {
-        return cursoRepository.findAll().map { CursoResponseDTO.desdeModelo(it) }
+    override fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO> {
+        val cursos = if (esDocente) {
+            cursoRepository.findCursosParaDocente(username)
+        } else {
+            cursoRepository.findCursosParaAlumno(username)
+        }
+        return cursos.map { CursoResponseDTO.desdeModelo(it) }
     }
 
-    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AlumnosDeUnCursoResponseDTO {
+    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
+        }
+
+        if (curso.owner?.username != solicitanteUsername) {
+            throw ForbiddenException("Solo el docente a cargo del curso puede agregar alumnos")
         }
 
         val repoName = curso.githubRepoName?.takeIf { it.isNotBlank() }
@@ -144,9 +154,16 @@ class CursoServiceImpl (
         return gitHubRepoService.repositoryExists(repoNameCursoActual)
     }
 
-    override fun obtenerAlumnos(cursoId: Long): AlumnosDeUnCursoResponseDTO {
+    override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para ver los alumnos de este curso")
         }
 
         val repoName = curso.githubRepoName?.takeIf { it.isNotBlank() }
