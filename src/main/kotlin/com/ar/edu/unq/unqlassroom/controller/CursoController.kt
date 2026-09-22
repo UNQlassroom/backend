@@ -37,20 +37,27 @@ class CursoController (
     fun agregarAlumnos(
         @PathVariable id: Long,
         @RequestBody @Valid request: AgregarAlumnosRequestDTO,
+        authentication: Authentication,
     ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
-        val response = cursoService.agregarAlumnos(id, request)
+        val response = cursoService.agregarAlumnos(id, request, authentication.name)
         return ResponseEntity.ok(response)
     }
 
     @GetMapping
-    fun obtenerCursos(): ResponseEntity<List<CursoResponseDTO>> {
-        val cursos = cursoService.obtenerCursos()
+    fun obtenerCursos(
+        authentication: Authentication,
+    ): ResponseEntity<List<CursoResponseDTO>> {
+        val esDocente = authentication.authorities.any { it.authority == "ROLE_DOCENTE" }
+        val cursos = cursoService.obtenerCursos(authentication.name, esDocente)
         return ResponseEntity.ok(cursos)
     }
 
     @GetMapping("/{id}/alumnos")
-    fun obtenerAlumnos(@PathVariable id: Long): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
-        val alumnos = cursoService.obtenerAlumnos(id)
+    fun obtenerAlumnos(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
+        val alumnos = cursoService.obtenerAlumnos(id, authentication.name)
         return ResponseEntity.ok(alumnos)
     }
 }

@@ -84,7 +84,7 @@ class SecurityIntegrationTest {
     @Test
     fun `protected endpoints return 200 when valid token is provided`() {
         val token = jwtService.generateToken(alumno)
-        `when`(cursoService.obtenerCursos()).thenReturn(emptyList())
+        `when`(cursoService.obtenerCursos("alumno", false)).thenReturn(emptyList())
 
         mockMvc.perform(
             get("/cursos")

@@ -17,6 +17,7 @@ import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -96,10 +97,12 @@ class CursoControllerTest {
             )
         )
 
-        `when`(cursoService.agregarAlumnos(10L, requestDTO)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.agregarAlumnos(10L, requestDTO, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
@@ -117,9 +120,11 @@ class CursoControllerTest {
     @Test
     fun `agregarAlumnos endpoint returns 200 when usernames is empty`() {
         val requestDTO = AgregarAlumnosRequestDTO(usernames = emptyList())
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
@@ -144,10 +149,12 @@ class CursoControllerTest {
             )
         )
 
-        `when`(cursoService.obtenerAlumnos(10L)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.obtenerAlumnos(10L, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
             get("/cursos/10/alumnos")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
         )
             .andExpect(status().isOk)
@@ -157,5 +164,39 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.alumnos[0].repositorio.nombre").value("2026s1_c1_estructuras_de_datos_tp1_alumno1"))
             .andExpect(jsonPath("$.alumnos[0].repositorio.ultimoCommit").value("Segundo commit"))
             .andExpect(jsonPath("$.alumnos[0].repositorio.estadoCI").value("success"))
+    }
+
+    @Test
+    fun `obtenerCursos endpoint returns 200 and cursos for docente`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val cursos = listOf(
+            CursoResponseDTO(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, descripcion = "desc", ownerUsername = "profe")
+        )
+        `when`(cursoService.obtenerCursos("profe", true)).thenReturn(cursos)
+
+        mockMvc.perform(
+            get("/cursos")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.size()").value(1))
+            .andExpect(jsonPath("$[0].materia").value("Estructuras"))
+    }
+
+    @Test
+    fun `obtenerCursos endpoint returns 200 and cursos for alumno`() {
+        val auth = UsernamePasswordAuthenticationToken("alumno", null, listOf(SimpleGrantedAuthority("ROLE_ALUMNO")))
+        val cursos = listOf(
+            CursoResponseDTO(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2, descripcion = "desc", ownerUsername = "otro_profe")
+        )
+        `when`(cursoService.obtenerCursos("alumno", false)).thenReturn(cursos)
+
+        mockMvc.perform(
+            get("/cursos")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.size()").value(1))
+            .andExpect(jsonPath("$[0].materia").value("Redes"))
     }
 }
