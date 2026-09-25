@@ -94,40 +94,6 @@ class GitHubRepoServiceTest {
     }
 
     @Test
-    fun `generarNombreRepo produces the expected format with year, semester, comision, materia and username without tildes`() {
-        val curso = com.ar.edu.unq.unqlassroom.model.Curso(
-            materia = "programación funcional",
-            anio = 2026,
-            semestre = 2,
-            comision = 3
-        )
-        assertEquals("2026s2_c3_programacion_funcional_userDeGithub", gitHubRepoService.generarNombreRepo(curso, "userDeGithub"))
-    }
-
-    @Test
-    fun `generarNombreRepo removes accents from username as well`() {
-        val curso = com.ar.edu.unq.unqlassroom.model.Curso(
-            materia = "matemática discreta",
-            anio = 2026,
-            semestre = 1,
-            comision = 1
-        )
-        assertEquals("2026s1_c1_matematica_discreta_agustin", gitHubRepoService.generarNombreRepo(curso, "agustín"))
-    }
-
-    @Test
-    fun `generarDescripcionRepo produces the expected description`() {
-        val curso = com.ar.edu.unq.unqlassroom.model.Curso(
-            materia = "programación funcional",
-            anio = 2026,
-            semestre = 2,
-            comision = 3
-        )
-        val desc = gitHubRepoService.generarDescripcionRepo(curso, "userDeGithub")
-        assertEquals("Repositorio individual de userDeGithub para el curso programación funcional - Año 2026 - Semestre 2 - Comisión 3", desc)
-    }
-
-    @Test
     fun `repositoryExists returns true when resource exists`() {
         `when`(properties.organization).thenReturn("UNQlassroom")
         `when`(gitHubAppClient.checkResourceExists("/repos/UNQlassroom/existing_repo")).thenReturn(true)

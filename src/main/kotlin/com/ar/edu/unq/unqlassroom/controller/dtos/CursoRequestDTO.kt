@@ -15,7 +15,7 @@ data class CursoRequestDTO(
             semestre = this.semestre,
             comision = this.comision,
         )
-        curso.descripcion = curso.generarDescripcionRepo()
+        curso.descripcion = curso.generarDescripcion()
         return curso
     }
 }
