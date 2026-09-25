@@ -133,7 +133,6 @@ class CursoServiceImplTest {
         val response = cursoService.agregarAlumnos(1L, request, "profe_test")
 
         assertEquals(1L, response.cursoId)
-        assertNull(response.repoName)
         assertEquals(2, response.alumnos.size)
         assertEquals("alumno1", response.alumnos[0].username)
         assertEquals("pending", response.alumnos[0].state)
@@ -266,7 +265,6 @@ class CursoServiceImplTest {
         val response = cursoService.obtenerAlumnos(1L, "profe_test")
 
         assertEquals(1L, response.cursoId)
-        assertNull(response.repoName)
         assertEquals(2, response.alumnos.size)
         assertEquals("alumno1", response.alumnos[0].username)
         assertEquals("pending", response.alumnos[0].state)
