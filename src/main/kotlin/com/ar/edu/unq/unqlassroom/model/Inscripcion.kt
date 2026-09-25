@@ -27,8 +27,4 @@ class Inscripcion(
 
     @Column(nullable = false)
     var githubState: String = "pending",
-
-    @OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true)
-    @JoinColumn(name = "repositorio_id")
-    var repositorio: Repositorio? = null,
 )
