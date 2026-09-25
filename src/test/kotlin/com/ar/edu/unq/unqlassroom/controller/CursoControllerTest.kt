@@ -87,7 +87,6 @@ class CursoControllerTest {
 
         val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            repoName = null,
             alumnos = listOf(
                 AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
                 AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "pending")
@@ -131,7 +130,6 @@ class CursoControllerTest {
     fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
         val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            repoName = null,
             alumnos = listOf(
                 AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
                 AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "active")
@@ -158,7 +156,6 @@ class CursoControllerTest {
     fun `obtenerAlumnos endpoint returns 200 and list of students`() {
         val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            repoName = null,
             alumnos = listOf(
                 AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "write", state = "active")
             )
