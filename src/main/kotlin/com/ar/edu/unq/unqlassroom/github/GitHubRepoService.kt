@@ -1,7 +1,5 @@
 package com.ar.edu.unq.unqlassroom.github
 
-import com.ar.edu.unq.unqlassroom.model.Curso
-import com.ar.edu.unq.unqlassroom.util.removerTildes
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -23,6 +21,7 @@ class GitHubRepoService(
         description: String? = null,
         private: Boolean = true,
         autoInit: Boolean = true,
+        isTemplate: Boolean = false,
         org: String? = null,
     ): GitHubRepoResponse {
         val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
@@ -32,6 +31,7 @@ class GitHubRepoService(
                 description = description,
                 private = private,
                 autoInit = autoInit,
+                isTemplate = isTemplate,
             ),
         )
         return gitHubAppClient.executeInstallationRequest(
@@ -40,6 +40,61 @@ class GitHubRepoService(
             responseType = GitHubRepoResponse::class.java,
             body = requestBody,
         )
+    }
+
+    @JvmOverloads
+    fun createTemplateRepository(
+        name: String,
+        description: String? = null,
+        org: String? = null,
+    ): GitHubRepoResponse {
+        return createOrgRepository(
+            name = name,
+            description = description,
+            private = true,
+            autoInit = true,
+            isTemplate = true,
+            org = org,
+        )
+    }
+
+    @JvmOverloads
+    fun createRepositoryFromTemplate(
+        templateRepoName: String,
+        newRepoName: String,
+        description: String? = null,
+        private: Boolean = true,
+        org: String? = null,
+    ): GitHubRepoResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            GenerateRepoFromTemplateRequest(
+                owner = targetOrg,
+                name = newRepoName,
+                description = description,
+                private = private,
+                includeAllBranches = false,
+            )
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "POST",
+            path = "/repos/$targetOrg/$templateRepoName/generate",
+            responseType = GitHubRepoResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun listTemplateRepositories(
+        org: String? = null,
+    ): List<GitHubRepoResponse> {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val repos = gitHubAppClient.executeInstallationRequest(
+            method = "GET",
+            path = "/orgs/$targetOrg/repos?type=all&per_page=100",
+            responseType = Array<GitHubRepoResponse>::class.java,
+        )
+        return repos.filter { it.isTemplate }
     }
 
     @JvmOverloads
@@ -54,7 +109,6 @@ class GitHubRepoService(
             responseType = GitHubRepoResponse::class.java,
         )
     }
-
 
     @JvmOverloads
     fun repositoryExists(
@@ -180,12 +234,6 @@ class GitHubRepoService(
         )
     }
 
-    fun generarNombreRepo(curso: Curso, username: String): String =
-        "${curso.generarNombreRepo()}_${username.trim().removerTildes()}"
-
-    fun generarDescripcionRepo(curso: com.ar.edu.unq.unqlassroom.model.Curso, username: String): String =
-        "Repositorio individual de ${username.trim()} para el curso ${curso.materia} - Año ${curso.anio} - Semestre ${curso.semestre} - Comisión ${curso.comision}"
-
     private fun requiredOrganization(): String = properties.organization?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -196,6 +244,16 @@ data class CreateRepoRequest(
     @JsonProperty("description") val description: String? = null,
     @JsonProperty("private") val private: Boolean = true,
     @JsonProperty("auto_init") val autoInit: Boolean = true,
+    @JsonProperty("is_template") val isTemplate: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GenerateRepoFromTemplateRequest(
+    @JsonProperty("owner") val owner: String,
+    @JsonProperty("name") val name: String,
+    @JsonProperty("description") val description: String? = null,
+    @JsonProperty("private") val private: Boolean = true,
+    @JsonProperty("include_all_branches") val includeAllBranches: Boolean = false,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -205,6 +263,8 @@ data class GitHubRepoResponse(
     @JsonProperty("full_name") val fullName: String = "",
     @JsonProperty("html_url") val htmlUrl: String = "",
     @JsonProperty("clone_url") val cloneUrl: String = "",
+    @JsonProperty("is_template") val isTemplate: Boolean = false,
+    @JsonProperty("description") val description: String? = null,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -265,4 +325,3 @@ data class GitHubWorkflowRunItem(
     @JsonProperty("status") val status: String = "",
     @JsonProperty("conclusion") val conclusion: String? = null,
 )
-
