@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.github
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -234,6 +235,34 @@ class GitHubRepoService(
         )
     }
 
+    @JvmOverloads
+    fun createRelease(
+        repoName: String,
+        tagName: String,
+        name: String? = null,
+        body: String? = null,
+        targetCommitish: String? = null,
+        org: String? = null,
+    ): GitHubReleaseResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            CreateReleaseRequest(
+                tagName = tagName,
+                name = name,
+                body = body,
+                targetCommitish = targetCommitish,
+                draft = false,
+                prerelease = false,
+            )
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "POST",
+            path = "/repos/$targetOrg/$repoName/releases",
+            responseType = GitHubReleaseResponse::class.java,
+            body = requestBody,
+        )
+    }
+
     private fun requiredOrganization(): String = properties.organization?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -324,4 +353,24 @@ data class GitHubWorkflowRunsResponse(
 data class GitHubWorkflowRunItem(
     @JsonProperty("status") val status: String = "",
     @JsonProperty("conclusion") val conclusion: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateReleaseRequest(
+    @JsonProperty("tag_name") val tagName: String,
+    @JsonProperty("name") val name: String? = null,
+    @JsonProperty("body") val body: String? = null,
+    @JsonProperty("target_commitish") val targetCommitish: String? = null,
+    @JsonProperty("draft") val draft: Boolean = false,
+    @JsonProperty("prerelease") val prerelease: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubReleaseResponse(
+    @JsonProperty("id") val id: Long = 0,
+    @JsonProperty("tag_name") val tagName: String = "",
+    @JsonProperty("name") val name: String? = null,
+    @JsonProperty("html_url") val htmlUrl: String = "",
+    @JsonProperty("created_at") val createdAt: String = "",
 )

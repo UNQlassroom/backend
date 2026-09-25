@@ -169,4 +169,81 @@ class AsignacionControllerTest {
             .andExpect(jsonPath("$.size()").value(1))
             .andExpect(jsonPath("$[0].name").value("template-tp3"))
     }
+
+    @Test
+    fun `marcarAsignacionComoEntregada returns 200 and updated assignment`() {
+        val response = AsignacionResponseDTO(
+            id = 5L,
+            cursoId = 10L,
+            titulo = "TP5",
+            descripcion = null,
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl5",
+            fechaLimite = null,
+            grupos = listOf(
+                GrupoAsignacionResponseDTO(
+                    id = 50L,
+                    nombre = null,
+                    integrantes = listOf("alumno1"),
+                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
+                    entregada = true,
+                    releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
+                )
+            ),
+            entregada = true,
+            releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("alumno1", null)
+        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "alumno1", null)).thenReturn(response)
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/entregar")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5))
+            .andExpect(jsonPath("$.entregada").value(true))
+            .andExpect(jsonPath("$.releaseUrl").value("https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1"))
+            .andExpect(jsonPath("$.grupos[0].entregada").value(true))
+            .andExpect(jsonPath("$.grupos[0].releaseUrl").value("https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1"))
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada with request body specifying grupoId returns 200`() {
+        val response = AsignacionResponseDTO(
+            id = 5L,
+            cursoId = 10L,
+            titulo = "TP5",
+            descripcion = null,
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl5",
+            fechaLimite = null,
+            grupos = listOf(
+                GrupoAsignacionResponseDTO(
+                    id = 50L,
+                    nombre = "Grupo 1",
+                    integrantes = listOf("alumno1"),
+                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
+                    entregada = true,
+                )
+            ),
+            entregada = true
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "profe", 50L)).thenReturn(response)
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/entregar")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(EntregarAsignacionRequestDTO(grupoId = 50L)))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5))
+            .andExpect(jsonPath("$.entregada").value(true))
+            .andExpect(jsonPath("$.grupos[0].id").value(50))
+            .andExpect(jsonPath("$.grupos[0].entregada").value(true))
+    }
 }

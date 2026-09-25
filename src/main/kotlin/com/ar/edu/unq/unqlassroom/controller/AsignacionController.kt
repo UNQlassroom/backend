@@ -42,6 +42,24 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @PostMapping("/cursos/{cursoId}/asignaciones/{asignacionId}/entregar")
+    fun marcarAsignacionComoEntregada(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(required = false) grupoId: Long?,
+        @RequestBody(required = false) request: EntregarAsignacionRequestDTO?,
+        authentication: Authentication,
+    ): ResponseEntity<AsignacionResponseDTO> {
+        val targetGrupoId = request?.grupoId ?: grupoId
+        val response = asignacionService.marcarAsignacionComoEntregada(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = targetGrupoId,
+        )
+        return ResponseEntity.ok(response)
+    }
+
     @PostMapping("/templates")
     fun crearTemplate(
         @RequestBody @Valid request: CrearTemplateRepoRequestDTO,

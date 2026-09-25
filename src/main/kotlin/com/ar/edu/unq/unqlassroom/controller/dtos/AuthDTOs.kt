@@ -28,6 +28,9 @@ data class GitHubLoginResponseDTO(
 }
 
 data class AuthResponseDTO(
-    val token: String,
-    val user: GitHubLoginResponseDTO
+    val token: String? = null,
+    val user: GitHubLoginResponseDTO? = null,
+    val requiereUnirseAOrg: Boolean = false,
+    val redirectUrl: String? = null
 )
+
