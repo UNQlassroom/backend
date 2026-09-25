@@ -43,6 +43,15 @@ class CursoController (
         return ResponseEntity.ok(response)
     }
 
+    @PostMapping("/{id}/alumnos/sync")
+    fun sincronizarAlumnos(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
+        val response = cursoService.sincronizarAlumnos(id, authentication.name)
+        return ResponseEntity.ok(response)
+    }
+
     @GetMapping
     fun obtenerCursos(
         authentication: Authentication,

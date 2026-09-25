@@ -5,7 +5,6 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoMiembroDeUnCursoDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
@@ -43,7 +42,7 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `crearCurso endpoint returns 201 and created curso with github repo details`() {
+    fun `crearCurso endpoint returns 201 and created curso`() {
         val requestDTO = CursoRequestDTO(
             materia = "Estructuras de Datos",
             anio = 2026,
@@ -58,8 +57,7 @@ class CursoControllerTest {
             semestre = 1,
             comision = 1,
             descripcion = "Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1",
-            githubRepoId = 987654L,
-            githubRepoName = "2026s1_c1_estructuras_de_datos"
+            ownerUsername = "profe"
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
@@ -78,8 +76,7 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.semestre").value(1))
             .andExpect(jsonPath("$.comision").value(1))
             .andExpect(jsonPath("$.descripcion").value("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1"))
-            .andExpect(jsonPath("$.githubRepoId").value(987654))
-            .andExpect(jsonPath("$.githubRepoName").value("2026s1_c1_estructuras_de_datos"))
+            .andExpect(jsonPath("$.ownerUsername").value("profe"))
     }
 
     @Test
@@ -90,10 +87,10 @@ class CursoControllerTest {
 
         val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            repoName = "2026s1_c1_estructuras_de_datos",
+            repoName = null,
             alumnos = listOf(
-                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active", repositorio = null),
-                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "pending", repositorio = null)
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
+                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "pending")
             )
         )
 
@@ -108,7 +105,6 @@ class CursoControllerTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.repoName").value("2026s1_c1_estructuras_de_datos"))
             .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
             .andExpect(jsonPath("$.alumnos[0].role").value("push"))
             .andExpect(jsonPath("$.alumnos[0].state").value("active"))
@@ -132,20 +128,39 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `obtenerAlumnos endpoint returns 200 and list of students with repositorio`() {
-        val repoDTO = RepositorioDTO(
-            nombre = "2026s1_c1_estructuras_de_datos_tp1_alumno1",
-            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_tp1_alumno1",
-            ultimoCommit = "Segundo commit",
-            fechaUltimoCommit = "2026-09-09T19:00:00Z",
-            estadoCI = "success"
-        )
-
+    fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
         val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            repoName = "2026s1_c1_estructuras_de_datos",
+            repoName = null,
             alumnos = listOf(
-                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "write", state = "active", repositorio = repoDTO)
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
+                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "active")
+            )
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.sincronizarAlumnos(10L, "profe")).thenReturn(responseDTO)
+
+        mockMvc.perform(
+            post("/cursos/10/alumnos/sync")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.cursoId").value(10))
+            .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
+            .andExpect(jsonPath("$.alumnos[0].state").value("active"))
+            .andExpect(jsonPath("$.alumnos[1].username").value("alumno2"))
+            .andExpect(jsonPath("$.alumnos[1].state").value("active"))
+    }
+
+    @Test
+    fun `obtenerAlumnos endpoint returns 200 and list of students`() {
+        val responseDTO = AlumnosDeUnCursoResponseDTO(
+            cursoId = 10L,
+            repoName = null,
+            alumnos = listOf(
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "write", state = "active")
             )
         )
 
@@ -159,11 +174,9 @@ class CursoControllerTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.repoName").value("2026s1_c1_estructuras_de_datos"))
             .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.nombre").value("2026s1_c1_estructuras_de_datos_tp1_alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.ultimoCommit").value("Segundo commit"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.estadoCI").value("success"))
+            .andExpect(jsonPath("$.alumnos[0].role").value("write"))
+            .andExpect(jsonPath("$.alumnos[0].state").value("active"))
     }
 
     @Test
@@ -210,8 +223,6 @@ class CursoControllerTest {
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            githubRepoId = 123L,
-            githubRepoName = "2026s1_c1_estructuras",
             ownerUsername = "profe"
         )
         `when`(cursoService.obtenerCurso(1L, "profe")).thenReturn(curso)

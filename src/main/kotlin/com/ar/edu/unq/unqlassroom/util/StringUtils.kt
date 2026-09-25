@@ -8,3 +8,13 @@ fun String.removerTildes(): String {
         .replace("\\p{M}".toRegex(), "")
         .replace("[´`¨^~]".toRegex(), "")
 }
+
+fun String.toRepoSlug(): String {
+    return this.removerTildes()
+        .trim()
+        .lowercase()
+        .replace(Regex("[\\s-]+"), "_")
+        .replace(Regex("[^a-z0-9_]"), "")
+        .replace(Regex("_+"), "_")
+        .trim('_')
+}
