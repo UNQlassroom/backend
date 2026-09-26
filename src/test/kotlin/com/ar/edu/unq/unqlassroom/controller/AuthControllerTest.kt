@@ -62,4 +62,28 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.user.username").value("alumno1"))
             .andExpect(jsonPath("$.user.esDocente").value(false))
     }
+
+    @Test
+    fun `loginConGitHub returns 200 with redirectUrl when user requires joining org`() {
+        val requestDTO = GitHubLoginRequestDTO(code = "github-code-org-required", esDocente = false)
+        val responseDTO = AuthResponseDTO(
+            token = null,
+            user = null,
+            requiereUnirseAOrg = true,
+            redirectUrl = "https://github.com/orgs/UNQlassroom/invitation"
+        )
+
+        `when`(authService.loginConGitHub(requestDTO)).thenReturn(responseDTO)
+
+        mockMvc.perform(
+            post("/auth/github")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(requestDTO))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.requiereUnirseAOrg").value(true))
+            .andExpect(jsonPath("$.redirectUrl").value("https://github.com/orgs/UNQlassroom/invitation"))
+            .andExpect(jsonPath("$.token").doesNotExist())
+            .andExpect(jsonPath("$.user").doesNotExist())
+    }
 }

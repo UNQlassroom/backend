@@ -29,6 +29,19 @@ class AuthServiceImpl(
         val accessToken = gitHubOAuthClient.intercambiarCodePorToken(dto.code)
         val perfil = gitHubOAuthClient.obtenerPerfilGitHub(accessToken)
 
+        val usuarioExistente = usuarioRepository.findByUsername(perfil.login)
+        if (usuarioExistente != null) {
+            perfil.email?.let { usuarioExistente.email = it }
+            perfil.name?.let { usuarioExistente.nombreCompleto = it }
+            usuarioExistente.esDocente = dto.esDocente == true
+            val usuarioGuardado = usuarioRepository.save(usuarioExistente)
+            val token = jwtService.generateToken(usuarioGuardado)
+            return AuthResponseDTO(
+                token = token,
+                user = GitHubLoginResponseDTO.desdeModelo(usuarioGuardado)
+            )
+        }
+
         val org = properties.organization?.trim().orEmpty()
         if (org.isNotEmpty()) {
             val membresia = gitHubOrgService.obtenerMembresia(perfil.login)
@@ -44,27 +57,18 @@ class AuthServiceImpl(
                     token = null,
                     user = null,
                     requiereUnirseAOrg = true,
-                    redirectUrl = redirectUrl,
+                    redirectUrl = redirectUrl
                 )
             }
         }
 
-        val usuarioExistente = usuarioRepository.findByUsername(perfil.login)
-        val usuarioAGuardar = if (usuarioExistente != null) {
-            perfil.email?.let { usuarioExistente.email = it }
-            perfil.name?.let { usuarioExistente.nombreCompleto = it }
-            usuarioExistente.esDocente = dto.esDocente == true
-            usuarioExistente
-        } else {
-            Usuario(
-                username = perfil.login,
-                esDocente = dto.esDocente == true,
-                email = perfil.email,
-                nombreCompleto = perfil.name
-            )
-        }
-
-        val usuarioGuardado = usuarioRepository.save(usuarioAGuardar)
+        val nuevoUsuario = Usuario(
+            username = perfil.login,
+            esDocente = dto.esDocente == true,
+            email = perfil.email,
+            nombreCompleto = perfil.name
+        )
+        val usuarioGuardado = usuarioRepository.save(nuevoUsuario)
         val token = jwtService.generateToken(usuarioGuardado)
 
         return AuthResponseDTO(
