@@ -11,4 +11,5 @@ interface AsignacionService {
     fun obtenerAsignacion(cursoId: Long, asignacionId: Long, solicitanteUsername: String): AsignacionResponseDTO
     fun crearTemplateRepository(dto: CrearTemplateRepoRequestDTO, solicitanteUsername: String): TemplateRepoResponseDTO
     fun listarTemplates(solicitanteUsername: String): List<TemplateRepoResponseDTO>
+    fun marcarAsignacionComoEntregada(cursoId: Long, asignacionId: Long, solicitanteUsername: String, grupoId: Long? = null): AsignacionResponseDTO
 }

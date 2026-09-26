@@ -15,6 +15,7 @@ import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import java.time.LocalDateTime
 
 @Service
 @Transactional
@@ -200,6 +201,8 @@ class AsignacionServiceImpl(
                 }
             }
 
+            val gruposDTO = gruposFiltrados.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
+            val primerGrupo = gruposDTO.firstOrNull()
             AsignacionResponseDTO(
                 id = asignacion.id ?: 0L,
                 cursoId = asignacion.curso.id ?: 0L,
@@ -208,7 +211,10 @@ class AsignacionServiceImpl(
                 tipo = asignacion.tipo,
                 templateRepoName = asignacion.templateRepoName,
                 fechaLimite = asignacion.fechaLimite,
-                grupos = gruposFiltrados.map { GrupoAsignacionResponseDTO.desdeModelo(it) },
+                grupos = gruposDTO,
+                entregada = primerGrupo?.entregada ?: false,
+                fechaEntrega = primerGrupo?.fechaEntrega,
+                releaseUrl = primerGrupo?.releaseUrl,
             )
         }
     }
@@ -252,6 +258,9 @@ class AsignacionServiceImpl(
             }
         }
 
+        val gruposDTO = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
+        val primerGrupo = gruposDTO.firstOrNull()
+
         return AsignacionResponseDTO(
             id = asignacion.id ?: 0L,
             cursoId = asignacion.curso.id ?: 0L,
@@ -260,7 +269,113 @@ class AsignacionServiceImpl(
             tipo = asignacion.tipo,
             templateRepoName = asignacion.templateRepoName,
             fechaLimite = asignacion.fechaLimite,
-            grupos = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) },
+            grupos = gruposDTO,
+            entregada = primerGrupo?.entregada ?: false,
+            fechaEntrega = primerGrupo?.fechaEntrega,
+            releaseUrl = primerGrupo?.releaseUrl,
+        )
+    }
+
+    override fun marcarAsignacionComoEntregada(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?
+    ): AsignacionResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        if (asignacion.fechaLimite != null && LocalDateTime.now().isAfter(asignacion.fechaLimite)) {
+            throw BadRequestException("No se puede entregar la asignación porque la fecha límite ha vencido")
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para entregar esta asignación")
+        }
+
+        val grupo = if (esOwner) {
+            if (grupoId != null) {
+                asignacion.grupos.find { it.id == grupoId }
+                    ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
+            } else {
+                throw BadRequestException("Debe especificar el grupoId para marcar la entrega como docente")
+            }
+        } else {
+            val grupoDelAlumno = asignacion.grupos.find { g ->
+                g.integrantes.any { it.username == solicitanteUsername }
+            } ?: throw BadRequestException("El usuario no pertenece a ningún grupo de esta asignación")
+
+            if (grupoId != null && grupoDelAlumno.id != grupoId) {
+                throw ForbiddenException("No tiene permisos para entregar en nombre de otro grupo")
+            }
+            grupoDelAlumno
+        }
+
+        grupo.cantidadEntregas += 1
+        grupo.entregada = true
+        grupo.fechaEntrega = LocalDateTime.now()
+
+        val tagName = "entrega-v${grupo.cantidadEntregas}"
+        val releaseName = "Entrega v${grupo.cantidadEntregas} - ${asignacion.titulo}"
+        val releaseBody = "Entrega realizada por $solicitanteUsername el ${grupo.fechaEntrega}"
+
+        try {
+            val release = gitHubRepoService.createRelease(
+                repoName = grupo.repositorio.nombre,
+                tagName = tagName,
+                name = releaseName,
+                body = releaseBody,
+            )
+            grupo.releaseUrl = release.htmlUrl
+        } catch (_: Exception) {
+            // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
+        }
+
+        try {
+            val info = gitHubRepoService.obtenerInformacionRepositorio(grupo.repositorio.nombre)
+            grupo.repositorio.ultimoCommit = info.ultimoCommit
+            grupo.repositorio.fechaUltimoCommit = info.fechaUltimoCommit
+            grupo.repositorio.estadoCI = info.estadoCI
+        } catch (_: Exception) {
+            // Si falla github puntual, continuar
+        }
+
+        val asignacionGuardada = asignacionRepository.save(asignacion)
+
+        val gruposAMostrar = if (esOwner) {
+            asignacionGuardada.grupos
+        } else {
+            asignacionGuardada.grupos.filter { g ->
+                g.integrantes.any { it.username == solicitanteUsername }
+            }
+        }
+
+        val gruposDTO = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
+        val grupoActualDTO = if (esOwner) {
+            gruposDTO.find { it.id == grupo.id }
+        } else {
+            gruposDTO.firstOrNull()
+        }
+
+        return AsignacionResponseDTO(
+            id = asignacionGuardada.id ?: 0L,
+            cursoId = asignacionGuardada.curso.id ?: 0L,
+            titulo = asignacionGuardada.titulo,
+            descripcion = asignacionGuardada.descripcion,
+            tipo = asignacionGuardada.tipo,
+            templateRepoName = asignacionGuardada.templateRepoName,
+            fechaLimite = asignacionGuardada.fechaLimite,
+            grupos = gruposDTO,
+            entregada = grupoActualDTO?.entregada ?: false,
+            fechaEntrega = grupoActualDTO?.fechaEntrega,
+            releaseUrl = grupoActualDTO?.releaseUrl,
         )
     }
 

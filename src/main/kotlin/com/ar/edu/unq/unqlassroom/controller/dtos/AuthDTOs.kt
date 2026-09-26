@@ -33,3 +33,4 @@ data class AuthResponseDTO(
     val requiereUnirseAOrg: Boolean = false,
     val redirectUrl: String? = null
 )
+
