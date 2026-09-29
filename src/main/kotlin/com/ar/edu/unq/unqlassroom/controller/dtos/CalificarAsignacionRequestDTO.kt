@@ -15,6 +15,4 @@ data class CalificarAsignacionRequestDTO(
 
     val observaciones: String? = null,
 
-) {
-    fun getObservaciones(): String = observaciones ?: ""
-}
+)

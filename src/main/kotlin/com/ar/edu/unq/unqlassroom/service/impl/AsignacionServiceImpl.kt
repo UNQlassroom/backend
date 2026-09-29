@@ -360,8 +360,8 @@ class AsignacionServiceImpl(
             throw BadRequestException("Debe especificar el grupo a calificar")
         }
 
-        grupo.calificacion = calificacion
-        grupo.observaciones = dto.getObservaciones()
+        grupo.calificacion = dto.calificacion
+        grupo.observaciones = dto.observaciones
         grupo.fechaCalificacion = LocalDateTime.now()
 
         val asignacionGuardada = asignacionRepository.save(asignacion)
