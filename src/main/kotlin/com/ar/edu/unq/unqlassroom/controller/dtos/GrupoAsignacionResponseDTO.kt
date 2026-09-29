@@ -9,8 +9,11 @@ data class GrupoAsignacionResponseDTO(
     val integrantes: List<String>,
     val repositorio: RepositorioDTO?,
     val entregada: Boolean = false,
-    val fechaEntrega: LocalDateTime? = null,
+    val fechaEntregada: LocalDateTime? = null,
     val releaseUrl: String? = null,
+    val calificacion: Int? = null,
+    val observaciones: String? = null,
+    val fechaCalificacion: LocalDateTime? = null,
 ) {
     companion object {
         fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO = GrupoAsignacionResponseDTO(
@@ -19,8 +22,11 @@ data class GrupoAsignacionResponseDTO(
             integrantes = grupo.integrantes.map { it.username },
             repositorio = RepositorioDTO.desdeModelo(grupo.repositorio),
             entregada = grupo.entregada,
-            fechaEntrega = grupo.fechaEntrega,
+            fechaEntregada = grupo.fechaEntregada,
             releaseUrl = grupo.releaseUrl,
+            calificacion = grupo.calificacion,
+            observaciones = grupo.observaciones,
+            fechaCalificacion = grupo.fechaCalificacion,
         )
     }
 }
