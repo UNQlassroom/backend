@@ -60,6 +60,28 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @RequestMapping(
+        value = [
+            "/cursos/{cursoId}/asignaciones/{asignacionId}/individual/calificar",
+            "/cursos/{cursoId}/asignaciones/{asignacionId}/grupos/calificar"
+        ],
+        method = [RequestMethod.POST, RequestMethod.PUT]
+    )
+    fun calificarAsignacion(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestBody @Valid request: CalificarAsignacionRequestDTO,
+        authentication: Authentication,
+    ): ResponseEntity<AsignacionResponseDTO> {
+        val response = asignacionService.calificarAsignacion(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            dto = request
+        )
+        return ResponseEntity.ok(response)
+    }
+
     @PostMapping("/templates")
     fun crearTemplate(
         @RequestBody @Valid request: CrearTemplateRepoRequestDTO,
