@@ -168,7 +168,8 @@
 						<plugin>spring</plugin>
 						<plugin>jpa</plugin>
 						<plugin>all-open</plugin>
-					</compilerPlugins>
+                        <plugin>lombok</plugin>
+                    </compilerPlugins>
 					<pluginOptions>
 						<option>all-open:annotation=jakarta.persistence.Entity</option>
 						<option>all-open:annotation=jakarta.persistence.MappedSuperclass</option>
@@ -186,7 +187,12 @@
 						<artifactId>kotlin-maven-noarg</artifactId>
 						<version>${kotlin.version}</version>
 					</dependency>
-				</dependencies>
+                    <dependency>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-lombok</artifactId>
+                        <version>${kotlin.version}</version>
+                    </dependency>
+                </dependencies>
 			</plugin>
 		</plugins>
 	</build>
