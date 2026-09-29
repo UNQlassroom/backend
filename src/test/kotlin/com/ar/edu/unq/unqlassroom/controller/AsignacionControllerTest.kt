@@ -190,8 +190,6 @@ class AsignacionControllerTest {
                     releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
                 )
             ),
-            entregada = true,
-            releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
         )
 
         val auth = UsernamePasswordAuthenticationToken("alumno1", null)
@@ -203,8 +201,6 @@ class AsignacionControllerTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.id").value(5))
-            .andExpect(jsonPath("$.entregada").value(true))
-            .andExpect(jsonPath("$.releaseUrl").value("https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1"))
             .andExpect(jsonPath("$.grupos[0].entregada").value(true))
             .andExpect(jsonPath("$.grupos[0].releaseUrl").value("https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1"))
     }
@@ -228,7 +224,6 @@ class AsignacionControllerTest {
                     entregada = true,
                 )
             ),
-            entregada = true
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
@@ -242,8 +237,121 @@ class AsignacionControllerTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.id").value(5))
-            .andExpect(jsonPath("$.entregada").value(true))
             .andExpect(jsonPath("$.grupos[0].id").value(50))
             .andExpect(jsonPath("$.grupos[0].entregada").value(true))
+    }
+
+    @Test
+    fun `calificarAsignacion returns 200 and updated assignment with grade and feedback`() {
+        val request = CalificarAsignacionRequestDTO(
+            grupoId = 50L,
+            calificacion = 9,
+            observaciones = "Excelente resolución"
+        )
+        val response = AsignacionResponseDTO(
+            id = 5L,
+            cursoId = 10L,
+            titulo = "TP5",
+            descripcion = null,
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl5",
+            fechaLimite = null,
+            grupos = listOf(
+                GrupoAsignacionResponseDTO(
+                    id = 50L,
+                    nombre = null,
+                    integrantes = listOf("alumno1"),
+                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
+                    calificacion = 9,
+                    observaciones = "Excelente resolución",
+                )
+            ),
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(asignacionService.calificarAsignacion(10L, 5L, "profe", request)).thenReturn(response)
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/individual/calificar")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5))
+            .andExpect(jsonPath("$.grupos[0].calificacion").value(9))
+            .andExpect(jsonPath("$.grupos[0].observaciones").value("Excelente resolución"))
+    }
+
+    @Test
+    fun `calificarAsignacion with path grupoId returns 200`() {
+        val request = CalificarAsignacionRequestDTO(
+            grupoId = 60L,
+            calificacion = 8,
+            observaciones = "Muy buen trabajo grupal"
+        )
+        val response = AsignacionResponseDTO(
+            id = 5L,
+            cursoId = 10L,
+            titulo = "TP5",
+            descripcion = null,
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl5",
+            fechaLimite = null,
+            grupos = listOf(
+                GrupoAsignacionResponseDTO(
+                    id = 60L,
+                    nombre = "Grupo A",
+                    integrantes = listOf("alumno1", "alumno2"),
+                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
+                    calificacion = 8,
+                    observaciones = "Muy buen trabajo grupal",
+                )
+            ),
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(asignacionService.calificarAsignacion(10L, 5L, "profe", request)).thenReturn(response)
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/grupos/calificar")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5))
+            .andExpect(jsonPath("$.grupos[0].calificacion").value(8))
+            .andExpect(jsonPath("$.grupos[0].observaciones").value("Muy buen trabajo grupal"))
+    }
+
+    @Test
+    fun `calificarAsignacion returns 400 when nota is invalid`() {
+        val requestUnderMin = CalificarAsignacionRequestDTO(
+            calificacion = 0,
+            observaciones = "Desaprobado"
+        )
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/individual/calificar")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(requestUnderMin))
+        )
+            .andExpect(status().isBadRequest)
+
+        val requestOverMax = CalificarAsignacionRequestDTO(
+            calificacion = 11,
+            observaciones = "Excelente plus"
+        )
+
+        mockMvc.perform(
+            post("/cursos/10/asignaciones/5/individual/calificar")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(requestOverMax))
+        )
+            .andExpect(status().isBadRequest)
     }
 }

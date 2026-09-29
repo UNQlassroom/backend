@@ -34,13 +34,22 @@ class GrupoAsignacion(
     var entregada: Boolean = false,
 
     @Column(nullable = true)
-    var fechaEntrega: LocalDateTime? = null,
+    var fechaEntregada: LocalDateTime? = null,
 
     @Column(nullable = true)
     var releaseUrl: String? = null,
 
     @Column(nullable = false)
-    var cantidadEntregas: Int = 0
+    var cantidadEntregas: Int = 0,
+
+    @Column(nullable = true)
+    var calificacion: Int? = null,
+
+    @Column(nullable = true, length = 2000)
+    var observaciones: String? = null,
+
+    @Column(nullable = true)
+    var fechaCalificacion: LocalDateTime? = null,
 ) {
     fun normalizarNombre(): String =
         nombre?.removerTildes()?.lowercase()?.trim()?.replace("\\s+".toRegex(), "_") ?: ""

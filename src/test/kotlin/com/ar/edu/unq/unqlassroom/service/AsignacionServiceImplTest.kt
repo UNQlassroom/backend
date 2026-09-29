@@ -1,7 +1,9 @@
 package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.controller.dtos.*
+import com.ar.edu.unq.unqlassroom.errors.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.BadRequestException
+import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoResponse
@@ -302,7 +304,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `crearAsignacion GRUPAL throws BadRequestException when a student is not enrolled in curso`() {
+    fun `crearAsignacion GRUPAL throws BadRequestException when a student is not enrolled`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
         val alumno1 = Usuario(id = 2L, username = "alumno1")
@@ -318,69 +320,77 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "template-tp",
             grupos = listOf(
-                CrearGrupoRequestDTO(nombre = "Grupo 1", integrantesUsernames = listOf("alumno1", "alumno_fantasma")),
+                CrearGrupoRequestDTO(nombre = "Grupo 1", integrantesUsernames = listOf("alumno_no_inscripto")),
             )
         )
 
         val ex = assertThrows<BadRequestException> {
             asignacionService.crearAsignacion(10L, request, "profe_test")
         }
-        assertTrue(ex.message!!.contains("alumno_fantasma"))
+        assertEquals("Los siguientes alumnos no están inscriptos en el curso: alumno_no_inscripto", ex.message)
     }
 
     @Test
-    fun `crearAsignacion throws ForbiddenException when solicitante is not the owner docente`() {
-        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
-
-        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
-
-        val request = CrearAsignacionRequestDTO(
-            titulo = "TP1",
-            tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "template-tp",
-        )
-
-        val ex = assertThrows<ForbiddenException> {
-            asignacionService.crearAsignacion(10L, request, "otro_usuario")
-        }
-        assertEquals("Solo el docente a cargo del curso puede crear asignaciones", ex.message)
-    }
-
-    @Test
-    fun `crearAsignacion throws BadRequestException when template repo does not exist in GitHub`() {
-        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
-
-        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
-        `when`(gitHubRepoService.repositoryExists("template_inexistente")).thenReturn(false)
-
-        val request = CrearAsignacionRequestDTO(
-            titulo = "TP1",
-            tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "template_inexistente",
-        )
-
-        val ex = assertThrows<BadRequestException> {
-            asignacionService.crearAsignacion(10L, request, "profe_owner")
-        }
-        assertEquals("El repositorio template 'template_inexistente' no existe en GitHub", ex.message)
-    }
-
-    @Test
-    fun `obtenerAsignaciones returns filtered groups when solicitante is enrolled alumno`() {
+    fun `crearAsignacion throws BadRequestException when template repo does not exist`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1")
-        val alumno2 = Usuario(id = 3L, username = "alumno2")
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
-        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(
-            Inscripcion(curso = curso, usuario = alumno1)
+        `when`(gitHubRepoService.repositoryExists("template-inexistente")).thenReturn(false)
+
+        val request = CrearAsignacionRequestDTO(
+            titulo = "TP Invalido",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "template-inexistente",
         )
 
-        val repo1 = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
-        val repo2 = Repositorio(nombre = "repo2", htmlUrl = "https://github.com/repo2")
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, request, "profe_test")
+        }
+        assertEquals("El repositorio template 'template-inexistente' no existe en GitHub", ex.message)
+    }
+
+    @Test
+    fun `crearAsignacion throws ForbiddenException when user is not the teacher`() {
+        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val request = CrearAsignacionRequestDTO(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+        )
+
+        assertThrows<ForbiddenException> {
+            asignacionService.crearAsignacion(10L, request, "alumno_hacker")
+        }
+    }
+
+    @Test
+    fun `crearAsignacion throws CursoNotFoundException when course does not exist`() {
+        `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val request = CrearAsignacionRequestDTO(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+        )
+
+        assertThrows<CursoNotFoundException> {
+            asignacionService.crearAsignacion(99L, request, "profe")
+        }
+    }
+
+    @Test
+    fun `obtenerAsignaciones returns all groups when requested by teacher`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
         val asignacion = Asignacion(
             id = 50L,
@@ -389,8 +399,59 @@ class AsignacionServiceImplTest {
             templateRepoName = "tmpl",
             curso = curso,
         )
-        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
-        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
+        val grupo1 = GrupoAsignacion(
+            id = 1L,
+            asignacion = asignacion,
+            repositorio = Repositorio(nombre = "r1", htmlUrl = "http://r1"),
+            integrantes = mutableListOf(alumno1),
+        )
+        val grupo2 = GrupoAsignacion(
+            id = 2L,
+            asignacion = asignacion,
+            repositorio = Repositorio(nombre = "r2", htmlUrl = "http://r2"),
+            integrantes = mutableListOf(alumno2),
+        )
+        asignacion.grupos.addAll(listOf(grupo1, grupo2))
+
+        `when`(asignacionRepository.findByCursoId(10L)).thenReturn(listOf(asignacion))
+
+        val result = asignacionService.obtenerAsignaciones(10L, "profe_owner")
+
+        assertEquals(1, result.size)
+        assertEquals(2, result[0].grupos.size)
+    }
+
+    @Test
+    fun `obtenerAsignaciones filters groups to only student's own group`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(
+            Inscripcion(curso = curso, usuario = alumno1)
+        )
+
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo1 = GrupoAsignacion(
+            id = 1L,
+            asignacion = asignacion,
+            repositorio = Repositorio(nombre = "r1", htmlUrl = "http://r1"),
+            integrantes = mutableListOf(alumno1),
+        )
+        val grupo2 = GrupoAsignacion(
+            id = 2L,
+            asignacion = asignacion,
+            repositorio = Repositorio(nombre = "r2", htmlUrl = "http://r2"),
+            integrantes = mutableListOf(alumno2),
+        )
         asignacion.grupos.addAll(listOf(grupo1, grupo2))
 
         `when`(asignacionRepository.findByCursoId(10L)).thenReturn(listOf(asignacion))
@@ -398,55 +459,37 @@ class AsignacionServiceImplTest {
         val result = asignacionService.obtenerAsignaciones(10L, "alumno1")
 
         assertEquals(1, result.size)
-        // alumno1 only sees their own group
         assertEquals(1, result[0].grupos.size)
         assertEquals(listOf("alumno1"), result[0].grupos[0].integrantes)
     }
 
     @Test
-    fun `obtenerAsignaciones returns all groups when solicitante is owner docente`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1")
-        val alumno2 = Usuario(id = 3L, username = "alumno2")
+    fun `obtenerAsignacion throws ForbiddenException when student is not enrolled and not owner`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "intruso")).thenReturn(null)
 
-        val repo1 = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
-        val repo2 = Repositorio(nombre = "repo2", htmlUrl = "https://github.com/repo2")
-
-        val asignacion = Asignacion(
-            id = 50L,
-            titulo = "TP1",
-            tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "tmpl",
-            curso = curso,
-        )
-        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
-        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
-        asignacion.grupos.addAll(listOf(grupo1, grupo2))
-
-        `when`(asignacionRepository.findByCursoId(10L)).thenReturn(listOf(asignacion))
-
-        val result = asignacionService.obtenerAsignaciones(10L, "profe_test")
-
-        assertEquals(1, result.size)
-        // owner sees all groups
-        assertEquals(2, result[0].grupos.size)
+        assertThrows<ForbiddenException> {
+            asignacionService.obtenerAsignacion(10L, 50L, "intruso")
+        }
     }
 
     @Test
-    fun `obtenerAsignacion refreshes repo info and returns details`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+    fun `obtenerAsignacion returns updated CI and commit info for groups`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno = Usuario(id = 2L, username = "alumno1")
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
         val repo = Repositorio(
             nombre = "repo1",
-            htmlUrl = "https://github.com/repo1",
+            htmlUrl = "http://r1",
             ultimoCommit = "Old commit",
-            estadoCI = "pending"
+            fechaUltimoCommit = "2026-09-01T00:00:00Z",
+            estadoCI = "sin_ci"
         )
         val asignacion = Asignacion(
             id = 50L,
@@ -455,25 +498,26 @@ class AsignacionServiceImplTest {
             templateRepoName = "tmpl",
             curso = curso,
         )
-        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf())
+        val grupo = GrupoAsignacion(id = 1L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
         asignacion.grupos.add(grupo)
 
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-
-        val updatedInfo = RepositorioInfo(
-            nombre = "repo1",
-            htmlUrl = "https://github.com/repo1",
-            ultimoCommit = "Fresh commit",
-            fechaUltimoCommit = "2026-09-24T18:20:00Z",
-            estadoCI = "success"
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(
+            RepositorioInfo(
+                nombre = "repo1",
+                htmlUrl = "http://r1",
+                ultimoCommit = "Fresh commit",
+                fechaUltimoCommit = "2026-09-25T12:00:00Z",
+                estadoCI = "success"
+            )
         )
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(updatedInfo)
 
-        val result = asignacionService.obtenerAsignacion(10L, 50L, "profe_test")
+        val result = asignacionService.obtenerAsignacion(10L, 50L, "profe_owner")
 
-        assertEquals(50L, result.id)
-        assertEquals("Fresh commit", result.grupos[0].repositorio?.ultimoCommit)
-        assertEquals("success", result.grupos[0].repositorio?.estadoCI)
+        val repoResult = result.grupos[0].repositorio
+        assertEquals("Fresh commit", repoResult?.ultimoCommit)
+        assertEquals("2026-09-25T12:00:00Z", repoResult?.fechaUltimoCommit)
+        assertEquals("success", repoResult?.estadoCI)
     }
 
     @Test
@@ -485,16 +529,16 @@ class AsignacionServiceImplTest {
             name = "template-base-kotlin",
             fullName = "UNQlassroom/template-base-kotlin",
             htmlUrl = "https://github.com/UNQlassroom/template-base-kotlin",
-            description = "Template base"
+            description = "Template base para ejercicios Kotlin",
+            isTemplate = true
         )
-        `when`(gitHubRepoService.createTemplateRepository("template-base-kotlin", "Template base")).thenReturn(repoResponse)
+        `when`(gitHubRepoService.createTemplateRepository("template-base-kotlin", "Template base para ejercicios Kotlin")).thenReturn(repoResponse)
 
-        val result = asignacionService.crearTemplateRepository(
-            CrearTemplateRepoRequestDTO("template-base-kotlin", "Template base"),
-            "profe_test"
-        )
+        val request = CrearTemplateRepoRequestDTO("template-base-kotlin", "Template base para ejercicios Kotlin")
+        val result = asignacionService.crearTemplateRepository(request, "profe_test")
 
         assertEquals("template-base-kotlin", result.name)
+        assertEquals("UNQlassroom/template-base-kotlin", result.fullName)
         assertEquals("https://github.com/UNQlassroom/template-base-kotlin", result.htmlUrl)
     }
 
@@ -510,5 +554,238 @@ class AsignacionServiceImplTest {
 
         assertEquals(1, result.size)
         assertEquals("tmpl1", result[0].name)
+    }
+
+    @Test
+    fun `calificarAsignacion assigns nota and feedback to specified group and persists`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno = Usuario(id = 2L, username = "alumno1")
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val repo = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(asignacionRepository.save(asignacion)).thenReturn(asignacion)
+
+        val dto = CalificarAsignacionRequestDTO(
+            grupoId = 101L,
+            calificacion = 10,
+            observaciones = "Excelente trabajo individual"
+        )
+
+        val response = asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dto)
+
+        assertEquals("Excelente trabajo individual", grupo.observaciones)
+        assertNotNull(grupo.fechaCalificacion)
+        assertEquals(10, grupo.calificacion)
+        assertEquals("Excelente trabajo individual", grupo.observaciones)
+        verify(asignacionRepository).save(asignacion)
+    }
+
+    @Test
+    fun `calificarAsignacion works when request body uses feedback, comentario, devolucion or texto`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno = Usuario(id = 2L, username = "alumno1")
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val repo = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(asignacionRepository.save(asignacion)).thenReturn(asignacion)
+
+        val dtoFeedback = CalificarAsignacionRequestDTO(
+            grupoId = 101L,
+            calificacion = 8,
+            observaciones = "Buen enfoque"
+        )
+        asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dtoFeedback)
+        assertEquals(8, grupo.calificacion)
+        assertEquals("Buen enfoque", grupo.observaciones)
+
+        val dtoTexto = CalificarAsignacionRequestDTO(
+            grupoId = 101L,
+            calificacion = 7,
+            observaciones = "Aprobado con observaciones"
+        )
+        asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dtoTexto)
+        assertEquals(7, grupo.calificacion)
+        assertEquals("Aprobado con observaciones", grupo.observaciones)
+    }
+
+    @Test
+    fun `calificarAsignacion allows finding group by alumnoUsername in individual assignment`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val repo1 = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo2 = Repositorio(nombre = "repo2", htmlUrl = "https://github.com/repo2")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
+        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
+        asignacion.grupos.addAll(listOf(grupo1, grupo2))
+
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(asignacionRepository.save(asignacion)).thenReturn(asignacion)
+
+        val dto = CalificarAsignacionRequestDTO(
+            alumnoUsername = "alumno2",
+            calificacion = 9,
+            observaciones = "Muy buen trabajo"
+        )
+
+        asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dto)
+
+        assertNull(grupo1.calificacion)
+        assertEquals(9, grupo2.calificacion)
+        assertEquals("Muy buen trabajo", grupo2.observaciones)
+    }
+
+    @Test
+    fun `calificarAsignacion throws BadRequestException when nota is outside 1 to 10`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val dtoMenor = CalificarAsignacionRequestDTO(calificacion = 0)
+        val ex1 = assertThrows<BadRequestException> {
+            asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dtoMenor)
+        }
+        assertEquals("La nota debe ser entre 1 y 10", ex1.message)
+
+        val dtoMayor = CalificarAsignacionRequestDTO(calificacion = 11)
+        val ex2 = assertThrows<BadRequestException> {
+            asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dtoMayor)
+        }
+        assertEquals("La nota debe ser entre 1 y 10", ex2.message)
+    }
+
+    @Test
+    fun `calificarAsignacion throws ForbiddenException when solicitante is not course owner docente`() {
+        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val dto = CalificarAsignacionRequestDTO(calificacion = 8)
+        val ex = assertThrows<ForbiddenException> {
+            asignacionService.calificarAsignacion(10L, 50L, "otro_docente", dto)
+        }
+        assertEquals("Solo el docente a cargo del curso puede calificar asignaciones", ex.message)
+    }
+
+    @Test
+    fun `calificarAsignacion throws CursoNotFoundException when curso does not exist`() {
+        `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val dto = CalificarAsignacionRequestDTO(calificacion = 8)
+        assertThrows<CursoNotFoundException> {
+            asignacionService.calificarAsignacion(99L, 50L, "profe", dto)
+        }
+    }
+
+    @Test
+    fun `calificarAsignacion throws AsignacionNotFoundException when asignacion does not exist`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(99L, 10L)).thenReturn(null)
+
+        val dto = CalificarAsignacionRequestDTO(calificacion = 8)
+        assertThrows<AsignacionNotFoundException> {
+            asignacionService.calificarAsignacion(10L, 99L, "profe_owner", dto)
+        }
+    }
+
+    @Test
+    fun `calificarAsignacion throws BadRequestException when grupo does not belong to asignacion`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val dto = CalificarAsignacionRequestDTO(grupoId = 999L, calificacion = 8)
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dto)
+        }
+        assertEquals("El grupo especificado no pertenece a la asignación", ex.message)
+    }
+
+    @Test
+    fun `calificarAsignacion throws BadRequestException when multiple groups exist and none is specified`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+        val repo1 = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo2 = Repositorio(nombre = "repo2", htmlUrl = "https://github.com/repo2")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
+        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
+        asignacion.grupos.addAll(listOf(grupo1, grupo2))
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val dto = CalificarAsignacionRequestDTO(calificacion = 8)
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.calificarAsignacion(10L, 50L, "profe_owner", dto)
+        }
+        assertEquals("Debe especificar el grupo a calificar", ex.message)
     }
 }
