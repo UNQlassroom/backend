@@ -200,22 +200,7 @@ class AsignacionServiceImpl(
                     grupo.integrantes.any { it.username == solicitanteUsername }
                 }
             }
-
-            val gruposDTO = gruposFiltrados.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
-            val primerGrupo = gruposDTO.firstOrNull()
-            AsignacionResponseDTO(
-                id = asignacion.id ?: 0L,
-                cursoId = asignacion.curso.id ?: 0L,
-                titulo = asignacion.titulo,
-                descripcion = asignacion.descripcion,
-                tipo = asignacion.tipo,
-                templateRepoName = asignacion.templateRepoName,
-                fechaLimite = asignacion.fechaLimite,
-                grupos = gruposDTO,
-                entregada = primerGrupo?.entregada ?: false,
-                fechaEntrega = primerGrupo?.fechaEntrega,
-                releaseUrl = primerGrupo?.releaseUrl,
-            )
+            AsignacionResponseDTO.desdeModelo(asignacion, gruposFiltrados)
         }
     }
 
@@ -257,23 +242,7 @@ class AsignacionServiceImpl(
                 // Si falla consulta puntual a github, mantener el estado persistido
             }
         }
-
-        val gruposDTO = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
-        val primerGrupo = gruposDTO.firstOrNull()
-
-        return AsignacionResponseDTO(
-            id = asignacion.id ?: 0L,
-            cursoId = asignacion.curso.id ?: 0L,
-            titulo = asignacion.titulo,
-            descripcion = asignacion.descripcion,
-            tipo = asignacion.tipo,
-            templateRepoName = asignacion.templateRepoName,
-            fechaLimite = asignacion.fechaLimite,
-            grupos = gruposDTO,
-            entregada = primerGrupo?.entregada ?: false,
-            fechaEntrega = primerGrupo?.fechaEntrega,
-            releaseUrl = primerGrupo?.releaseUrl,
-        )
+        return AsignacionResponseDTO.desdeModelo(asignacion, gruposAMostrar)
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -320,11 +289,11 @@ class AsignacionServiceImpl(
 
         grupo.cantidadEntregas += 1
         grupo.entregada = true
-        grupo.fechaEntrega = LocalDateTime.now()
+        grupo.fechaEntregada = LocalDateTime.now()
 
         val tagName = "entrega-v${grupo.cantidadEntregas}"
         val releaseName = "Entrega v${grupo.cantidadEntregas} - ${asignacion.titulo}"
-        val releaseBody = "Entrega realizada por $solicitanteUsername el ${grupo.fechaEntrega}"
+        val releaseBody = "Entrega realizada por $solicitanteUsername el ${grupo.fechaEntregada}"
 
         try {
             val release = gitHubRepoService.createRelease(
@@ -347,36 +316,58 @@ class AsignacionServiceImpl(
             // Si falla github puntual, continuar
         }
 
-        val asignacionGuardada = asignacionRepository.save(asignacion)
-
         val gruposAMostrar = if (esOwner) {
-            asignacionGuardada.grupos
+            asignacion.grupos
         } else {
-            asignacionGuardada.grupos.filter { g ->
-                g.integrantes.any { it.username == solicitanteUsername }
+            asignacion.grupos.filter { grupo ->
+                grupo.integrantes.any { it.username == solicitanteUsername }
             }
         }
 
-        val gruposDTO = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) }
-        val grupoActualDTO = if (esOwner) {
-            gruposDTO.find { it.id == grupo.id }
-        } else {
-            gruposDTO.firstOrNull()
+        return AsignacionResponseDTO.desdeModelo(asignacion, gruposAMostrar)
+    }
+
+    override fun calificarAsignacion(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        dto: CalificarAsignacionRequestDTO,
+    ): AsignacionResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
         }
 
-        return AsignacionResponseDTO(
-            id = asignacionGuardada.id ?: 0L,
-            cursoId = asignacionGuardada.curso.id ?: 0L,
-            titulo = asignacionGuardada.titulo,
-            descripcion = asignacionGuardada.descripcion,
-            tipo = asignacionGuardada.tipo,
-            templateRepoName = asignacionGuardada.templateRepoName,
-            fechaLimite = asignacionGuardada.fechaLimite,
-            grupos = gruposDTO,
-            entregada = grupoActualDTO?.entregada ?: false,
-            fechaEntrega = grupoActualDTO?.fechaEntrega,
-            releaseUrl = grupoActualDTO?.releaseUrl,
-        )
+        if (curso.owner?.username != solicitanteUsername) {
+            throw ForbiddenException("Solo el docente a cargo del curso puede calificar asignaciones")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val calificacion = dto.calificacion ?: throw BadRequestException("La nota debe ser entre 1 y 10")
+        if (calificacion < 1 || calificacion > 10) {
+            throw BadRequestException("La nota debe ser entre 1 y 10")
+        }
+
+        val targetGrupoId = dto.grupoId
+        val grupo = if (targetGrupoId != null) {
+            asignacion.grupos.find { it.id == targetGrupoId }
+                ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
+        } else if (dto.alumnoUsername != null) {
+            asignacion.grupos.find { g -> g.integrantes.any { it.username == dto.alumnoUsername } }
+                ?: throw BadRequestException("El alumno especificado no pertenece a la asignación")
+        } else {
+            throw BadRequestException("Debe especificar el grupo a calificar")
+        }
+
+        grupo.calificacion = calificacion
+        grupo.observaciones = dto.getObservaciones()
+        grupo.fechaCalificacion = LocalDateTime.now()
+
+        val asignacionGuardada = asignacionRepository.save(asignacion)
+
+        return AsignacionResponseDTO.desdeModelo(asignacionGuardada)
+
     }
 
     override fun crearTemplateRepository(
