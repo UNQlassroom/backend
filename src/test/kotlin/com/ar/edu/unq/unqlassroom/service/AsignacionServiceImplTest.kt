@@ -6,6 +6,9 @@ import com.ar.edu.unq.unqlassroom.errors.BadRequestException
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
+import com.ar.edu.unq.unqlassroom.github.GitHubIssueItemResponse
+import com.ar.edu.unq.unqlassroom.github.GitHubIssueService
+import com.ar.edu.unq.unqlassroom.github.GitHubIssueUser
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoResponse
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.github.RepositorioInfo
@@ -44,6 +47,9 @@ class AsignacionServiceImplTest {
 
     @Mock
     private lateinit var gitHubCollaboratorService: GitHubCollaboratorService
+
+    @Mock
+    private lateinit var gitHubIssueService: GitHubIssueService
 
     @InjectMocks
     private lateinit var asignacionService: AsignacionServiceImpl
@@ -788,4 +794,174 @@ class AsignacionServiceImplTest {
         }
         assertEquals("Debe especificar el grupo a calificar", ex.message)
     }
+
+    @Test
+    fun `obtenerCorrecciones calculates ACTUALIZADO when commit is after issue createdAt`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "template-tp1",
+            curso = curso
+        )
+        val repo = Repositorio(
+            id = 100L,
+            nombre = "repo-tp1-alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1",
+            ultimoCommit = "fix(test): correccion",
+            fechaUltimoCommit = "2026-09-30T15:00:00Z" // 3 PM
+        )
+        val grupo = GrupoAsignacion(
+            id = 200L,
+            asignacion = asignacion,
+            integrantes = mutableListOf(alumno),
+            repositorio = repo
+        )
+        asignacion.grupos.add(grupo)
+
+        val issue = GitHubIssueItemResponse(
+            number = 1,
+            title = "Corregir test 2",
+            state = "open",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
+            user = GitHubIssueUser(login = "profe_owner"),
+            comments = 0,
+            createdAt = "2026-09-30T10:00:00Z", // 10 AM
+            updatedAt = "2026-09-30T10:00:00Z",
+            closedAt = null
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+
+        val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
+
+        assertEquals(1, resultado.size)
+        val grupoResultado = resultado[0]
+        assertEquals("repo-tp1-alumno1", grupoResultado.repoNombre)
+        assertEquals(1, grupoResultado.issues.size)
+        val issueResultado = grupoResultado.issues[0]
+        assertEquals("ACTUALIZADO", issueResultado.estado)
+        assertTrue(issueResultado.tieneCommitsPosteriores)
+    }
+
+    @Test
+    fun `obtenerCorrecciones calculates PENDIENTE when no commit after and no comments`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "template-tp1",
+            curso = curso
+        )
+        val repo = Repositorio(
+            id = 100L,
+            nombre = "repo-tp1-alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1",
+            ultimoCommit = "init commit",
+            fechaUltimoCommit = "2026-09-29T15:00:00Z" // Día anterior
+        )
+        val grupo = GrupoAsignacion(
+            id = 200L,
+            asignacion = asignacion,
+            integrantes = mutableListOf(alumno),
+            repositorio = repo
+        )
+        asignacion.grupos.add(grupo)
+
+        val issue = GitHubIssueItemResponse(
+            number = 1,
+            title = "Corregir test 2",
+            state = "open",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
+            user = GitHubIssueUser(login = "profe_owner"),
+            comments = 0,
+            createdAt = "2026-09-30T10:00:00Z",
+            updatedAt = "2026-09-30T10:00:00Z",
+            closedAt = null
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+
+        val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
+
+        assertEquals(1, resultado.size)
+        val issueResultado = resultado[0].issues[0]
+        assertEquals("PENDIENTE", issueResultado.estado)
+        assertFalse(issueResultado.tieneCommitsPosteriores)
+    }
+
+    @Test
+    fun `obtenerCorrecciones calculates RESUELTO when issue is closed`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "template-tp1",
+            curso = curso
+        )
+        val repo = Repositorio(
+            id = 100L,
+            nombre = "repo-tp1-alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1",
+            ultimoCommit = "ultimo commit",
+            fechaUltimoCommit = "2026-09-30T15:00:00Z"
+        )
+        val grupo = GrupoAsignacion(
+            id = 200L,
+            asignacion = asignacion,
+            integrantes = mutableListOf(alumno),
+            repositorio = repo
+        )
+        asignacion.grupos.add(grupo)
+
+        val issue = GitHubIssueItemResponse(
+            number = 1,
+            title = "Corregir test 2",
+            state = "closed",
+            htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
+            user = GitHubIssueUser(login = "profe_owner"),
+            comments = 2,
+            createdAt = "2026-09-30T10:00:00Z",
+            updatedAt = "2026-09-30T16:00:00Z",
+            closedAt = "2026-09-30T16:00:00Z"
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+
+        val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
+
+        assertEquals(1, resultado.size)
+        val issueResultado = resultado[0].issues[0]
+        assertEquals("RESUELTO", issueResultado.estado)
+    }
+
+    @Test
+    fun `obtenerCorrecciones throws ForbiddenException when user has no permissions`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "extranio")).thenReturn(null)
+
+        val ex = assertThrows<ForbiddenException> {
+            asignacionService.obtenerCorrecciones(10L, 50L, "extranio")
+        }
+        assertEquals("No tiene permisos para ver las correcciones de esta asignación", ex.message)
+    }
+
 }

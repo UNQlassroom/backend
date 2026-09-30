@@ -6,6 +6,8 @@ import com.ar.edu.unq.unqlassroom.errors.BadRequestException
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
+import com.ar.edu.unq.unqlassroom.github.GitHubIssueItemResponse
+import com.ar.edu.unq.unqlassroom.github.GitHubIssueService
 import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
@@ -15,6 +17,7 @@ import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import java.time.Instant
 import java.time.LocalDateTime
 
 @Service
@@ -26,6 +29,7 @@ class AsignacionServiceImpl(
     private val usuarioService: UsuarioService,
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
+    private val gitHubIssueService: GitHubIssueService,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -401,5 +405,99 @@ class AsignacionServiceImpl(
                 description = it.description,
             )
         }
+    }
+
+    override fun obtenerCorrecciones(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String
+    ): List<CorreccionGrupoResponseDTO> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para ver las correcciones de esta asignación")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val gruposAMostrar = if (esOwner) {
+            asignacion.grupos
+        } else {
+            asignacion.grupos.filter { grupo ->
+                grupo.integrantes.any { it.username == solicitanteUsername }
+            }
+        }
+
+        return gruposAMostrar.map { grupo ->
+            try {
+                val info = gitHubRepoService.obtenerInformacionRepositorio(grupo.repositorio.nombre)
+                grupo.repositorio.ultimoCommit = info.ultimoCommit
+                grupo.repositorio.fechaUltimoCommit = info.fechaUltimoCommit
+                grupo.repositorio.estadoCI = info.estadoCI
+            } catch (_: Exception) {
+                // Mantener estado persistido si falla la consulta
+            }
+
+            val issuesGitHub = gitHubIssueService.getRepositoryIssues(grupo.repositorio.nombre)
+            val issuesDTOs = issuesGitHub.map { issue ->
+                val (estado, tieneCommitsPosteriores) = calcularEstadoIssue(issue, grupo.repositorio.fechaUltimoCommit)
+                IssueResponseDTO(
+                    numero = issue.number,
+                    titulo = issue.title,
+                    htmlUrl = issue.htmlUrl,
+                    autor = issue.user?.login ?: "",
+                    estado = estado,
+                    tieneCommitsPosteriores = tieneCommitsPosteriores,
+                    cantComentarios = issue.comments,
+                    fechaCreacion = issue.createdAt,
+                    fechaActualizacion = issue.updatedAt,
+                    fechaCierre = issue.closedAt,
+                )
+            }
+
+            CorreccionGrupoResponseDTO(
+                grupoId = grupo.id ?: 0L,
+                nombre = grupo.nombre ?: grupo.integrantes.firstOrNull()?.username,
+                integrantes = grupo.integrantes.map { it.username },
+                repoNombre = grupo.repositorio.nombre,
+                repoHtmlUrl = grupo.repositorio.htmlUrl,
+                issues = issuesDTOs,
+            )
+        }
+    }
+
+    private fun calcularEstadoIssue(
+        issue: GitHubIssueItemResponse,
+        fechaUltimoCommit: String?
+    ): Pair<String, Boolean> {
+        if (issue.state.equals("closed", ignoreCase = true)) {
+            return Pair("RESUELTO", false)
+        }
+
+        val tieneCommitsPosteriores = if (!fechaUltimoCommit.isNullOrBlank() && issue.createdAt.isNotBlank()) {
+            try {
+                val commitInstant = Instant.parse(fechaUltimoCommit)
+                val issueInstant = Instant.parse(issue.createdAt)
+                commitInstant.isAfter(issueInstant)
+            } catch (_: Exception) {
+                false
+            }
+        } else {
+            false
+        }
+
+        val estado = if (tieneCommitsPosteriores || issue.comments > 0) {
+            "ACTUALIZADO"
+        } else {
+            "PENDIENTE"
+        }
+
+        return Pair(estado, tieneCommitsPosteriores)
     }
 }
