@@ -98,4 +98,14 @@ class AsignacionController(
         val response = asignacionService.listarTemplates(authentication.name)
         return ResponseEntity.ok(response)
     }
+
+    @GetMapping("/cursos/{cursoId}/asignaciones/{asignacionId}/correcciones")
+    fun obtenerCorrecciones(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        authentication: Authentication,
+    ): ResponseEntity<List<CorreccionGrupoResponseDTO>> {
+        val response = asignacionService.obtenerCorrecciones(cursoId, asignacionId, authentication.name)
+        return ResponseEntity.ok(response)
+    }
 }

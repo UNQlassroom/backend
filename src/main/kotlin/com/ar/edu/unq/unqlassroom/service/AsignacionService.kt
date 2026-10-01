@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AsignacionResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CalificarAsignacionRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CrearAsignacionRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CrearTemplateRepoRequestDTO
+import com.ar.edu.unq.unqlassroom.controller.dtos.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.TemplateRepoResponseDTO
 
 interface AsignacionService {
@@ -14,4 +15,5 @@ interface AsignacionService {
     fun listarTemplates(solicitanteUsername: String): List<TemplateRepoResponseDTO>
     fun marcarAsignacionComoEntregada(cursoId: Long, asignacionId: Long, solicitanteUsername: String, grupoId: Long? = null): AsignacionResponseDTO
     fun calificarAsignacion(cursoId: Long, asignacionId: Long, solicitanteUsername: String, dto: CalificarAsignacionRequestDTO): AsignacionResponseDTO
+    fun obtenerCorrecciones(cursoId: Long, asignacionId: Long, solicitanteUsername: String): List<CorreccionGrupoResponseDTO>
 }

@@ -354,4 +354,42 @@ class AsignacionControllerTest {
         )
             .andExpect(status().isBadRequest)
     }
+
+    @Test
+    fun `obtenerCorrecciones returns 200 and list of corrections`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        val issue = IssueResponseDTO(
+            numero = 1,
+            titulo = "Arreglar tests",
+            htmlUrl = "https://github.com/UNQlassroom/repo1/issues/1",
+            autor = "profe",
+            estado = "PENDIENTE",
+            tieneCommitsPosteriores = false,
+            cantComentarios = 0,
+            fechaCreacion = "2026-09-30T10:00:00Z",
+            fechaActualizacion = "2026-09-30T10:00:00Z",
+            fechaCierre = null,
+        )
+        val grupoCorreccion = CorreccionGrupoResponseDTO(
+            grupoId = 1L,
+            nombre = "alumno1",
+            integrantes = listOf("alumno1"),
+            repoNombre = "repo1",
+            repoHtmlUrl = "https://github.com/UNQlassroom/repo1",
+            issues = listOf(issue),
+        )
+
+        `when`(asignacionService.obtenerCorrecciones(10L, 5L, "profe"))
+            .thenReturn(listOf(grupoCorreccion))
+
+        mockMvc.perform(
+            get("/cursos/10/asignaciones/5/correcciones")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$[0].grupoId").value(1))
+            .andExpect(jsonPath("$[0].repoNombre").value("repo1"))
+            .andExpect(jsonPath("$[0].issues[0].numero").value(1))
+            .andExpect(jsonPath("$[0].issues[0].estado").value("PENDIENTE"))
+    }
 }
