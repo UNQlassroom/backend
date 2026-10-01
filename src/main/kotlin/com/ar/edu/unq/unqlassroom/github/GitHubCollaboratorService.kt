@@ -15,6 +15,10 @@ class GitHubCollaboratorService(
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
 ) {
 
+    fun userExists(username: String): Boolean {
+        return gitHubAppClient.userExists(username)
+    }
+
     @JvmOverloads
     fun addCollaborator(
         repoName: String,

@@ -1,8 +1,10 @@
 package com.ar.edu.unq.unqlassroom.github
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -36,6 +38,15 @@ class GitHubOrgServiceTest {
     @BeforeEach
     fun setUp() {
         gitHubOrgService = GitHubOrgService(gitHubAppClient, properties)
+    }
+
+    @Test
+    fun `userExists delegates to gitHubAppClient userExists`() {
+        `when`(gitHubAppClient.userExists("usuario_valido")).thenReturn(true)
+        `when`(gitHubAppClient.userExists("usuario_invalido")).thenReturn(false)
+
+        assertTrue(gitHubOrgService.userExists("usuario_valido"))
+        assertFalse(gitHubOrgService.userExists("usuario_invalido"))
     }
 
     @Test

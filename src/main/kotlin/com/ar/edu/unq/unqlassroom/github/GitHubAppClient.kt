@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.github
 
+import com.ar.edu.unq.unqlassroom.errors.BadRequestException
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
@@ -30,6 +31,34 @@ class GitHubAppClient(
 ) {
     private val httpClient: HttpClient = HttpClient.newHttpClient()
 
+    @Volatile
+    private var cachedTokenResponse: GitHubInstallationTokenResponse? = null
+
+    fun getInstallationToken(): String {
+        val current = cachedTokenResponse
+        if (current != null && isTokenValid(current)) {
+            return current.token
+        }
+        synchronized(this) {
+            val retryCurrent = cachedTokenResponse
+            if (retryCurrent != null && isTokenValid(retryCurrent)) {
+                return retryCurrent.token
+            }
+            val newToken = createInstallationToken()
+            cachedTokenResponse = newToken
+            return newToken.token
+        }
+    }
+
+    private fun isTokenValid(tokenResponse: GitHubInstallationTokenResponse): Boolean {
+        return try {
+            val expiresAt = Instant.parse(tokenResponse.expiresAt)
+            Instant.now().plusSeconds(60).isBefore(expiresAt)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun createInstallationToken(): GitHubInstallationTokenResponse {
         val jwt = createAppJwt()
         val request = HttpRequest.newBuilder()
@@ -56,9 +85,9 @@ class GitHubAppClient(
         responseType: Class<T>,
         body: String? = null,
     ): T {
-        val token = createInstallationToken().token
+        val token = getInstallationToken()
         val requestBuilder = HttpRequest.newBuilder()
-            .uri(URI.create("${properties.apiBaseUrl}/${path.trimStart('/')}") )
+            .uri(URI.create("${properties.apiBaseUrl}/${path.trimStart('/')}"))
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("Authorization", "Bearer $token")
@@ -95,7 +124,7 @@ class GitHubAppClient(
     }
 
     fun checkResourceExists(path: String): Boolean {
-        val token = createInstallationToken().token
+        val token = getInstallationToken()
         val request = HttpRequest.newBuilder()
             .uri(URI.create("${properties.apiBaseUrl}/${path.trimStart('/')}"))
             .header("Accept", "application/vnd.github+json")
@@ -104,7 +133,7 @@ class GitHubAppClient(
             .GET()
             .build()
 
-        val response = httpClient.send(request, HttpResponse.BodyHandlers.discarding())
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         return when (response.statusCode()) {
             200 -> true
             404 -> false
@@ -112,6 +141,10 @@ class GitHubAppClient(
                 "GitHub API request failed with status ${response.statusCode()}",
             )
         }
+    }
+
+    fun userExists(username: String): Boolean {
+        return checkResourceExists("/users/$username")
     }
 
     private fun createAppJwt(): String {

@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.errors.BadRequestException
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.errors.UsuarioNotFoundException
@@ -17,6 +18,7 @@ import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
@@ -45,6 +47,11 @@ class CursoServiceImplTest {
 
     @InjectMocks
     private lateinit var cursoService: CursoServiceImpl
+
+    @BeforeEach
+    fun setUp() {
+        Mockito.lenient().`when`(gitHubOrgService.userExists(Mockito.anyString())).thenReturn(true)
+    }
 
     private fun anyCurso(): Curso {
         Mockito.any(Curso::class.java)
@@ -145,6 +152,32 @@ class CursoServiceImplTest {
         verify(gitHubOrgService).invitarMiembro("alumno1")
         verify(gitHubOrgService).invitarMiembro("alumno2")
         verify(inscripcionRepository, Mockito.times(2)).save(Mockito.any(Inscripcion::class.java))
+    }
+
+    @Test
+    fun `agregarAlumnos throws BadRequestException when a username does not exist on GitHub`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(gitHubOrgService.userExists("alumno_fantasma")).thenReturn(false)
+
+        val request = AgregarAlumnosRequestDTO(
+            usernames = listOf("alumno_valido", "alumno_fantasma")
+        )
+
+        val exception = assertThrows<BadRequestException> {
+            cursoService.agregarAlumnos(1L, request, "profe_test")
+        }
+
+        assertEquals("Los siguientes usuarios no existen en GitHub: alumno_fantasma", exception.message)
+        verify(gitHubOrgService, Mockito.never()).invitarMiembro(Mockito.anyString(), Mockito.anyString(), Mockito.nullable(String::class.java))
     }
 
     @Test

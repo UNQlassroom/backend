@@ -1,6 +1,8 @@
 package com.ar.edu.unq.unqlassroom.github
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -39,6 +41,15 @@ class GitHubCollaboratorServiceTest {
     @BeforeEach
     fun setUp() {
         gitHubCollaboratorService = GitHubCollaboratorService(gitHubAppClient, properties)
+    }
+
+    @Test
+    fun `userExists delegates to gitHubAppClient userExists`() {
+        `when`(gitHubAppClient.userExists("usuario_valido")).thenReturn(true)
+        `when`(gitHubAppClient.userExists("usuario_invalido")).thenReturn(false)
+
+        assertTrue(gitHubCollaboratorService.userExists("usuario_valido"))
+        assertFalse(gitHubCollaboratorService.userExists("usuario_invalido"))
     }
 
     @Test
