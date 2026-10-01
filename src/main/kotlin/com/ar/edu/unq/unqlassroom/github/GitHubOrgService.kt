@@ -15,6 +15,10 @@ class GitHubOrgService(
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
 ) {
 
+    fun userExists(username: String): Boolean {
+        return gitHubAppClient.userExists(username)
+    }
+
     @JvmOverloads
     fun invitarMiembro(
         username: String,
