@@ -5,6 +5,7 @@ import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoMiembroDeUnCursoDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.errors.BadRequestException
 import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
 import com.ar.edu.unq.unqlassroom.github.GitHubOrgService
@@ -70,6 +71,13 @@ class CursoServiceImpl (
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+
+        val usuariosInexistentes = distinctUsernames.filterNot { gitHubOrgService.userExists(it) }
+        if (usuariosInexistentes.isNotEmpty()) {
+            throw BadRequestException(
+                "Los siguientes usuarios no existen en GitHub: ${usuariosInexistentes.joinToString()}"
+            )
+        }
 
         val alumnosAgregados = distinctUsernames.map { username ->
             val usuario = usuarioService.obtenerOCrearAlumno(username)
