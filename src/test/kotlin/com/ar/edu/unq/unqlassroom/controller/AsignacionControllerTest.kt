@@ -1,6 +1,8 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.*
+import com.ar.edu.unq.unqlassroom.dto.asignacion.*
+import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.fasterxml.jackson.databind.ObjectMapper

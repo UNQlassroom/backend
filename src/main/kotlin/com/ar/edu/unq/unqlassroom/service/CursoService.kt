@@ -1,9 +1,9 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
 
 interface CursoService {
 

@@ -1,8 +1,8 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AuthResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.GitHubLoginRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.GitHubLoginResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.AuthResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginResponseDTO
 import com.ar.edu.unq.unqlassroom.service.AuthService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach

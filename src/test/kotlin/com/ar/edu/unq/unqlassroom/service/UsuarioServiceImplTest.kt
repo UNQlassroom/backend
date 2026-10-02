@@ -1,7 +1,7 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
-import com.ar.edu.unq.unqlassroom.errors.UsuarioNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.UsuarioServiceImpl

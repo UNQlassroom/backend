@@ -1,10 +1,10 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoMiembroDeUnCursoDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach

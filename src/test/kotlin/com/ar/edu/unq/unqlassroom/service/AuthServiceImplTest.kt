@@ -1,14 +1,15 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.GitHubLoginRequestDTO
-import com.ar.edu.unq.unqlassroom.github.GitHubAppProperties
-import com.ar.edu.unq.unqlassroom.github.GitHubOAuthClient
-import com.ar.edu.unq.unqlassroom.github.GitHubOrgMembershipResponse
-import com.ar.edu.unq.unqlassroom.github.GitHubOrgService
-import com.ar.edu.unq.unqlassroom.github.GitHubUserProfileResponse
+import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginRequestDTO
+import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
+import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubOAuthClient
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgMembershipResponse
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubUserProfileResponse
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.AuthServiceImpl
+import com.ar.edu.unq.unqlassroom.security.JwtService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows

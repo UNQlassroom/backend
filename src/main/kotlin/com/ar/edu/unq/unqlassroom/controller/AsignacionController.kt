@@ -1,6 +1,6 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.*
+import com.ar.edu.unq.unqlassroom.dto.asignacion.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity

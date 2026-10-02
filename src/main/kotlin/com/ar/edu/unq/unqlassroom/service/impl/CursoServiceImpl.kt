@@ -1,14 +1,14 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoMiembroDeUnCursoDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnosDeUnCursoResponseDTO
-import com.ar.edu.unq.unqlassroom.errors.BadRequestException
-import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
-import com.ar.edu.unq.unqlassroom.github.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
