@@ -1,8 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.*
-import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
-import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
@@ -27,7 +25,9 @@ import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.Mockito.*
 import org.mockito.junit.jupiter.MockitoExtension
+import java.time.LocalDateTime
 import java.util.Optional
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubReleaseResponse
 
 @ExtendWith(MockitoExtension::class)
 class AsignacionServiceImplTest {
@@ -64,6 +64,21 @@ class AsignacionServiceImplTest {
             templateRepoName = "",
             curso = Curso(materia = "", anio = 0, semestre = 1, comision = 1)
         )
+    }
+
+    private fun anyString(): String {
+        any(String::class.java)
+        return ""
+    }
+
+    private fun eqString(value: String): String {
+        eq(value)
+        return ""
+    }
+
+    private fun <T> anyNullable(clazz: Class<T>): T? {
+        nullable(clazz)
+        return null
     }
 
     @Test
@@ -966,4 +981,459 @@ class AsignacionServiceImplTest {
         assertEquals("No tiene permisos para ver las correcciones de esta asignación", ex.message)
     }
 
+    @Test
+    fun `marcarAsignacionComoEntregada throws CursoNotFoundException when curso not found`() {
+        `when`(cursoRepository.findById(999L)).thenReturn(Optional.empty())
+
+        assertThrows<CursoNotFoundException> {
+            asignacionService.marcarAsignacionComoEntregada(999L, 1L, "profe", null)
+        }
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada throws AsignacionNotFoundException when asignacion not found`() {
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1)
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(null)
+
+        assertThrows<AsignacionNotFoundException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "profe", null)
+        }
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada throws BadRequestException when deadline expired`() {
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().minusDays(1),
+            curso = curso
+        )
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno", null)
+        }
+        assertEquals("No se puede entregar la asignación porque la fecha límite ha vencido", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada throws ForbiddenException when user is not owner and not enrolled`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "intruso")).thenReturn(null)
+
+        val ex = assertThrows<ForbiddenException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "intruso", null)
+        }
+        assertEquals("No tiene permisos para entregar esta asignación", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada as owner throws BadRequestException when grupoId is null`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "profe_owner", null)
+        }
+        assertEquals("Debe especificar el grupoId para marcar la entrega como docente", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada as owner throws BadRequestException when grupoId not in asignacion`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "profe_owner", 999L)
+        }
+        assertEquals("El grupo especificado no pertenece a la asignación", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada as student throws BadRequestException when student in no group`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        val alumno = Usuario(id = 2L, username = "alumno_sin_grupo", esDocente = false)
+        val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno_sin_grupo")).thenReturn(inscripcion)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno_sin_grupo", null)
+        }
+        assertEquals("El usuario no pertenece a ningún grupo de esta asignación", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada as student throws ForbiddenException when specifying another grupoId`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(inscripcion)
+
+        val ex = assertThrows<ForbiddenException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno1", 999L)
+        }
+        assertEquals("No tiene permisos para entregar en nombre de otro grupo", ex.message)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada by student successfully delivers and creates release`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(inscripcion)
+
+        val release = GitHubReleaseResponse(id = 12L, tagName = "entrega-v1", htmlUrl = "https://release.url/v1")
+        `when`(gitHubRepoService.createRelease(
+            repoName = eqString("repo1"),
+            tagName = eqString("entrega-v1"),
+            name = anyString(),
+            body = anyString(),
+            targetCommitish = anyNullable(String::class.java),
+            org = anyNullable(String::class.java)
+        )).thenReturn(release)
+
+        val repoInfo = RepositorioInfo(
+            nombre = "repo1",
+            htmlUrl = "https://github.com/repo1",
+            ultimoCommit = "Commit entrega",
+            fechaUltimoCommit = "2026-10-02T18:00:00Z",
+            estadoCI = "success"
+        )
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(repoInfo)
+
+        val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno1", 101L)
+
+        assertTrue(grupo.entregada)
+        assertEquals(1, grupo.cantidadEntregas)
+        assertEquals("https://release.url/v1", grupo.releaseUrl)
+        assertNotNull(grupo.fechaEntregada)
+        assertEquals("success", grupo.repositorio.estadoCI)
+        assertEquals(1, res.grupos.size)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada succeeds even when createRelease and repoInfo throw exceptions`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(inscripcion)
+
+        `when`(gitHubRepoService.createRelease(
+            repoName = anyString(),
+            tagName = anyString(),
+            name = anyString(),
+            body = anyString(),
+            targetCommitish = anyNullable(String::class.java),
+            org = anyNullable(String::class.java)
+        )).thenThrow(RuntimeException("Release API unavailable"))
+
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Repo API unavailable"))
+
+        val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno1", null)
+
+        assertTrue(grupo.entregada)
+        assertEquals(1, grupo.cantidadEntregas)
+        assertNull(grupo.releaseUrl)
+        assertNotNull(grupo.fechaEntregada)
+        assertEquals(1, res.grupos.size)
+    }
+
+    @Test
+    fun `marcarAsignacionComoEntregada by owner returns all groups`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo1 = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo2 = Repositorio(id = 2L, nombre = "repo2", htmlUrl = "https://github.com/repo2")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(1),
+            curso = curso
+        )
+        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
+        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
+        asignacion.grupos.addAll(listOf(grupo1, grupo2))
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(RepositorioInfo(nombre = "repo1", htmlUrl = "https://github.com/repo1"))
+
+        val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "profe_owner", 101L)
+
+        assertEquals(2, res.grupos.size)
+    }
+
+    @Test
+    fun `obtenerAsignacion throws CursoNotFoundException and AsignacionNotFoundException`() {
+        `when`(cursoRepository.findById(999L)).thenReturn(Optional.empty())
+        assertThrows<CursoNotFoundException> {
+            asignacionService.obtenerAsignacion(999L, 50L, "profe")
+        }
+
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe"))
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
+
+        assertThrows<AsignacionNotFoundException> {
+            asignacionService.obtenerAsignacion(10L, 999L, "profe")
+        }
+    }
+
+    @Test
+    fun `obtenerAsignacion preserves existing repo data when gitHubRepoService fails`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", ultimoCommit = "prev commit", estadoCI = "pending")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Network error"))
+
+        val res = asignacionService.obtenerAsignacion(10L, 50L, "profe_owner")
+
+        assertEquals(1, res.grupos.size)
+        assertEquals("prev commit", res.grupos[0].repositorio?.ultimoCommit)
+        assertEquals("pending", res.grupos[0].repositorio?.estadoCI)
+    }
+
+    @Test
+    fun `obtenerCorrecciones throws CursoNotFoundException and AsignacionNotFoundException`() {
+        `when`(cursoRepository.findById(999L)).thenReturn(Optional.empty())
+        assertThrows<CursoNotFoundException> {
+            asignacionService.obtenerCorrecciones(999L, 50L, "profe")
+        }
+
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe"))
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
+
+        assertThrows<AsignacionNotFoundException> {
+            asignacionService.obtenerCorrecciones(10L, 999L, "profe")
+        }
+    }
+
+    @Test
+    fun `obtenerCorrecciones by student only returns student group corrections`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo1 = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo2 = Repositorio(id = 2L, nombre = "repo2", htmlUrl = "https://github.com/repo2")
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso
+        )
+        val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
+        val grupo2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, integrantes = mutableListOf(alumno2))
+        asignacion.grupos.addAll(listOf(grupo1, grupo2))
+
+        val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno1)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(inscripcion)
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Repo error"))
+        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(emptyList())
+
+        val res = asignacionService.obtenerCorrecciones(10L, 50L, "alumno1")
+
+        assertEquals(1, res.size)
+        assertEquals("repo1", res[0].repoNombre)
+    }
+
+    @Test
+    fun `obtenerCorrecciones calculates ACTUALIZADO when issue has comments even if commit is before`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(
+            id = 1L,
+            nombre = "repo1",
+            htmlUrl = "https://github.com/repo1",
+            fechaUltimoCommit = "2026-09-01T10:00:00Z"
+        )
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        val issueWithComments = GitHubIssueItemResponse(
+            number = 1,
+            title = "Feedback",
+            htmlUrl = "https://github.com/issue/1",
+            state = "open",
+            comments = 3,
+            createdAt = "2026-09-15T10:00:00Z"
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(listOf(issueWithComments))
+
+        val res = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
+
+        assertEquals(1, res.size)
+        assertEquals("ACTUALIZADO", res[0].issues[0].estado)
+        assertFalse(res[0].issues[0].tieneCommitsPosteriores)
+    }
+
+    @Test
+    fun `obtenerCorrecciones calculates PENDIENTE when commit date is null or invalid format`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val repo = Repositorio(
+            id = 1L,
+            nombre = "repo1",
+            htmlUrl = "https://github.com/repo1",
+            fechaUltimoCommit = "invalid-date-format"
+        )
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
+        asignacion.grupos.add(grupo)
+
+        val issueNoComments = GitHubIssueItemResponse(
+            number = 1,
+            title = "Feedback",
+            htmlUrl = "https://github.com/issue/1",
+            state = "open",
+            comments = 0,
+            createdAt = "2026-09-15T10:00:00Z"
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(listOf(issueNoComments))
+
+        val res = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
+
+        assertEquals(1, res.size)
+        assertEquals("PENDIENTE", res[0].issues[0].estado)
+        assertFalse(res[0].issues[0].tieneCommitsPosteriores)
+    }
 }

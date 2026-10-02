@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.integration.github.service
+package com.ar.edu.unq.unqlassroom.integration.github.service
 
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
@@ -197,5 +197,77 @@ class GitHubCollaboratorServiceTest {
         assertEquals("alumno2", members[1].username)
         assertEquals("push", members[1].role)
         assertEquals("pending", members[1].state)
+    }
+
+    @Test
+    fun `getRepoMembers uses default member role and ignores null invitee`() {
+        val collaborators = arrayOf(
+            GitHubCollaboratorItemResponse(login = "alumno1", roleName = null)
+        )
+        val invitations = arrayOf(
+            GitHubRepoInvitationItemResponse(
+                id = 1L,
+                invitee = GitHubInviteeResponse(login = "alumno2"),
+                permissions = null
+            ),
+            GitHubRepoInvitationItemResponse(
+                id = 2L,
+                invitee = null,
+                permissions = "push"
+            ),
+            GitHubRepoInvitationItemResponse(
+                id = 3L,
+                invitee = GitHubInviteeResponse(login = "   "),
+                permissions = "push"
+            )
+        )
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = eqString("/repos/UNQlassroom/test_repo/collaborators?affiliation=direct&per_page=100"),
+                responseType = anyClass(Array<GitHubCollaboratorItemResponse>::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(collaborators)
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = eqString("/repos/UNQlassroom/test_repo/invitations?per_page=100"),
+                responseType = anyClass(Array<GitHubRepoInvitationItemResponse>::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(invitations)
+
+        val members = gitHubCollaboratorService.getRepoMembers("test_repo")
+        assertEquals(2, members.size)
+        assertEquals("alumno1", members[0].username)
+        assertEquals("member", members[0].role)
+        assertEquals("alumno2", members[1].username)
+        assertEquals("member", members[1].role)
+    }
+
+    @Test
+    fun `requiredOrganization throws IllegalStateException when organization is blank`() {
+        `when`(properties.organization).thenReturn("   ")
+        org.junit.jupiter.api.assertThrows<IllegalStateException> {
+            gitHubCollaboratorService.getRepoMembers("test_repo")
+        }
+    }
+
+    @Test
+    fun `data classes constructors and properties test`() {
+        val req = AddCollaboratorRequest(permission = "admin")
+        assertEquals("admin", req.permission)
+
+        val resp = GitHubCollaboratorResponse(username = "user1", role = "admin", state = "active")
+        assertEquals("user1", resp.username)
+        assertEquals("admin", resp.role)
+        assertEquals("active", resp.state)
+
+        val member = GitHubRepoMemberResponse(username = "user2", role = "read", state = "pending")
+        assertEquals("user2", member.username)
+        assertEquals("read", member.role)
+        assertEquals("pending", member.state)
     }
 }
