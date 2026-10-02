@@ -6,12 +6,12 @@ import jakarta.validation.constraints.NotNull
 import java.time.LocalDateTime
 
 data class CrearAsignacionRequestDTO(
-    @field:NotBlank(message = "El tÃ­tulo es obligatorio")
+    @field:NotBlank(message = "El título es obligatorio")
     val titulo: String,
 
     val descripcion: String? = null,
 
-    @field:NotNull(message = "El tipo de asignaciÃ³n es obligatorio")
+    @field:NotNull(message = "El tipo de asignación es obligatorio")
     val tipo: TipoAsignacion,
 
     @field:NotBlank(message = "El repositorio template es obligatorio")

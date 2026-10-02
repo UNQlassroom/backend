@@ -42,7 +42,7 @@ class AsignacionControllerTest {
     @Test
     fun `crearAsignacion returns 201 and created assignment`() {
         val request = CrearAsignacionRequestDTO(
-            titulo = "TP1 - RecursiÃ³n",
+            titulo = "TP1 - Recursión",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
         )
@@ -50,7 +50,7 @@ class AsignacionControllerTest {
         val response = AsignacionResponseDTO(
             id = 1L,
             cursoId = 10L,
-            titulo = "TP1 - RecursiÃ³n",
+            titulo = "TP1 - Recursión",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
@@ -77,7 +77,7 @@ class AsignacionControllerTest {
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.id").value(1))
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.titulo").value("TP1 - RecursiÃ³n"))
+            .andExpect(jsonPath("$.titulo").value("TP1 - Recursión"))
             .andExpect(jsonPath("$.tipo").value("INDIVIDUAL"))
             .andExpect(jsonPath("$.grupos[0].integrantes[0]").value("alumno1"))
     }
@@ -248,7 +248,7 @@ class AsignacionControllerTest {
         val request = CalificarAsignacionRequestDTO(
             grupoId = 50L,
             calificacion = 9,
-            observaciones = "Excelente resoluciÃ³n"
+            observaciones = "Excelente resolución"
         )
         val response = AsignacionResponseDTO(
             id = 5L,
@@ -265,7 +265,7 @@ class AsignacionControllerTest {
                     integrantes = listOf("alumno1"),
                     repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
                     calificacion = 9,
-                    observaciones = "Excelente resoluciÃ³n",
+                    observaciones = "Excelente resolución",
                 )
             ),
         )
@@ -282,7 +282,7 @@ class AsignacionControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.id").value(5))
             .andExpect(jsonPath("$.grupos[0].calificacion").value(9))
-            .andExpect(jsonPath("$.grupos[0].observaciones").value("Excelente resoluciÃ³n"))
+            .andExpect(jsonPath("$.grupos[0].observaciones").value("Excelente resolución"))
     }
 
     @Test

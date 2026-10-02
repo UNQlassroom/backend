@@ -56,7 +56,7 @@ class CursoControllerTest {
             anio = 2026,
             semestre = 1,
             comision = 1,
-            descripcion = "Curso de Estructuras de Datos - AÃ±o 2026 - Semestre 1 - ComisiÃ³n 1",
+            descripcion = "Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1",
             ownerUsername = "profe"
         )
 
@@ -75,7 +75,7 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.anio").value(2026))
             .andExpect(jsonPath("$.semestre").value(1))
             .andExpect(jsonPath("$.comision").value(1))
-            .andExpect(jsonPath("$.descripcion").value("Curso de Estructuras de Datos - AÃ±o 2026 - Semestre 1 - ComisiÃ³n 1"))
+            .andExpect(jsonPath("$.descripcion").value("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1"))
             .andExpect(jsonPath("$.ownerUsername").value("profe"))
     }
 

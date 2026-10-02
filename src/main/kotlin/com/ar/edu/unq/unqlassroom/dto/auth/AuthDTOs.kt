@@ -4,7 +4,7 @@ import com.ar.edu.unq.unqlassroom.model.Usuario
 import jakarta.validation.constraints.NotBlank
 
 data class GitHubLoginRequestDTO(
-    @field:NotBlank(message = "El cÃ³digo de GitHub es requerido")
+    @field:NotBlank(message = "El código de GitHub es requerido")
     val code: String,
     val esDocente: Boolean? = false
 )

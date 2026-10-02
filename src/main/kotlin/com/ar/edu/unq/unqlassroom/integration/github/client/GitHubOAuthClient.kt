@@ -55,12 +55,12 @@ class GitHubOAuthClient(
         val response = try {
             restTemplate.postForEntity(tokenUrl, request, GitHubOAuthTokenResponse::class.java)
         } catch (e: Exception) {
-            throw UnauthorizedException("Error de comunicaciÃ³n con GitHub OAuth: ${e.message}")
+            throw UnauthorizedException("Error de comunicación con GitHub OAuth: ${e.message}")
         }
 
         val tokenResponse = response.body
         if (tokenResponse?.access_token.isNullOrBlank()) {
-            val errorMsg = tokenResponse?.error_description ?: tokenResponse?.error ?: "CÃ³digo de autorizaciÃ³n invÃ¡lido o expirado"
+            val errorMsg = tokenResponse?.error_description ?: tokenResponse?.error ?: "Código de autorización inválido o expirado"
             throw UnauthorizedException("No se pudo obtener el token de acceso de GitHub: $errorMsg")
         }
 
@@ -80,6 +80,6 @@ class GitHubOAuthClient(
             throw UnauthorizedException("Error al consultar el perfil del usuario en GitHub: ${e.message}")
         }
 
-        return response.body ?: throw UnauthorizedException("GitHub no retornÃ³ informaciÃ³n del usuario")
+        return response.body ?: throw UnauthorizedException("GitHub no retornó información del usuario")
     }
 }
