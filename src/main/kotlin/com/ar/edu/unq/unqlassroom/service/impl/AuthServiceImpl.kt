@@ -1,15 +1,15 @@
-package com.ar.edu.unq.unqlassroom.service.impl
+﻿package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AuthResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.GitHubLoginRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.GitHubLoginResponseDTO
-import com.ar.edu.unq.unqlassroom.github.GitHubAppProperties
-import com.ar.edu.unq.unqlassroom.github.GitHubOAuthClient
-import com.ar.edu.unq.unqlassroom.github.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.dto.auth.AuthResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginResponseDTO
+import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
+import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubOAuthClient
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.AuthService
-import com.ar.edu.unq.unqlassroom.service.JwtService
+import com.ar.edu.unq.unqlassroom.security.JwtService
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.stereotype.Service

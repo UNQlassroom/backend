@@ -1,15 +1,15 @@
-package com.ar.edu.unq.unqlassroom.security
+﻿package com.ar.edu.unq.unqlassroom.security
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AsignacionResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CalificarAsignacionRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.AsignacionResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.CalificarAsignacionRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.CursoService
-import com.ar.edu.unq.unqlassroom.service.JwtService
+import com.ar.edu.unq.unqlassroom.security.JwtService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

@@ -1,11 +1,11 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AsignacionResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CalificarAsignacionRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CrearAsignacionRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CrearTemplateRepoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CorreccionGrupoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.TemplateRepoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.AsignacionResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.CalificarAsignacionRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.CrearAsignacionRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.CrearTemplateRepoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.CorreccionGrupoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.TemplateRepoResponseDTO
 
 interface AsignacionService {
     fun crearAsignacion(cursoId: Long, dto: CrearAsignacionRequestDTO, solicitanteUsername: String): AsignacionResponseDTO

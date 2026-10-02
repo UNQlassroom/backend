@@ -1,14 +1,16 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.*
-import com.ar.edu.unq.unqlassroom.errors.AsignacionNotFoundException
-import com.ar.edu.unq.unqlassroom.errors.BadRequestException
-import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.errors.ForbiddenException
-import com.ar.edu.unq.unqlassroom.github.GitHubCollaboratorService
-import com.ar.edu.unq.unqlassroom.github.GitHubIssueItemResponse
-import com.ar.edu.unq.unqlassroom.github.GitHubIssueService
-import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
+import com.ar.edu.unq.unqlassroom.dto.asignacion.*
+import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
