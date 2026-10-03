@@ -44,4 +44,13 @@ class StringUtilsTest {
         assertEquals("Quimica Organica", "Química Orgánica".removerTildes())
         assertEquals("Fisica I", "Física I".removerTildes())
     }
+
+    @Test
+    fun `toRepoSlug sanitizes string for github repositories`() {
+        assertEquals("estructuras_de_datos", "Estructuras de Datos".toRepoSlug())
+        assertEquals("programacion_funcional", "  Programación  Funcional  ".toRepoSlug())
+        assertEquals("tp_1_recursion", "TP-1: Recursión!".toRepoSlug())
+        assertEquals("grupo_alpha", "Grupo - Alpha".toRepoSlug())
+        assertEquals("agustin", "agustín".toRepoSlug())
+    }
 }
