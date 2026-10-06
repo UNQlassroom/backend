@@ -69,7 +69,7 @@ class SecurityIntegrationTest {
 
     private fun anyCurso(): Curso {
         Mockito.any(Curso::class.java)
-        return Curso(materia = "", anio = 0, semestre = 1, comision = 1)
+        return Curso(materia = "Test", anio = 2026, semestre = 1, comision = 1)
     }
 
     private fun eqString(value: String): String {

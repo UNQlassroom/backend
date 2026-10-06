@@ -60,10 +60,10 @@ class AsignacionServiceImplTest {
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
         return Asignacion(
-            titulo = "",
+            titulo = "TP Dummy",
             tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "",
-            curso = Curso(materia = "", anio = 0, semestre = 1, comision = 1)
+            templateRepoName = "tmpl",
+            curso = Curso(materia = "BD", anio = 2026, semestre = 1, comision = 1)
         )
     }
 
@@ -307,9 +307,6 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(gitHubRepoService.repositoryExists("template-tp")).thenReturn(true)
-        `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(
-            listOf(Inscripcion(curso = curso, usuario = alumno1), Inscripcion(curso = curso, usuario = alumno2))
-        )
 
         val request = CrearAsignacionRequestDTO(
             titulo = "TP Grupal",
@@ -649,6 +646,8 @@ class AsignacionServiceImplTest {
             templateRepoName = "tmpl",
             curso = curso,
         )
+        val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion)
+        asignacion.grupos.add(grupo)
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
@@ -1347,4 +1346,127 @@ class AsignacionServiceImplTest {
         assertEquals("PENDIENTE", res[0].issues[0].estado)
         assertFalse(res[0].issues[0].tieneCommitsPosteriores)
     }
+
+    @Test
+    fun `crearAsignacion throws BadRequestException when asignacion with same titulo already exists in curso`() {
+        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        val existing = Asignacion(id = 1L, titulo = "TP1", tipo = TipoAsignacion.INDIVIDUAL, templateRepoName = "tmpl", curso = curso)
+        `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(existing)
+
+        val asignacion = Asignacion(titulo = "TP1", tipo = TipoAsignacion.INDIVIDUAL, templateRepoName = "tmpl")
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, asignacion, "profe_test")
+        }
+        assertEquals("Ya existe una asignación con el título 'TP1' en este curso", ex.message)
+    }
+
+    @Test
+    fun `crearAsignacion throws BadRequestException when fechaLimite is in the past`() {
+        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
+
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().minusDays(1)
+        )
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, asignacion, "profe_test")
+        }
+        assertEquals("La fecha límite no puede ser anterior a la fecha actual", ex.message)
+    }
+
+    @Test
+    fun `crearAsignacion INDIVIDUAL throws BadRequestException when grupos are specified`() {
+        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
+        `when`(gitHubRepoService.repositoryExists("tmpl")).thenReturn(true)
+
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl"
+        )
+        val grupo = GrupoAsignacion(nombre = "Grupo 1", integrantes = mutableListOf(Usuario(username = "u1")))
+        asignacion.grupos.add(grupo)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, asignacion, "profe_test")
+        }
+        assertEquals("No se pueden especificar grupos para una asignación individual", ex.message)
+    }
+
+    @Test
+    fun `crearAsignacion GRUPAL throws BadRequestException when a group has no members`() {
+        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
+        `when`(gitHubRepoService.repositoryExists("tmpl")).thenReturn(true)
+
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl"
+        )
+        val grupo = GrupoAsignacion(nombre = "Grupo Vacio", integrantes = mutableListOf())
+        asignacion.grupos.add(grupo)
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, asignacion, "profe_test")
+        }
+        assertEquals("Todos los grupos deben tener al menos un integrante", ex.message)
+    }
+
+    @Test
+    fun `crearAsignacion GRUPAL throws BadRequestException when duplicate group names exist`() {
+        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
+        `when`(gitHubRepoService.repositoryExists("tmpl")).thenReturn(true)
+
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl"
+        )
+        val u1 = Usuario(username = "u1")
+        val u2 = Usuario(username = "u2")
+        asignacion.grupos.add(GrupoAsignacion(nombre = "Grupo Alpha", integrantes = mutableListOf(u1)))
+        asignacion.grupos.add(GrupoAsignacion(nombre = "grupo alpha", integrantes = mutableListOf(u2)))
+
+        val ex = assertThrows<BadRequestException> {
+            asignacionService.crearAsignacion(10L, asignacion, "profe_test")
+        }
+        assertEquals("No puede haber grupos con el mismo nombre en la misma asignación", ex.message)
+    }
+
+    @Test
+    fun `generarNombreRepo throws IllegalStateException when asignacion has no curso`() {
+        val asignacion = Asignacion(
+            titulo = "TP 1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl"
+        )
+        val ex = assertThrows<IllegalStateException> {
+            asignacion.generarNombreRepo("alumno")
+        }
+        assertEquals("La asignación no está asociada a ningún curso", ex.message)
+    }
 }
+

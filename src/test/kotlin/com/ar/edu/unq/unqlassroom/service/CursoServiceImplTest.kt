@@ -54,7 +54,7 @@ class CursoServiceImplTest {
 
     private fun anyCurso(): Curso {
         Mockito.any(Curso::class.java)
-        return Curso(materia = "", anio = 0, semestre = 1, comision = 1)
+        return Curso(materia = "Test", anio = 2026, semestre = 1, comision = 1)
     }
 
     @Test
@@ -489,4 +489,42 @@ class CursoServiceImplTest {
         }
         assertEquals("No tiene permisos para acceder a este curso", ex.message)
     }
+
+    @Test
+    fun `crearCurso throws BadRequestException when duplicate curso exists for owner`() {
+        val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
+        `when`(cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
+            "profe_test", "Estructuras de Datos", 2026, 1, 1
+        )).thenReturn(true)
+
+        val requestDTO = CursoRequestDTO(
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+        )
+
+        val ex = assertThrows<BadRequestException> {
+            cursoService.crearCurso(requestDTO.aModelo(), "profe_test")
+        }
+        assertEquals("Ya existe un curso para la materia 'Estructuras de Datos' en el año 2026, semestre 1 y comisión 1", ex.message)
+    }
+
+    @Test
+    fun `Curso constructor throws IllegalArgumentException on invalid attributes`() {
+        assertThrows<IllegalArgumentException> {
+            Curso(materia = "", anio = 2026, semestre = 1, comision = 1)
+        }
+        assertThrows<IllegalArgumentException> {
+            Curso(materia = "BD", anio = 1999, semestre = 1, comision = 1)
+        }
+        assertThrows<IllegalArgumentException> {
+            Curso(materia = "BD", anio = 2026, semestre = 3, comision = 1)
+        }
+        assertThrows<IllegalArgumentException> {
+            Curso(materia = "BD", anio = 2026, semestre = 1, comision = 0)
+        }
+    }
 }
+

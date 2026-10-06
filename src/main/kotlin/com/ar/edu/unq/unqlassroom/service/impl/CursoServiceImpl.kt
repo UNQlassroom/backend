@@ -23,7 +23,18 @@ class CursoServiceImpl (
 ) : CursoService {
 
     override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
-        curso.owner = usuarioService.obtenerDocente(ownerUsername)
+        val docente = usuarioService.obtenerDocente(ownerUsername)
+        if (cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
+                docente.username,
+                curso.materia,
+                curso.anio,
+                curso.semestre,
+                curso.comision
+            )
+        ) {
+            throw BadRequestException("Ya existe un curso para la materia '${curso.materia}' en el año ${curso.anio}, semestre ${curso.semestre} y comisión ${curso.comision}")
+        }
+        curso.asignarOwner(docente)
         return cursoRepository.save(curso)
     }
 
@@ -40,7 +51,7 @@ class CursoServiceImpl (
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
@@ -59,7 +70,7 @@ class CursoServiceImpl (
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
+        if (!curso.esOwner(solicitanteUsername)) {
             throw ForbiddenException("Solo el docente a cargo del curso puede agregar alumnos")
         }
 
@@ -99,19 +110,16 @@ class CursoServiceImpl (
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
+        if (!curso.esOwner(solicitanteUsername)) {
             throw ForbiddenException("Solo el docente a cargo del curso puede sincronizar alumnos")
         }
 
         val inscripciones = inscripcionRepository.findByCursoId(cursoId)
 
         return inscripciones.map { inscripcion ->
-            if (inscripcion.githubState == "pending") {
-                val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
-                if (membership != null && membership.state == "active") {
-                    inscripcion.githubState = "active"
-                    inscripcionRepository.save(inscripcion)
-                }
+            val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
+            if (membership != null && inscripcion.activarSiCorresponde(membership.state)) {
+                inscripcionRepository.save(inscripcion)
             }
             inscripcion
         }
@@ -122,7 +130,7 @@ class CursoServiceImpl (
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {

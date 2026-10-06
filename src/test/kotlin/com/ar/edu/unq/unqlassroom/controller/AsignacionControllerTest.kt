@@ -2,7 +2,6 @@ package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
-import com.ar.edu.unq.unqlassroom.dto.curso.response.RepositorioDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
@@ -40,15 +39,10 @@ class AsignacionControllerTest {
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
         return Asignacion(
-            titulo = "",
+            titulo = "TP Dummy",
             tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = ""
+            templateRepoName = "tmpl"
         )
-    }
-
-    private fun anyGrupoAsignacion(): GrupoAsignacion {
-        any(GrupoAsignacion::class.java)
-        return GrupoAsignacion()
     }
 
     private fun eqString(value: String): String {

@@ -19,7 +19,6 @@ import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 import java.time.Instant
-import java.time.LocalDateTime
 
 @Service
 @Transactional
@@ -42,15 +41,24 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
+        if (!curso.esOwner(solicitanteUsername)) {
             throw ForbiddenException("Solo el docente a cargo del curso puede crear asignaciones")
+        }
+
+        if (asignacionRepository.findByCursoIdAndTituloIgnoreCase(cursoId, asignacion.titulo.trim()) != null) {
+            throw BadRequestException("Ya existe una asignación con el título '${asignacion.titulo}' en este curso")
+        }
+
+        if (asignacion.estaVencida()) {
+            throw BadRequestException("La fecha límite no puede ser anterior a la fecha actual")
         }
 
         if (!gitHubRepoService.repositoryExists(asignacion.templateRepoName)) {
             throw BadRequestException("El repositorio template '${asignacion.templateRepoName}' no existe en GitHub")
         }
 
-        asignacion.curso = curso
+        asignacion.asociarACurso(curso)
+        asignacion.validarEstructuraGrupos()
 
         val docenteUsername = curso.owner?.username ?: solicitanteUsername
         val inscripcionesCurso = inscripcionRepository.findByCursoId(cursoId)
@@ -101,19 +109,12 @@ class AsignacionServiceImpl(
                     repositorio = repositorio,
                     integrantes = mutableListOf(alumno),
                 )
-                asignacion.grupos.add(grupo)
+                gruposGenerados.add(grupo)
             }
+            asignacion.grupos = gruposGenerados
         } else {
-            // GRUPAL
-            if (asignacion.grupos.isEmpty()) {
-                throw BadRequestException("Para una asignación grupal debe especificar al menos un grupo")
-            }
-
+            // GRUPAL: validar inscripción en el curso
             val allMembers = asignacion.grupos.flatMap { it.integrantes.map { u -> u.username.trim() } }
-            if (allMembers.size != allMembers.distinct().size) {
-                throw BadRequestException("Un alumno no puede pertenecer a más de un grupo en la misma asignación")
-            }
-
             val notEnrolled = allMembers.filterNot { alumnosInscriptosUsernames.contains(it) }
             if (notEnrolled.isNotEmpty()) {
                 throw BadRequestException("Los siguientes alumnos no están inscriptos en el curso: ${notEnrolled.joinToString()}")
@@ -180,7 +181,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
@@ -188,26 +189,7 @@ class AsignacionServiceImpl(
         }
 
         val asignaciones = asignacionRepository.findByCursoId(cursoId)
-
-        if (esOwner) {
-            return asignaciones
-        }
-
-        return asignaciones.map { asignacion ->
-            val gruposFiltrados = asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
-            }
-            Asignacion(
-                id = asignacion.id,
-                titulo = asignacion.titulo,
-                descripcion = asignacion.descripcion,
-                tipo = asignacion.tipo,
-                templateRepoName = asignacion.templateRepoName,
-                fechaLimite = asignacion.fechaLimite,
-                curso = asignacion.curso,
-                grupos = gruposFiltrados.toMutableList()
-            )
-        }
+        return asignaciones.map { it.paraVisualizacionDe(solicitanteUsername, esOwner) }
     }
 
     override fun obtenerAsignacion(
@@ -219,7 +201,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
@@ -229,41 +211,20 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val gruposAMostrar = if (esOwner) {
-            asignacion.grupos
-        } else {
-            asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
-            }
-        }
+        val asignacionVisible = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
 
-        gruposAMostrar.forEach { grupo ->
+        asignacionVisible.grupos.forEach { grupo ->
             grupo.repositorio?.let { repo ->
                 try {
                     val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                    repo.ultimoCommit = info.ultimoCommit
-                    repo.fechaUltimoCommit = info.fechaUltimoCommit
-                    repo.estadoCI = info.estadoCI
+                    repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
                 } catch (_: Exception) {
                     // Si falla consulta puntual a github, mantener el estado persistido
                 }
             }
         }
 
-        if (esOwner) {
-            return asignacion
-        }
-
-        return Asignacion(
-            id = asignacion.id,
-            titulo = asignacion.titulo,
-            descripcion = asignacion.descripcion,
-            tipo = asignacion.tipo,
-            templateRepoName = asignacion.templateRepoName,
-            fechaLimite = asignacion.fechaLimite,
-            curso = asignacion.curso,
-            grupos = gruposAMostrar.toMutableList()
-        )
+        return asignacionVisible
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -279,11 +240,9 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        if (asignacion.fechaLimite != null && LocalDateTime.now().isAfter(asignacion.fechaLimite)) {
-            throw BadRequestException("No se puede entregar la asignación porque la fecha límite ha vencido")
-        }
+        asignacion.validarVencimiento()
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
@@ -292,29 +251,23 @@ class AsignacionServiceImpl(
 
         val grupo = if (esOwner) {
             if (grupoId != null) {
-                asignacion.grupos.find { it.id == grupoId }
-                    ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
+                asignacion.buscarGrupo(grupoId)
             } else {
                 throw BadRequestException("Debe especificar el grupoId para marcar la entrega como docente")
             }
         } else {
-            val grupoDelAlumno = asignacion.grupos.find { g ->
-                g.integrantes.any { it.username == solicitanteUsername }
-            } ?: throw BadRequestException("El usuario no pertenece a ningún grupo de esta asignación")
-
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
             if (grupoId != null && grupoDelAlumno.id != grupoId) {
                 throw ForbiddenException("No tiene permisos para entregar en nombre de otro grupo")
             }
             grupoDelAlumno
         }
 
-        grupo.cantidadEntregas += 1
-        grupo.entregada = true
-        grupo.fechaEntregada = LocalDateTime.now()
+        grupo.registrarEntrega()
 
         val tagName = "entrega-v${grupo.cantidadEntregas}"
-        val releaseName = "Entrega v${grupo.cantidadEntregas} - ${asignacion.titulo}"
-        val releaseBody = "Entrega realizada por $solicitanteUsername el ${grupo.fechaEntregada}"
+        val releaseName = grupo.generarNombreRelease(asignacion.titulo)
+        val releaseBody = grupo.generarCuerpoRelease(solicitanteUsername)
 
         grupo.repositorio?.let { repo ->
             try {
@@ -331,32 +284,14 @@ class AsignacionServiceImpl(
 
             try {
                 val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                repo.ultimoCommit = info.ultimoCommit
-                repo.fechaUltimoCommit = info.fechaUltimoCommit
-                repo.estadoCI = info.estadoCI
+                repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
             } catch (_: Exception) {
                 // Si falla github puntual, continuar
             }
         }
 
         val guardada = asignacionRepository.save(asignacion)
-        if (esOwner) {
-            return guardada
-        }
-
-        val gruposAMostrar = guardada.grupos.filter { g ->
-            g.integrantes.any { it.username == solicitanteUsername }
-        }
-        return Asignacion(
-            id = guardada.id,
-            titulo = guardada.titulo,
-            descripcion = guardada.descripcion,
-            tipo = guardada.tipo,
-            templateRepoName = guardada.templateRepoName,
-            fechaLimite = guardada.fechaLimite,
-            curso = guardada.curso,
-            grupos = gruposAMostrar.toMutableList()
-        )
+        return guardada.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
     override fun calificarAsignacion(
@@ -371,23 +306,15 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
+        if (!curso.esOwner(solicitanteUsername)) {
             throw ForbiddenException("Solo el docente a cargo del curso puede calificar asignaciones")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        if (calificacion < 1 || calificacion > 10) {
-            throw BadRequestException("La nota debe ser entre 1 y 10")
-        }
-
-        val grupo = asignacion.grupos.find { it.id == grupoId }
-            ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
-
-        grupo.calificacion = calificacion
-        grupo.observaciones = observaciones
-        grupo.fechaCalificacion = LocalDateTime.now()
+        val grupo = asignacion.buscarGrupo(grupoId)
+        grupo.calificar(calificacion, observaciones)
 
         return asignacionRepository.save(asignacion)
     }
@@ -401,7 +328,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
+        val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
@@ -411,21 +338,13 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val gruposAMostrar = if (esOwner) {
-            asignacion.grupos
-        } else {
-            asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
-            }
-        }
+        val gruposAMostrar = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner).grupos
 
         return gruposAMostrar.map { grupo ->
             grupo.repositorio?.let { repo ->
                 try {
                     val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                    repo.ultimoCommit = info.ultimoCommit
-                    repo.fechaUltimoCommit = info.fechaUltimoCommit
-                    repo.estadoCI = info.estadoCI
+                    repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
                 } catch (_: Exception) {
                     // Mantener estado persistido si falla la consulta
                 }
