@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.asignacion
+package com.ar.edu.unq.unqlassroom.dto.asignacion.response
 
 import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
@@ -21,7 +21,7 @@ data class AsignacionResponseDTO(
             gruposAMostrar: List<GrupoAsignacion> = asignacion.grupos
         ): AsignacionResponseDTO = AsignacionResponseDTO(
             id = asignacion.id!!,
-            cursoId = asignacion.curso.id!!,
+            cursoId = asignacion.curso!!.id!!,
             titulo = asignacion.titulo,
             descripcion = asignacion.descripcion,
             tipo = asignacion.tipo,

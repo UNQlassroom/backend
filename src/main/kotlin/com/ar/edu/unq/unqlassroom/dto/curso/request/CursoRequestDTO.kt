@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.curso
+package com.ar.edu.unq.unqlassroom.dto.curso.request
 
 import com.ar.edu.unq.unqlassroom.model.Curso
 

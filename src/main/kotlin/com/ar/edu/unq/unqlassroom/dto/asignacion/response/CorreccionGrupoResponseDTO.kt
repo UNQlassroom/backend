@@ -1,6 +1,6 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.asignacion
+package com.ar.edu.unq.unqlassroom.dto.asignacion.response
 
-import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 
 data class CorreccionGrupoResponseDTO(
     val grupoId: Long,
