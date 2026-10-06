@@ -1,5 +1,6 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.asignacion
+package com.ar.edu.unq.unqlassroom.dto.asignacion.request
 
+import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -20,4 +21,18 @@ data class CrearAsignacionRequestDTO(
     val fechaLimite: LocalDateTime? = null,
 
     val grupos: List<CrearGrupoRequestDTO>? = null,
-)
+) {
+    fun aModelo(): Asignacion {
+        val asignacion = Asignacion(
+            titulo = this.titulo,
+            descripcion = this.descripcion,
+            tipo = this.tipo,
+            templateRepoName = this.templateRepoName,
+            fechaLimite = this.fechaLimite,
+        )
+        this.grupos?.let { listaGrupos ->
+            asignacion.grupos = listaGrupos.map { it.aModelo(asignacion) }.toMutableList()
+        }
+        return asignacion
+    }
+}
