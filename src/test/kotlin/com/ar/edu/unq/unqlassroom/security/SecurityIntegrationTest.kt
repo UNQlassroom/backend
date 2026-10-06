@@ -1,9 +1,11 @@
-﻿package com.ar.edu.unq.unqlassroom.security
+package com.ar.edu.unq.unqlassroom.security
 
-import com.ar.edu.unq.unqlassroom.dto.asignacion.AsignacionResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.asignacion.CalificarAsignacionRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.request.CalificarAsignacionRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.AsignacionResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.model.Asignacion
+import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -36,30 +38,7 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.context.WebApplicationContext
 
 @SpringBootTest
-@Import(SecurityIntegrationTest.TestSecurityConfig::class)
 class SecurityIntegrationTest {
-
-    @TestConfiguration
-    class TestSecurityConfig {
-        @RestController
-        class CalificarMockController(private val asignacionService: AsignacionService) {
-            @PostMapping("/cursos/{cursoId}/asignaciones/{asignacionId}/calificar")
-            fun calificar(
-                @PathVariable cursoId: Long,
-                @PathVariable asignacionId: Long,
-                @RequestBody request: CalificarAsignacionRequestDTO,
-                authentication: Authentication,
-            ): ResponseEntity<AsignacionResponseDTO> {
-                val res = asignacionService.calificarAsignacion(
-                    cursoId = cursoId,
-                    asignacionId = asignacionId,
-                    solicitanteUsername = authentication.name,
-                    dto = request
-                )
-                return ResponseEntity.ok(res)
-            }
-        }
-    }
 
     @Autowired
     private lateinit var context: WebApplicationContext
@@ -83,14 +62,14 @@ class SecurityIntegrationTest {
     private val docente = Usuario(id = 1L, username = "profe", esDocente = true)
     private val alumno = Usuario(id = 2L, username = "alumno", esDocente = false)
 
-    private fun anyCursoRequest(): CursoRequestDTO {
-        Mockito.any(CursoRequestDTO::class.java)
-        return CursoRequestDTO(materia = "", anio = 0, semestre = 1, comision = 1)
+    private fun anyCalificarModel(): GrupoAsignacion {
+        Mockito.any(GrupoAsignacion::class.java)
+        return GrupoAsignacion(calificacion = 8)
     }
 
-    private fun anyCalificarRequest(): CalificarAsignacionRequestDTO {
-        Mockito.any(CalificarAsignacionRequestDTO::class.java)
-        return CalificarAsignacionRequestDTO(calificacion = 8)
+    private fun anyCurso(): Curso {
+        Mockito.any(Curso::class.java)
+        return Curso(materia = "", anio = 0, semestre = 1, comision = 1)
     }
 
     private fun eqString(value: String): String {
@@ -147,7 +126,7 @@ class SecurityIntegrationTest {
         )
 
         mockMvc.perform(
-            post("/cursos/crear")
+            post("/cursos")
                 .header("Authorization", "Bearer $token")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
@@ -164,20 +143,20 @@ class SecurityIntegrationTest {
             semestre = 1,
             comision = 1
         )
-        val responseDTO = CursoResponseDTO(
+        val cursoGuardado = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            ownerUsername = "profe"
+            owner = docente
         )
 
-        `when`(cursoService.crearCurso(anyCursoRequest(), eqString("profe"))).thenReturn(responseDTO)
+        `when`(cursoService.crearCurso(anyCurso(), eqString("profe"))).thenReturn(cursoGuardado)
 
         mockMvc.perform(
-            post("/cursos/crear")
+            post("/cursos")
                 .header("Authorization", "Bearer $token")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
@@ -188,7 +167,7 @@ class SecurityIntegrationTest {
     @Test
     fun `calificar asignacion returns 403 when user has role ALUMNO`() {
         val token = jwtService.generateToken(alumno)
-        val request = CalificarAsignacionRequestDTO(calificacion = 8, observaciones = "Buen trabajo")
+        val request = CalificarAsignacionRequestDTO(grupoId = 1L, calificacion = 8, observaciones = "Buen trabajo")
 
         mockMvc.perform(
             post("/cursos/10/asignaciones/5/calificar")
@@ -202,24 +181,27 @@ class SecurityIntegrationTest {
     @Test
     fun `calificar asignacion returns 200 when user has role DOCENTE`() {
         val token = jwtService.generateToken(docente)
-        val request = CalificarAsignacionRequestDTO(calificacion = 8, observaciones = "Buen trabajo", grupoId = 1L)
-        val response = AsignacionResponseDTO(
+        val request = CalificarAsignacionRequestDTO(grupoId = 1L, calificacion = 8, observaciones = "Buen trabajo")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 5L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP5",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl5",
             fechaLimite = null,
-            grupos = emptyList(),
+            grupos = mutableListOf(),
         )
 
         `when`(asignacionService.calificarAsignacion(
             Mockito.eq(10L),
             Mockito.eq(5L),
-            eqString("profe"),
-            anyCalificarRequest()
-        )).thenReturn(response)
+            Mockito.eq(1L),
+            Mockito.eq(8),
+            Mockito.eq("Buen trabajo"),
+            eqString("profe")
+        )).thenReturn(asignacion)
 
         mockMvc.perform(
             post("/cursos/10/asignaciones/5/calificar")

@@ -1,7 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
@@ -17,7 +17,6 @@ import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -83,7 +82,7 @@ class CursoServiceImplTest {
             )
         }
 
-        val result = cursoService.crearCurso(requestDTO, "profe_test")
+        val result = cursoService.crearCurso(requestDTO.aModelo(), "profe_test")
 
         assertNotNull(result)
         assertEquals(1L, result.id)
@@ -92,7 +91,7 @@ class CursoServiceImplTest {
         assertEquals(1, result.semestre)
         assertEquals(1, result.comision)
         assertEquals("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1", result.descripcion)
-        assertEquals("profe_test", result.ownerUsername)
+        assertEquals("profe_test", result.owner?.username)
     }
 
     @Test
@@ -137,17 +136,16 @@ class CursoServiceImplTest {
             usernames = listOf("alumno1", "alumno2", "alumno1 ")
         )
 
-        val response = cursoService.agregarAlumnos(1L, request, "profe_test")
+        val response = cursoService.agregarAlumnos(1L, request.usernames, "profe_test")
 
-        assertEquals(1L, response.cursoId)
-        assertEquals(2, response.alumnos.size)
-        assertEquals("alumno1", response.alumnos[0].username)
-        assertEquals("pending", response.alumnos[0].state)
-        assertEquals("member", response.alumnos[0].role)
+        assertEquals(2, response.size)
+        assertEquals("alumno1", response[0].usuario.username)
+        assertEquals("pending", response[0].githubState)
+        assertEquals("member", response[0].githubRole)
 
-        assertEquals("alumno2", response.alumnos[1].username)
-        assertEquals("active", response.alumnos[1].state)
-        assertEquals("member", response.alumnos[1].role)
+        assertEquals("alumno2", response[1].usuario.username)
+        assertEquals("active", response[1].githubState)
+        assertEquals("member", response[1].githubRole)
 
         verify(gitHubOrgService).invitarMiembro("alumno1")
         verify(gitHubOrgService).invitarMiembro("alumno2")
@@ -173,7 +171,7 @@ class CursoServiceImplTest {
         )
 
         val exception = assertThrows<BadRequestException> {
-            cursoService.agregarAlumnos(1L, request, "profe_test")
+            cursoService.agregarAlumnos(1L, request.usernames, "profe_test")
         }
 
         assertEquals("Los siguientes usuarios no existen en GitHub: alumno_fantasma", exception.message)
@@ -185,7 +183,7 @@ class CursoServiceImplTest {
         `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
 
         val exception = assertThrows<CursoNotFoundException> {
-            cursoService.agregarAlumnos(99L, AgregarAlumnosRequestDTO(listOf("alumno1")), "profe_test")
+            cursoService.agregarAlumnos(99L, listOf("alumno1"), "profe_test")
         }
 
         assertEquals("Curso no encontrado", exception.message)
@@ -205,7 +203,7 @@ class CursoServiceImplTest {
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         val exception = assertThrows<ForbiddenException> {
-            cursoService.agregarAlumnos(1L, AgregarAlumnosRequestDTO(listOf("alumno1")), "otro_profe")
+            cursoService.agregarAlumnos(1L, listOf("alumno1"), "otro_profe")
         }
 
         assertEquals("Solo el docente a cargo del curso puede agregar alumnos", exception.message)
@@ -231,7 +229,6 @@ class CursoServiceImplTest {
 
         `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
-        // Alumno 1 aceptó la invitación, Alumno 2 sigue pendiente
         `when`(gitHubOrgService.obtenerMembresia("alumno1")).thenReturn(
             GitHubOrgMembershipResponse(state = "active", role = "member")
         )
@@ -241,15 +238,14 @@ class CursoServiceImplTest {
 
         val response = cursoService.sincronizarAlumnos(1L, "profe_test")
 
-        assertEquals(1L, response.cursoId)
-        assertEquals(2, response.alumnos.size)
+        assertEquals(2, response.size)
 
-        val a1 = response.alumnos.first { it.username == "alumno1" }
-        assertEquals("active", a1.state)
+        val a1 = response.first { it.usuario.username == "alumno1" }
+        assertEquals("active", a1.githubState)
         assertEquals("active", inscripcion1.githubState)
 
-        val a2 = response.alumnos.first { it.username == "alumno2" }
-        assertEquals("pending", a2.state)
+        val a2 = response.first { it.usuario.username == "alumno2" }
+        assertEquals("pending", a2.githubState)
         assertEquals("pending", inscripcion2.githubState)
 
         verify(inscripcionRepository).save(inscripcion1)
@@ -297,12 +293,11 @@ class CursoServiceImplTest {
 
         val response = cursoService.obtenerAlumnos(1L, "profe_test")
 
-        assertEquals(1L, response.cursoId)
-        assertEquals(2, response.alumnos.size)
-        assertEquals("alumno1", response.alumnos[0].username)
-        assertEquals("pending", response.alumnos[0].state)
-        assertEquals("alumno2", response.alumnos[1].username)
-        assertEquals("active", response.alumnos[1].state)
+        assertEquals(2, response.size)
+        assertEquals("alumno1", response[0].usuario.username)
+        assertEquals("pending", response[0].githubState)
+        assertEquals("alumno2", response[1].usuario.username)
+        assertEquals("active", response[1].githubState)
 
         verify(gitHubOrgService, Mockito.never()).obtenerMembresia(Mockito.anyString(), Mockito.nullable(String::class.java))
     }
@@ -319,7 +314,7 @@ class CursoServiceImplTest {
             .thenThrow(ForbiddenException("El usuario alumno_infiltrado no tiene permisos de docente"))
 
         val ex = assertThrows<ForbiddenException> {
-            cursoService.crearCurso(requestDTO, "alumno_infiltrado")
+            cursoService.crearCurso(requestDTO.aModelo(), "alumno_infiltrado")
         }
         assertEquals("El usuario alumno_infiltrado no tiene permisos de docente", ex.message)
     }
@@ -336,7 +331,7 @@ class CursoServiceImplTest {
             .thenThrow(UsuarioNotFoundException("Usuario no encontrado: fantasma"))
 
         val ex = assertThrows<UsuarioNotFoundException> {
-            cursoService.crearCurso(requestDTO, "fantasma")
+            cursoService.crearCurso(requestDTO.aModelo(), "fantasma")
         }
         assertEquals("Usuario no encontrado: fantasma", ex.message)
     }
@@ -370,7 +365,7 @@ class CursoServiceImplTest {
 
         val response = cursoService.obtenerAlumnos(1L, "alumno_inscripto")
         assertNotNull(response)
-        assertEquals(1L, response.cursoId)
+        assertEquals(0, response.size)
     }
 
     @Test
@@ -438,7 +433,7 @@ class CursoServiceImplTest {
         assertNotNull(result)
         assertEquals(1L, result.id)
         assertEquals("Estructuras de Datos", result.materia)
-        assertEquals("profe_owner", result.ownerUsername)
+        assertEquals("profe_owner", result.owner?.username)
     }
 
     @Test

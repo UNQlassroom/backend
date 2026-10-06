@@ -34,7 +34,7 @@ class Asignacion(
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "curso_id", nullable = false)
-    var curso: Curso,
+    var curso: Curso? = null,
 
     @OneToMany(mappedBy = "asignacion", cascade = [CascadeType.ALL], orphanRemoval = true)
     var grupos: MutableList<GrupoAsignacion> = mutableListOf()
@@ -44,16 +44,16 @@ class Asignacion(
     }
 
     fun generarNombreRepo(sufijo: String): String {
-        val anio = curso.anio
-        val semestre = curso.semestre
-        val comision = curso.comision
-        val materiaSlug = curso.materia.toRepoSlug()
+        val anio = curso!!.anio
+        val semestre = curso!!.semestre
+        val comision = curso!!.comision
+        val materiaSlug = curso!!.materia.toRepoSlug()
         val tituloSlug = titulo.toRepoSlug()
         val sufijoSlug = sufijo.toRepoSlug()
         return "${anio}s${semestre}_c${comision}_${materiaSlug}_${tituloSlug}_${sufijoSlug}"
     }
 
     fun generarDescripcionRepo(sufijo: String): String {
-        return "Repositorio de asignación '$titulo' ($sufijo) - ${curso.materia} (${curso.anio}s${curso.semestre} comision ${curso.comision})"
+        return "Repositorio de asignación '$titulo' ($sufijo) - ${curso!!.materia} (${curso!!.anio}s${curso!!.semestre} comision ${curso!!.comision})"
     }
 }

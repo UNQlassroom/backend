@@ -1,21 +1,19 @@
-﻿package com.ar.edu.unq.unqlassroom.service
+package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.Inscripcion
 
 interface CursoService {
 
-    fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO
+    fun crearCurso(curso: Curso, ownerUsername: String): Curso
 
-    fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
+    fun agregarAlumnos(cursoId: Long, usernames: List<String>, solicitanteUsername: String): List<Inscripcion>
 
-    fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
+    fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion>
 
-    fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO>
+    fun obtenerCursos(username: String, esDocente: Boolean): List<Curso>
 
-    fun obtenerCurso(id: Long, solicitanteUsername: String): CursoResponseDTO
+    fun obtenerCurso(id: Long, solicitanteUsername: String): Curso
 
-    fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO
+    fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion>
 }

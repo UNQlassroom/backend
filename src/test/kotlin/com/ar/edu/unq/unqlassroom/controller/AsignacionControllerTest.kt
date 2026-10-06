@@ -1,9 +1,10 @@
-﻿package com.ar.edu.unq.unqlassroom.controller
+package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.dto.asignacion.*
-import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
-import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
-import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
+import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
+import com.ar.edu.unq.unqlassroom.dto.curso.response.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.any
+import org.mockito.Mockito.eq
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -34,6 +37,25 @@ class AsignacionControllerTest {
     private lateinit var mockMvc: MockMvc
     private val objectMapper = ObjectMapper()
 
+    private fun anyAsignacion(): Asignacion {
+        any(Asignacion::class.java)
+        return Asignacion(
+            titulo = "",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = ""
+        )
+    }
+
+    private fun anyGrupoAsignacion(): GrupoAsignacion {
+        any(GrupoAsignacion::class.java)
+        return GrupoAsignacion()
+    }
+
+    private fun eqString(value: String): String {
+        eq(value)
+        return value
+    }
+
     @BeforeEach
     fun setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(asignacionController).build()
@@ -47,26 +69,28 @@ class AsignacionControllerTest {
             templateRepoName = "template-tp1",
         )
 
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacionGuardada = Asignacion(
             id = 1L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP1 - Recursión",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
             fechaLimite = null,
-            grupos = listOf(
-                GrupoAsignacionResponseDTO(
-                    id = 100L,
-                    nombre = null,
-                    integrantes = listOf("alumno1"),
-                    repositorio = RepositorioDTO("repo1", "https://github.com/repo1", null, null, null)
-                )
-            )
         )
+        val repo = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val grupo = GrupoAsignacion(
+            id = 100L,
+            nombre = null,
+            asignacion = asignacionGuardada,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1")),
+        )
+        asignacionGuardada.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.crearAsignacion(10L, request, "profe")).thenReturn(response)
+        `when`(asignacionService.crearAsignacion(eq(10L), anyAsignacion(), eqString("profe"))).thenReturn(asignacionGuardada)
 
         mockMvc.perform(
             post("/cursos/10/asignaciones")
@@ -79,26 +103,24 @@ class AsignacionControllerTest {
             .andExpect(jsonPath("$.cursoId").value(10))
             .andExpect(jsonPath("$.titulo").value("TP1 - Recursión"))
             .andExpect(jsonPath("$.tipo").value("INDIVIDUAL"))
-            .andExpect(jsonPath("$.grupos[0].integrantes[0]").value("alumno1"))
+            .andExpect(jsonPath("$.grupos[0].integrantes[0].username").value("alumno1"))
     }
 
     @Test
     fun `obtenerAsignaciones returns 200 and list`() {
-        val response = listOf(
-            AsignacionResponseDTO(
-                id = 1L,
-                cursoId = 10L,
-                titulo = "TP1",
-                descripcion = null,
-                tipo = TipoAsignacion.INDIVIDUAL,
-                templateRepoName = "tmpl",
-                fechaLimite = null,
-                grupos = emptyList()
-            )
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            descripcion = null,
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = null,
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.obtenerAsignaciones(10L, "profe")).thenReturn(response)
+        `when`(asignacionService.obtenerAsignaciones(10L, "profe")).thenReturn(listOf(asignacion))
 
         mockMvc.perform(
             get("/cursos/10/asignaciones")
@@ -111,19 +133,19 @@ class AsignacionControllerTest {
 
     @Test
     fun `obtenerAsignacion returns 200 and assignment details`() {
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 2L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP2",
             descripcion = "TP Grupal",
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl-grupal",
             fechaLimite = null,
-            grupos = emptyList()
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.obtenerAsignacion(10L, 2L, "profe")).thenReturn(response)
+        `when`(asignacionService.obtenerAsignacion(10L, 2L, "profe")).thenReturn(asignacion)
 
         mockMvc.perform(
             get("/cursos/10/asignaciones/2")
@@ -136,66 +158,31 @@ class AsignacionControllerTest {
     }
 
     @Test
-    fun `crearTemplate returns 201 and created template`() {
-        val request = CrearTemplateRepoRequestDTO("template-tp3", "Desc")
-        val response = TemplateRepoResponseDTO("template-tp3", "org/template-tp3", "https://github.com/org/template-tp3", "Desc")
-
-        val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.crearTemplateRepository(request, "profe")).thenReturn(response)
-
-        mockMvc.perform(
-            post("/templates")
-                .principal(auth)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-        )
-            .andExpect(status().isCreated)
-            .andExpect(jsonPath("$.name").value("template-tp3"))
-            .andExpect(jsonPath("$.htmlUrl").value("https://github.com/org/template-tp3"))
-    }
-
-    @Test
-    fun `listarTemplates returns 200 and list`() {
-        val response = listOf(
-            TemplateRepoResponseDTO("template-tp3", "org/template-tp3", "https://github.com/org/template-tp3", "Desc")
-        )
-
-        val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.listarTemplates("profe")).thenReturn(response)
-
-        mockMvc.perform(
-            get("/templates")
-                .principal(auth)
-        )
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.size()").value(1))
-            .andExpect(jsonPath("$[0].name").value("template-tp3"))
-    }
-
-    @Test
     fun `marcarAsignacionComoEntregada returns 200 and updated assignment`() {
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 5L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP5",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl5",
             fechaLimite = null,
-            grupos = listOf(
-                GrupoAsignacionResponseDTO(
-                    id = 50L,
-                    nombre = null,
-                    integrantes = listOf("alumno1"),
-                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
-                    entregada = true,
-                    releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
-                )
-            ),
         )
+        val repo = Repositorio(nombre = "repo5", htmlUrl = "https://github.com/repo5")
+        val grupo = GrupoAsignacion(
+            id = 50L,
+            nombre = null,
+            asignacion = asignacion,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1")),
+            entregada = true,
+            releaseUrl = "https://github.com/UNQlassroom/repo5/releases/tag/entrega-v1",
+        )
+        asignacion.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("alumno1", null)
-        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "alumno1", null)).thenReturn(response)
+        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "alumno1", null)).thenReturn(asignacion)
 
         mockMvc.perform(
             post("/cursos/10/asignaciones/5/entregar")
@@ -209,27 +196,29 @@ class AsignacionControllerTest {
 
     @Test
     fun `marcarAsignacionComoEntregada with request body specifying grupoId returns 200`() {
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 5L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP5",
             descripcion = null,
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl5",
             fechaLimite = null,
-            grupos = listOf(
-                GrupoAsignacionResponseDTO(
-                    id = 50L,
-                    nombre = "Grupo 1",
-                    integrantes = listOf("alumno1"),
-                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
-                    entregada = true,
-                )
-            ),
         )
+        val repo = Repositorio(nombre = "repo5", htmlUrl = "https://github.com/repo5")
+        val grupo = GrupoAsignacion(
+            id = 50L,
+            nombre = "Grupo 1",
+            asignacion = asignacion,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1")),
+            entregada = true,
+        )
+        asignacion.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "profe", 50L)).thenReturn(response)
+        `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "profe", 50L)).thenReturn(asignacion)
 
         mockMvc.perform(
             post("/cursos/10/asignaciones/5/entregar")
@@ -250,31 +239,33 @@ class AsignacionControllerTest {
             calificacion = 9,
             observaciones = "Excelente resolución"
         )
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 5L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP5",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl5",
             fechaLimite = null,
-            grupos = listOf(
-                GrupoAsignacionResponseDTO(
-                    id = 50L,
-                    nombre = null,
-                    integrantes = listOf("alumno1"),
-                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
-                    calificacion = 9,
-                    observaciones = "Excelente resolución",
-                )
-            ),
         )
+        val repo = Repositorio(nombre = "repo5", htmlUrl = "https://github.com/repo5")
+        val grupo = GrupoAsignacion(
+            id = 50L,
+            nombre = null,
+            asignacion = asignacion,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1")),
+            calificacion = 9,
+            observaciones = "Excelente resolución",
+        )
+        asignacion.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.calificarAsignacion(10L, 5L, "profe", request)).thenReturn(response)
+        `when`(asignacionService.calificarAsignacion(eq(10L), eq(5L), eq(50L), eq(9), eq("Excelente resolución"), eqString("profe"))).thenReturn(asignacion)
 
         mockMvc.perform(
-            post("/cursos/10/asignaciones/5/individual/calificar")
+            post("/cursos/10/asignaciones/5/calificar")
                 .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
@@ -292,31 +283,33 @@ class AsignacionControllerTest {
             calificacion = 8,
             observaciones = "Muy buen trabajo grupal"
         )
-        val response = AsignacionResponseDTO(
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
             id = 5L,
-            cursoId = 10L,
+            curso = curso,
             titulo = "TP5",
             descripcion = null,
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl5",
             fechaLimite = null,
-            grupos = listOf(
-                GrupoAsignacionResponseDTO(
-                    id = 60L,
-                    nombre = "Grupo A",
-                    integrantes = listOf("alumno1", "alumno2"),
-                    repositorio = RepositorioDTO("repo5", "https://github.com/repo5", null, null, null),
-                    calificacion = 8,
-                    observaciones = "Muy buen trabajo grupal",
-                )
-            ),
         )
+        val repo = Repositorio(nombre = "repo5", htmlUrl = "https://github.com/repo5")
+        val grupo = GrupoAsignacion(
+            id = 60L,
+            nombre = "Grupo A",
+            asignacion = asignacion,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1"), Usuario(username = "alumno2")),
+            calificacion = 8,
+            observaciones = "Muy buen trabajo grupal",
+        )
+        asignacion.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.calificarAsignacion(10L, 5L, "profe", request)).thenReturn(response)
+        `when`(asignacionService.calificarAsignacion(eq(10L), eq(5L), eq(60L), eq(8), eq("Muy buen trabajo grupal"), eqString("profe"))).thenReturn(asignacion)
 
         mockMvc.perform(
-            post("/cursos/10/asignaciones/5/grupos/calificar")
+            post("/cursos/10/asignaciones/5/calificar")
                 .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
@@ -330,13 +323,14 @@ class AsignacionControllerTest {
     @Test
     fun `calificarAsignacion returns 400 when nota is invalid`() {
         val requestUnderMin = CalificarAsignacionRequestDTO(
+            grupoId = 1L,
             calificacion = 0,
             observaciones = "Desaprobado"
         )
         val auth = UsernamePasswordAuthenticationToken("profe", null)
 
         mockMvc.perform(
-            post("/cursos/10/asignaciones/5/individual/calificar")
+            post("/cursos/10/asignaciones/5/calificar")
                 .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestUnderMin))
@@ -344,12 +338,13 @@ class AsignacionControllerTest {
             .andExpect(status().isBadRequest)
 
         val requestOverMax = CalificarAsignacionRequestDTO(
+            grupoId = 1L,
             calificacion = 11,
             observaciones = "Excelente plus"
         )
 
         mockMvc.perform(
-            post("/cursos/10/asignaciones/5/individual/calificar")
+            post("/cursos/10/asignaciones/5/calificar")
                 .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestOverMax))
