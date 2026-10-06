@@ -195,7 +195,7 @@ class AsignacionControllerTest {
     }
 
     @Test
-    fun `marcarAsignacionComoEntregada with request body specifying grupoId returns 200`() {
+    fun `marcarAsignacionComoEntregada with query param grupo returns 200`() {
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
         val asignacion = Asignacion(
             id = 5L,
@@ -221,10 +221,8 @@ class AsignacionControllerTest {
         `when`(asignacionService.marcarAsignacionComoEntregada(10L, 5L, "profe", 50L)).thenReturn(asignacion)
 
         mockMvc.perform(
-            post("/cursos/10/asignaciones/5/entregar")
+            post("/cursos/10/asignaciones/5/entregar?grupo=50")
                 .principal(auth)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(EntregarAsignacionRequestDTO(grupoId = 50L)))
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.id").value(5))

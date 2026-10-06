@@ -50,7 +50,7 @@ class AsignacionController(
     fun marcarAsignacionComoEntregada(
         @PathVariable cursoId: Long,
         @PathVariable asignacionId: Long,
-        @RequestParam(required = true) grupo: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
         authentication: Authentication,
     ): ResponseEntity<AsignacionResponseDTO> {
         val asignacion = asignacionService.marcarAsignacionComoEntregada(

@@ -119,7 +119,7 @@ class AsignacionServiceImpl(
                 throw BadRequestException("Los siguientes alumnos no están inscriptos en el curso: ${notEnrolled.joinToString()}")
             }
 
-            asignacion.grupos.forEach { grupoOriginal ->
+            val gruposConfigurados = asignacion.grupos.map { grupoOriginal ->
                 val grupoNombre = grupoOriginal.nombre!!.trim()
                 val repoName = asignacion.generarNombreRepo(grupoNombre)
                 val repoDesc = asignacion.generarDescripcionRepo(grupoNombre)
@@ -162,14 +162,14 @@ class AsignacionServiceImpl(
                     estadoCI = info.estadoCI,
                 )
 
-                val grupo = GrupoAsignacion(
+                GrupoAsignacion(
                     nombre = grupoNombre,
                     asignacion = asignacion,
                     repositorio = repositorio,
                     integrantes = integrantesUsuarios.toMutableList(),
                 )
-                asignacion.grupos.add(grupo)
             }
+            asignacion.grupos = gruposConfigurados.toMutableList()
         }
 
         return asignacionRepository.save(asignacion)
