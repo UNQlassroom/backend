@@ -1,23 +1,19 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMemberDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
-import com.ar.edu.unq.unqlassroom.errors.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.errors.CursoSinGitHubTeamAsociadoException
-import com.ar.edu.unq.unqlassroom.github.GitHubRepoService
-import com.ar.edu.unq.unqlassroom.github.GitHubTeamService
-import com.ar.edu.unq.unqlassroom.model.Alumno
-import com.ar.edu.unq.unqlassroom.model.Curso
-import com.ar.edu.unq.unqlassroom.model.Repositorio
-import com.ar.edu.unq.unqlassroom.repository.AlumnoRepository
+import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
+import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
+import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
 
@@ -25,158 +21,151 @@ import org.springframework.stereotype.Service
 @Transactional
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
-    private val alumnoRepository: AlumnoRepository,
-    private val gitHubTeamService: GitHubTeamService,
-    private val gitHubRepoService: GitHubRepoService,
+    private val usuarioService: UsuarioService,
+    private val inscripcionRepository: InscripcionRepository,
+    private val gitHubOrgService: GitHubOrgService,
 ) : CursoService {
 
-    override fun crearCurso(dto: CursoRequestDTO): CursoResponseDTO {
+    override fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO {
         val curso = dto.aModelo()
-        val teamResponse = gitHubTeamService.createTeam(
-            name = curso.generarNombreTeam(),
-            description = curso.generarDescripcionTeam(),
-            // TODO aca falta pasar como team maintainer al profesor
-        )
-        curso.githubTeamId = teamResponse.id
-        curso.githubTeamSlug = teamResponse.slug
+        curso.owner = usuarioService.obtenerDocente(ownerUsername)
 
         val cursoGuardado = cursoRepository.save(curso)
         return CursoResponseDTO.desdeModelo(cursoGuardado)
     }
 
-    override fun obtenerCursos(): List<CursoResponseDTO> {
-        return cursoRepository.findAll().map { CursoResponseDTO.desdeModelo(it) }
+    override fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO> {
+        val cursos = if (esDocente) {
+            cursoRepository.findCursosParaDocente(username)
+        } else {
+            cursoRepository.findCursosParaAlumno(username)
+        }
+        return cursos.map { CursoResponseDTO.desdeModelo(it) }
     }
 
-    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO): AgregarAlumnosResponseDTO {
+    override fun obtenerCurso(id: Long, solicitanteUsername: String): CursoResponseDTO {
+        val curso = cursoRepository.findById(id).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para acceder a este curso")
+        }
+
+        return CursoResponseDTO.desdeModelo(curso)
+    }
+
+    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
-            ?: throw CursoSinGitHubTeamAsociadoException()
+        if (curso.owner?.username != solicitanteUsername) {
+            throw ForbiddenException("Solo el docente a cargo del curso puede agregar alumnos")
+        }
 
         val distinctUsernames = dto.usernames
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
 
-        val alumnosAgregados = distinctUsernames.map { username ->
-            val membership = gitHubTeamService.addMemberToTeam(
-                teamSlug = teamSlug,
-                username = username,
-                role = "member",
-            )
-
-            val repositorio = generarRepoParaAlumno(curso, username)
-
-            val alumnoExistente = alumnoRepository.findByCursoIdAndUsername(cursoId, username)
-            val alumnoAGuardar = if (alumnoExistente != null) {
-                alumnoExistente.role = membership.role
-                alumnoExistente.state = membership.state
-                alumnoExistente.repositorio = repositorio
-                alumnoExistente
-            } else {
-                Alumno(
-                    username = username,
-                    role = membership.role,
-                    state = membership.state,
-                    curso = curso,
-                    repositorio = repositorio,
-                )
-            }
-            val alumnoGuardado = alumnoRepository.save(alumnoAGuardar)
-
-            AlumnoTeamMembershipDTO(
-                username = alumnoGuardado.username,
-                role = alumnoGuardado.role,
-                state = alumnoGuardado.state,
-                repositorio = alumnoGuardado.repositorio?.let { RepositorioDTO.desdeModelo(it) },
+        val usuariosInexistentes = distinctUsernames.filterNot { gitHubOrgService.userExists(it) }
+        if (usuariosInexistentes.isNotEmpty()) {
+            throw BadRequestException(
+                "Los siguientes usuarios no existen en GitHub: ${usuariosInexistentes.joinToString()}"
             )
         }
 
-        return AgregarAlumnosResponseDTO(
+        val alumnosAgregados = distinctUsernames.map { username ->
+            val usuario = usuarioService.obtenerOCrearAlumno(username)
+
+            val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
+            val inscripcionAGuardar = if (inscripcionExistente != null) {
+                inscripcionExistente
+            } else {
+                val membership = gitHubOrgService.invitarMiembro(username)
+                val nuevaInscripcion = Inscripcion(
+                    curso = curso,
+                    usuario = usuario,
+                    githubRole = membership.role,
+                    githubState = membership.state,
+                )
+                inscripcionRepository.save(nuevaInscripcion)
+            }
+
+            AlumnoMiembroDeUnCursoDTO(
+                username = inscripcionAGuardar.usuario.username,
+                role = inscripcionAGuardar.githubRole,
+                state = inscripcionAGuardar.githubState,
+            )
+        }
+
+        return AlumnosDeUnCursoResponseDTO(
             cursoId = cursoId,
-            teamSlug = teamSlug,
             alumnos = alumnosAgregados,
         )
     }
 
-    private fun generarRepoParaAlumno(curso: Curso, username: String): Repositorio {
-        val repoName = gitHubRepoService.generarNombreRepo(curso, username)
-        if (!alumnoTieneRepoParaMateria(curso, username, repoName)) {
-            gitHubRepoService.createOrgRepository(
-                name = repoName,
-                description = gitHubRepoService.generarDescripcionRepo(curso, username),
-                private = true,
-                autoInit = true,
-            )
-            gitHubRepoService.addCollaborator(
-                repoName = repoName,
-                username = username,
-                permission = "push",
-            )
-        }
-
-        val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-        return Repositorio(
-            nombre = info.nombre,
-            htmlUrl = info.htmlUrl,
-            ultimoCommit = info.ultimoCommit,
-            fechaUltimoCommit = info.fechaUltimoCommit,
-            estadoCI = info.estadoCI,
-        )
-    }
-
-    private fun alumnoTieneRepoParaMateria(curso: Curso, username: String, repoNameCursoActual: String): Boolean {
-        return gitHubRepoService.repositoryExists(repoNameCursoActual)
-    }
-
-    override fun obtenerAlumnos(cursoId: Long): ObtenerAlumnosResponseDTO {
+    override fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val teamSlug = curso.githubTeamSlug?.takeIf { it.isNotBlank() }
-            ?: throw CursoSinGitHubTeamAsociadoException()
+        if (curso.owner?.username != solicitanteUsername) {
+            throw ForbiddenException("Solo el docente a cargo del curso puede sincronizar alumnos")
+        }
 
-        val members = gitHubTeamService.getTeamMembers(teamSlug)
-        val alumnosPersistidos = alumnoRepository.findByCursoId(cursoId).associateBy { it.username }
+        val inscripciones = inscripcionRepository.findByCursoId(cursoId)
 
-        val alumnos = members.map { member ->
-            val alumnoPersistido = alumnosPersistidos[member.username]
-            val repoName = alumnoPersistido?.repositorio?.nombre
-                ?: gitHubRepoService.generarNombreRepo(curso, member.username)
-
-            val repoExiste = alumnoPersistido?.repositorio != null || gitHubRepoService.repositoryExists(repoName)
-
-            val repoDTO = if (repoExiste) {
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                alumnoPersistido?.repositorio?.apply { // TODO cuando tengamos webhook configurado, tenemos q sincronizar los cambios apenas haya cambios
-                    ultimoCommit = info.ultimoCommit
-                    fechaUltimoCommit = info.fechaUltimoCommit
-                    estadoCI = info.estadoCI
+        val alumnosActualizados = inscripciones.map { inscripcion ->
+            if (inscripcion.githubState == "pending") {
+                val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
+                if (membership != null && membership.state == "active") {
+                    inscripcion.githubState = "active"
+                    inscripcionRepository.save(inscripcion)
                 }
-                RepositorioDTO(
-                    nombre = info.nombre,
-                    htmlUrl = info.htmlUrl,
-                    ultimoCommit = info.ultimoCommit,
-                    fechaUltimoCommit = info.fechaUltimoCommit,
-                    estadoCI = info.estadoCI,
-                )
-            } else null
+            }
 
-            AlumnoTeamMemberDTO(
-                username = member.username,
-                role = member.role,
-                state = member.state,
-                repositorio = repoDTO,
+            AlumnoMiembroDeUnCursoDTO(
+                username = inscripcion.usuario.username,
+                role = inscripcion.githubRole,
+                state = inscripcion.githubState,
             )
         }
 
-        return ObtenerAlumnosResponseDTO(
+        return AlumnosDeUnCursoResponseDTO(
             cursoId = cursoId,
-            teamSlug = teamSlug,
+            alumnos = alumnosActualizados,
+        )
+    }
+
+    override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.owner?.username == solicitanteUsername
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw ForbiddenException("No tiene permisos para ver los alumnos de este curso")
+        }
+
+        val inscripcionesPersistidas = inscripcionRepository.findByCursoId(cursoId)
+
+        val alumnos = inscripcionesPersistidas.map { inscripcion ->
+            AlumnoMiembroDeUnCursoDTO(
+                username = inscripcion.usuario.username,
+                role = inscripcion.githubRole,
+                state = inscripcion.githubState,
+            )
+        }
+
+        return AlumnosDeUnCursoResponseDTO(
+            cursoId = cursoId,
             alumnos = alumnos,
         )
     }

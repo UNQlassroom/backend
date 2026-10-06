@@ -1,13 +1,10 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AgregarAlumnosResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMemberDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.AlumnoTeamMembershipDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.ObtenerAlumnosResponseDTO
-import com.ar.edu.unq.unqlassroom.controller.dtos.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
@@ -18,6 +15,8 @@ import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -43,7 +42,7 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `crearCurso endpoint returns 201 and created curso with github team details`() {
+    fun `crearCurso endpoint returns 201 and created curso`() {
         val requestDTO = CursoRequestDTO(
             materia = "Estructuras de Datos",
             anio = 2026,
@@ -58,14 +57,15 @@ class CursoControllerTest {
             semestre = 1,
             comision = 1,
             descripcion = "Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1",
-            githubTeamId = 987654L,
-            githubTeamSlug = "2026s1_c1_estructuras_de_datos"
+            ownerUsername = "profe"
         )
 
-        `when`(cursoService.crearCurso(requestDTO)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(cursoService.crearCurso(requestDTO, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/crear")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
@@ -76,61 +76,50 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.semestre").value(1))
             .andExpect(jsonPath("$.comision").value(1))
             .andExpect(jsonPath("$.descripcion").value("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1"))
-            .andExpect(jsonPath("$.githubTeamId").value(987654))
-            .andExpect(jsonPath("$.githubTeamSlug").value("2026s1_c1_estructuras_de_datos"))
+            .andExpect(jsonPath("$.ownerUsername").value("profe"))
     }
 
     @Test
-    fun `agregarAlumnos endpoint returns 200 and list of added students with repositorio`() {
+    fun `agregarAlumnos endpoint returns 200 and list of added students`() {
         val requestDTO = AgregarAlumnosRequestDTO(
             usernames = listOf("alumno1", "alumno2")
         )
 
-        val repoDTO = RepositorioDTO(
-            nombre = "2026s1_c1_estructuras_de_datos_alumno1",
-            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
-            ultimoCommit = "Initial commit",
-            fechaUltimoCommit = "2026-09-09T18:00:00Z",
-            estadoCI = "sin_ci"
-        )
-
-        val responseDTO = AgregarAlumnosResponseDTO(
+        val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            teamSlug = "2026s1_c1_estructuras_de_datos",
             alumnos = listOf(
-                AlumnoTeamMembershipDTO(username = "alumno1", role = "member", state = "active", repositorio = repoDTO),
-                AlumnoTeamMembershipDTO(username = "alumno2", role = "member", state = "pending", repositorio = null)
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
+                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "pending")
             )
         )
 
-        `when`(cursoService.agregarAlumnos(10L, requestDTO)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.agregarAlumnos(10L, requestDTO, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.teamSlug").value("2026s1_c1_estructuras_de_datos"))
             .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].role").value("member"))
+            .andExpect(jsonPath("$.alumnos[0].role").value("push"))
             .andExpect(jsonPath("$.alumnos[0].state").value("active"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.nombre").value("2026s1_c1_estructuras_de_datos_alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.ultimoCommit").value("Initial commit"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.fechaUltimoCommit").value("2026-09-09T18:00:00Z"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.estadoCI").value("sin_ci"))
             .andExpect(jsonPath("$.alumnos[1].username").value("alumno2"))
-            .andExpect(jsonPath("$.alumnos[1].role").value("member"))
+            .andExpect(jsonPath("$.alumnos[1].role").value("push"))
             .andExpect(jsonPath("$.alumnos[1].state").value("pending"))
     }
 
     @Test
     fun `agregarAlumnos endpoint returns 200 when usernames is empty`() {
         val requestDTO = AgregarAlumnosRequestDTO(usernames = emptyList())
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
@@ -138,35 +127,110 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `obtenerAlumnos endpoint returns 200 and list of students with repositorio`() {
-        val repoDTO = RepositorioDTO(
-            nombre = "2026s1_c1_estructuras_de_datos_alumno1",
-            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_estructuras_de_datos_alumno1",
-            ultimoCommit = "Segundo commit",
-            fechaUltimoCommit = "2026-09-09T19:00:00Z",
-            estadoCI = "success"
-        )
-
-        val responseDTO = ObtenerAlumnosResponseDTO(
+    fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
+        val responseDTO = AlumnosDeUnCursoResponseDTO(
             cursoId = 10L,
-            teamSlug = "2026s1_c1_estructuras_de_datos",
             alumnos = listOf(
-                AlumnoTeamMemberDTO(username = "alumno1", role = "member", state = "active", repositorio = repoDTO)
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
+                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "active")
             )
         )
 
-        `when`(cursoService.obtenerAlumnos(10L)).thenReturn(responseDTO)
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.sincronizarAlumnos(10L, "profe")).thenReturn(responseDTO)
 
         mockMvc.perform(
-            get("/cursos/10/alumnos")
+            post("/cursos/10/alumnos/sync")
+                .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.teamSlug").value("2026s1_c1_estructuras_de_datos"))
             .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.nombre").value("2026s1_c1_estructuras_de_datos_alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.ultimoCommit").value("Segundo commit"))
-            .andExpect(jsonPath("$.alumnos[0].repositorio.estadoCI").value("success"))
+            .andExpect(jsonPath("$.alumnos[0].state").value("active"))
+            .andExpect(jsonPath("$.alumnos[1].username").value("alumno2"))
+            .andExpect(jsonPath("$.alumnos[1].state").value("active"))
+    }
+
+    @Test
+    fun `obtenerAlumnos endpoint returns 200 and list of students`() {
+        val responseDTO = AlumnosDeUnCursoResponseDTO(
+            cursoId = 10L,
+            alumnos = listOf(
+                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "write", state = "active")
+            )
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.obtenerAlumnos(10L, "profe")).thenReturn(responseDTO)
+
+        mockMvc.perform(
+            get("/cursos/10/alumnos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.cursoId").value(10))
+            .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
+            .andExpect(jsonPath("$.alumnos[0].role").value("write"))
+            .andExpect(jsonPath("$.alumnos[0].state").value("active"))
+    }
+
+    @Test
+    fun `obtenerCursos endpoint returns 200 and cursos for docente`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val cursos = listOf(
+            CursoResponseDTO(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, descripcion = "desc", ownerUsername = "profe")
+        )
+        `when`(cursoService.obtenerCursos("profe", true)).thenReturn(cursos)
+
+        mockMvc.perform(
+            get("/cursos")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.size()").value(1))
+            .andExpect(jsonPath("$[0].materia").value("Estructuras"))
+    }
+
+    @Test
+    fun `obtenerCursos endpoint returns 200 and cursos for alumno`() {
+        val auth = UsernamePasswordAuthenticationToken("alumno", null, listOf(SimpleGrantedAuthority("ROLE_ALUMNO")))
+        val cursos = listOf(
+            CursoResponseDTO(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2, descripcion = "desc", ownerUsername = "otro_profe")
+        )
+        `when`(cursoService.obtenerCursos("alumno", false)).thenReturn(cursos)
+
+        mockMvc.perform(
+            get("/cursos")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.size()").value(1))
+            .andExpect(jsonPath("$[0].materia").value("Redes"))
+    }
+
+    @Test
+    fun `obtenerCurso endpoint returns 200 and curso details`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val curso = CursoResponseDTO(
+            id = 1L,
+            materia = "Estructuras",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            descripcion = "desc",
+            ownerUsername = "profe"
+        )
+        `when`(cursoService.obtenerCurso(1L, "profe")).thenReturn(curso)
+
+        mockMvc.perform(
+            get("/cursos/1")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.materia").value("Estructuras"))
+            .andExpect(jsonPath("$.ownerUsername").value("profe"))
     }
 }
