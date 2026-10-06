@@ -23,4 +23,11 @@ class Repositorio(
 
     @Column(nullable = true)
     var estadoCI: String? = null,
-)
+) {
+    fun actualizarInfo(ultimoCommit: String?, fechaUltimoCommit: String?, estadoCI: String?) {
+        this.ultimoCommit = ultimoCommit
+        this.fechaUltimoCommit = fechaUltimoCommit
+        this.estadoCI = estadoCI
+    }
+}
+

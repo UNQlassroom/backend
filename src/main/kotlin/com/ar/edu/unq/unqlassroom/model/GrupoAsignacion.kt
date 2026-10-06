@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.util.removerTildes
 import jakarta.persistence.*
 import java.time.LocalDateTime
@@ -51,6 +52,33 @@ class GrupoAsignacion(
     @Column(nullable = true)
     var fechaCalificacion: LocalDateTime? = null,
 ) {
+    fun calificar(nota: Int, observaciones: String?) {
+        if (nota < 1 || nota > 10) {
+            throw BadRequestException("La nota debe ser entre 1 y 10")
+        }
+        this.calificacion = nota
+        this.observaciones = observaciones
+        this.fechaCalificacion = LocalDateTime.now()
+    }
+
+    fun registrarEntrega(releaseUrl: String? = null) {
+        this.cantidadEntregas += 1
+        this.entregada = true
+        this.fechaEntregada = LocalDateTime.now()
+        this.releaseUrl = releaseUrl
+    }
+
+    fun tieneIntegrante(username: String): Boolean =
+        integrantes.any { it.username.equals(username.trim(), ignoreCase = true) }
+
+    fun generarProximoTagNameRelease(): String = "entrega-v${cantidadEntregas + 1}"
+
+    fun generarNombreRelease(tituloAsignacion: String): String =
+        "Entrega v${cantidadEntregas} - $tituloAsignacion"
+
+    fun generarCuerpoRelease(username: String): String =
+        "Entrega realizada por $username el ${fechaEntregada ?: LocalDateTime.now()}"
+
     fun normalizarNombre(): String =
         nombre?.removerTildes()?.lowercase()?.trim()?.replace("\\s+".toRegex(), "_") ?: ""
 }
