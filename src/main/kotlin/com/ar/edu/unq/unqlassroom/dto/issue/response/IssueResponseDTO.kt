@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.issue
+package com.ar.edu.unq.unqlassroom.dto.issue.response
 
 data class IssueResponseDTO(
     val numero: Int,

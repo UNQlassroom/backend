@@ -16,7 +16,7 @@ class GrupoAsignacion(
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "asignacion_id", nullable = false)
-    var asignacion: Asignacion,
+    var asignacion: Asignacion? = null,
 
     @ManyToMany
     @JoinTable(
@@ -27,8 +27,8 @@ class GrupoAsignacion(
     var integrantes: MutableList<Usuario> = mutableListOf(),
 
     @OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true)
-    @JoinColumn(name = "repositorio_id", nullable = false)
-    var repositorio: Repositorio,
+    @JoinColumn(name = "repositorio_id", nullable = true)
+    var repositorio: Repositorio? = null,
 
     @Column(nullable = false)
     var entregada: Boolean = false,

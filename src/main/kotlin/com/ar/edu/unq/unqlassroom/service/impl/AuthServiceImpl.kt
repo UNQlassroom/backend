@@ -1,8 +1,8 @@
-﻿package com.ar.edu.unq.unqlassroom.service.impl
+package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.dto.auth.AuthResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.request.GitHubLoginRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.response.AuthResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.response.GitHubLoginResponseDTO
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubOAuthClient
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService

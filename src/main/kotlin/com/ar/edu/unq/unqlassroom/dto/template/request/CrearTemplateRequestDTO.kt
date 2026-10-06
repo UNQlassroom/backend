@@ -1,8 +1,8 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.asignacion
+package com.ar.edu.unq.unqlassroom.dto.template.request
 
 import jakarta.validation.constraints.NotBlank
 
-data class CrearTemplateRepoRequestDTO(
+data class CrearTemplateRequestDTO(
     @field:NotBlank(message = "El nombre del template es obligatorio")
     val name: String,
 

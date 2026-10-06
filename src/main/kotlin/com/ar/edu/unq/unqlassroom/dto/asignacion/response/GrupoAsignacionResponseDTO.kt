@@ -1,13 +1,14 @@
-﻿package com.ar.edu.unq.unqlassroom.dto.asignacion
+package com.ar.edu.unq.unqlassroom.dto.asignacion.response
 
-import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.RepositorioDTO
+import com.ar.edu.unq.unqlassroom.dto.usuario.response.UsuarioResponseDTO
 import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
 import java.time.LocalDateTime
 
 data class GrupoAsignacionResponseDTO(
     val id: Long,
     val nombre: String?,
-    val integrantes: List<String>,
+    val integrantes: List<UsuarioResponseDTO>,
     val repositorio: RepositorioDTO?,
     val entregada: Boolean = false,
     val fechaEntregada: LocalDateTime? = null,
@@ -18,10 +19,10 @@ data class GrupoAsignacionResponseDTO(
 ) {
     companion object {
         fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO = GrupoAsignacionResponseDTO(
-            id = grupo.id ?: 0L,
+            id = grupo.id!!,
             nombre = grupo.nombre,
-            integrantes = grupo.integrantes.map { it.username },
-            repositorio = RepositorioDTO.desdeModelo(grupo.repositorio),
+            integrantes = grupo.integrantes.map { UsuarioResponseDTO.desdeModelo(it) },
+            repositorio = grupo.repositorio?.let { RepositorioDTO.desdeModelo(it) },
             entregada = grupo.entregada,
             fechaEntregada = grupo.fechaEntregada,
             releaseUrl = grupo.releaseUrl,

@@ -1,10 +1,10 @@
-﻿package com.ar.edu.unq.unqlassroom.controller
+package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.Inscripcion
+import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
@@ -13,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.any
+import org.mockito.Mockito.eq
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -36,6 +38,16 @@ class CursoControllerTest {
     private lateinit var mockMvc: MockMvc
     private val objectMapper = ObjectMapper()
 
+    private fun anyCurso(): Curso {
+        any(Curso::class.java)
+        return Curso(materia = "", anio = 0, semestre = 1, comision = 1)
+    }
+
+    private fun eqString(value: String): String {
+        eq(value)
+        return value
+    }
+
     @BeforeEach
     fun setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(cursoController).build()
@@ -50,21 +62,21 @@ class CursoControllerTest {
             comision = 1,
         )
 
-        val responseDTO = CursoResponseDTO(
+        val cursoGuardado = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
             descripcion = "Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1",
-            ownerUsername = "profe"
+            owner = Usuario(id = 1L, username = "profe", esDocente = true)
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(cursoService.crearCurso(requestDTO, "profe")).thenReturn(responseDTO)
+        `when`(cursoService.crearCurso(anyCurso(), eqString("profe"))).thenReturn(cursoGuardado)
 
         mockMvc.perform(
-            post("/cursos/crear")
+            post("/cursos")
                 .principal(auth)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
@@ -85,16 +97,14 @@ class CursoControllerTest {
             usernames = listOf("alumno1", "alumno2")
         )
 
-        val responseDTO = AlumnosDeUnCursoResponseDTO(
-            cursoId = 10L,
-            alumnos = listOf(
-                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
-                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "pending")
-            )
+        val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
+        val inscripciones = listOf(
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "push", githubState = "active"),
+            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2"), githubRole = "push", githubState = "pending")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
-        `when`(cursoService.agregarAlumnos(10L, requestDTO, "profe")).thenReturn(responseDTO)
+        `when`(cursoService.agregarAlumnos(10L, listOf("alumno1", "alumno2"), "profe")).thenReturn(inscripciones)
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
@@ -116,6 +126,7 @@ class CursoControllerTest {
     fun `agregarAlumnos endpoint returns 200 when usernames is empty`() {
         val requestDTO = AgregarAlumnosRequestDTO(usernames = emptyList())
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        `when`(cursoService.agregarAlumnos(10L, emptyList(), "profe")).thenReturn(emptyList())
 
         mockMvc.perform(
             post("/cursos/10/alumnos")
@@ -128,16 +139,14 @@ class CursoControllerTest {
 
     @Test
     fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
-        val responseDTO = AlumnosDeUnCursoResponseDTO(
-            cursoId = 10L,
-            alumnos = listOf(
-                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "push", state = "active"),
-                AlumnoMiembroDeUnCursoDTO(username = "alumno2", role = "push", state = "active")
-            )
+        val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
+        val inscripciones = listOf(
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "push", githubState = "active"),
+            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2"), githubRole = "push", githubState = "active")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
-        `when`(cursoService.sincronizarAlumnos(10L, "profe")).thenReturn(responseDTO)
+        `when`(cursoService.sincronizarAlumnos(10L, "profe")).thenReturn(inscripciones)
 
         mockMvc.perform(
             post("/cursos/10/alumnos/sync")
@@ -154,15 +163,13 @@ class CursoControllerTest {
 
     @Test
     fun `obtenerAlumnos endpoint returns 200 and list of students`() {
-        val responseDTO = AlumnosDeUnCursoResponseDTO(
-            cursoId = 10L,
-            alumnos = listOf(
-                AlumnoMiembroDeUnCursoDTO(username = "alumno1", role = "write", state = "active")
-            )
+        val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
+        val inscripciones = listOf(
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "write", githubState = "active")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
-        `when`(cursoService.obtenerAlumnos(10L, "profe")).thenReturn(responseDTO)
+        `when`(cursoService.obtenerAlumnos(10L, "profe")).thenReturn(inscripciones)
 
         mockMvc.perform(
             get("/cursos/10/alumnos")
@@ -180,7 +187,7 @@ class CursoControllerTest {
     fun `obtenerCursos endpoint returns 200 and cursos for docente`() {
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
         val cursos = listOf(
-            CursoResponseDTO(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, descripcion = "desc", ownerUsername = "profe")
+            Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, descripcion = "desc", owner = Usuario(username = "profe"))
         )
         `when`(cursoService.obtenerCursos("profe", true)).thenReturn(cursos)
 
@@ -197,7 +204,7 @@ class CursoControllerTest {
     fun `obtenerCursos endpoint returns 200 and cursos for alumno`() {
         val auth = UsernamePasswordAuthenticationToken("alumno", null, listOf(SimpleGrantedAuthority("ROLE_ALUMNO")))
         val cursos = listOf(
-            CursoResponseDTO(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2, descripcion = "desc", ownerUsername = "otro_profe")
+            Curso(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2, descripcion = "desc", owner = Usuario(username = "otro_profe"))
         )
         `when`(cursoService.obtenerCursos("alumno", false)).thenReturn(cursos)
 
@@ -213,14 +220,14 @@ class CursoControllerTest {
     @Test
     fun `obtenerCurso endpoint returns 200 and curso details`() {
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
-        val curso = CursoResponseDTO(
+        val curso = Curso(
             id = 1L,
             materia = "Estructuras",
             anio = 2026,
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            ownerUsername = "profe"
+            owner = Usuario(username = "profe")
         )
         `when`(cursoService.obtenerCurso(1L, "profe")).thenReturn(curso)
 
