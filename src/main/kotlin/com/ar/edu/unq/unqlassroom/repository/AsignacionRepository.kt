@@ -8,4 +8,5 @@ import org.springframework.stereotype.Repository
 interface AsignacionRepository : JpaRepository<Asignacion, Long> {
     fun findByCursoId(cursoId: Long): List<Asignacion>
     fun findByIdAndCursoId(id: Long, cursoId: Long): Asignacion?
+    fun findByCursoIdAndTituloIgnoreCase(cursoId: Long, titulo: String): Asignacion?
 }

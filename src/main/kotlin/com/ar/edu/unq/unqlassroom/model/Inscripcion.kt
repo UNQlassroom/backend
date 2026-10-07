@@ -27,4 +27,13 @@ class Inscripcion(
 
     @Column(nullable = false)
     var githubState: String = "pending",
-)
+) {
+    fun activarSiCorresponde(estadoRemoto: String): Boolean {
+        if (githubState == "pending" && estadoRemoto == "active") {
+            githubState = "active"
+            return true
+        }
+        return false
+    }
+}
+

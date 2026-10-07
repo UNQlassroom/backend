@@ -14,4 +14,12 @@ interface CursoRepository : JpaRepository<Curso, Long> {
 
     @Query("SELECT c FROM Curso c JOIN c.inscripciones i WHERE i.usuario.username = :username AND (c.owner IS NULL OR c.owner.username <> :username)")
     fun findCursosParaAlumno(@Param("username") username: String): List<Curso>
+
+    fun existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
+        ownerUsername: String,
+        materia: String,
+        anio: Int,
+        semestre: Int,
+        comision: Int
+    ): Boolean
 }
