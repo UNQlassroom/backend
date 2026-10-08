@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.*
 import jakarta.persistence.*
 
 @Entity
@@ -38,10 +38,18 @@ class Curso (
 ) {
     init {
         materia = materia.trim()
-        require(materia.isNotBlank()) { "El nombre de la materia no puede estar vacío" }
-        require(anio >= 2000) { "El año debe ser mayor o igual a 2000" }
-        require(semestre in 1..2) { "El semestre debe ser 1 o 2" }
-        require(comision > 0) { "La comisión debe ser mayor a 0" }
+        if (materia.isBlank()) {
+            throw NombreMateriaVacioException()
+        }
+        if (anio < 2000) {
+            throw AnioCursoInvalidoException()
+        }
+        if (semestre !in 1..2) {
+            throw SemestreInvalidoException()
+        }
+        if (comision <= 0) {
+            throw ComisionInvalidaException()
+        }
     }
 
     fun esOwner(username: String?): Boolean =
@@ -49,7 +57,7 @@ class Curso (
 
     fun asignarOwner(docente: Usuario) {
         if (!docente.esDocente) {
-            throw ForbiddenException("El usuario ${docente.username} no tiene permisos de docente")
+            throw UsuarioNoEsDocenteException(docente.username)
         }
         this.owner = docente
     }

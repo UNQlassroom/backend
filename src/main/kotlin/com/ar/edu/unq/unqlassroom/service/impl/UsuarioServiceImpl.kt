@@ -1,6 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -20,7 +20,7 @@ class UsuarioServiceImpl(
             ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
 
         if (!usuario.esDocente) {
-            throw ForbiddenException("El usuario $username no tiene permisos de docente")
+            throw UsuarioNoEsDocenteException(username)
         }
 
         return usuario

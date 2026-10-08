@@ -1,8 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
-import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
@@ -32,7 +30,7 @@ class CursoServiceImpl (
                 curso.comision
             )
         ) {
-            throw BadRequestException("Ya existe un curso para la materia '${curso.materia}' en el año ${curso.anio}, semestre ${curso.semestre} y comisión ${curso.comision}")
+            throw CursoDuplicadoException(curso.materia, curso.anio, curso.semestre, curso.comision)
         }
         curso.asignarOwner(docente)
         return cursoRepository.save(curso)
@@ -55,7 +53,7 @@ class CursoServiceImpl (
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para acceder a este curso")
+            throw SinPermisoAccesoCursoException()
         }
 
         return curso
@@ -71,7 +69,7 @@ class CursoServiceImpl (
         }
 
         if (!curso.esOwner(solicitanteUsername)) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede agregar alumnos")
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede agregar alumnos")
         }
 
         val distinctUsernames = usernames
@@ -81,9 +79,7 @@ class CursoServiceImpl (
 
         val usuariosInexistentes = distinctUsernames.filterNot { gitHubOrgService.userExists(it) }
         if (usuariosInexistentes.isNotEmpty()) {
-            throw BadRequestException(
-                "Los siguientes usuarios no existen en GitHub: ${usuariosInexistentes.joinToString()}"
-            )
+            throw UsuariosGitHubNoEncontradosException(usuariosInexistentes)
         }
 
         return distinctUsernames.map { username ->
@@ -111,7 +107,7 @@ class CursoServiceImpl (
         }
 
         if (!curso.esOwner(solicitanteUsername)) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede sincronizar alumnos")
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede sincronizar alumnos")
         }
 
         val inscripciones = inscripcionRepository.findByCursoId(cursoId)
@@ -134,7 +130,7 @@ class CursoServiceImpl (
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver los alumnos de este curso")
+            throw SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
         }
 
         return inscripcionRepository.findByCursoId(cursoId)
