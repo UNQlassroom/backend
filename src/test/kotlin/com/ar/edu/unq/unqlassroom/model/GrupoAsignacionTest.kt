@@ -1,9 +1,11 @@
 package com.ar.edu.unq.unqlassroom.model
 
+import com.ar.edu.unq.unqlassroom.exception.CalificacionInvalidaException
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.time.LocalDateTime
 
 class GrupoAsignacionTest {
@@ -95,14 +97,14 @@ class GrupoAsignacionTest {
     }
 
     @Test
-    fun `calificar throws BadRequestException when nota is out of bounds`() {
+    fun `calificar throws CalificacionInvalidaException when nota is out of bounds`() {
         val grupo = GrupoAsignacion(id = 1L)
-        val ex1 = org.junit.jupiter.api.assertThrows<com.ar.edu.unq.unqlassroom.exception.BadRequestException> {
+        val ex1 = assertThrows<CalificacionInvalidaException> {
             grupo.calificar(0, null)
         }
         assertEquals("La nota debe ser entre 1 y 10", ex1.message)
 
-        val ex2 = org.junit.jupiter.api.assertThrows<com.ar.edu.unq.unqlassroom.exception.BadRequestException> {
+        val ex2 = assertThrows<CalificacionInvalidaException> {
             grupo.calificar(11, null)
         }
         assertEquals("La nota debe ser entre 1 y 10", ex2.message)
@@ -138,4 +140,3 @@ class GrupoAsignacionTest {
         assertTrue(grupo.generarCuerpoRelease("profe").contains("profe"))
     }
 }
-
