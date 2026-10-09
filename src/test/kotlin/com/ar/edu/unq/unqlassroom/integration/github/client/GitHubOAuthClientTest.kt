@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.integration.github.client
 
-import com.ar.edu.unq.unqlassroom.exception.UnauthorizedException
+import com.ar.edu.unq.unqlassroom.exception.GitHubOAuthException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -67,7 +67,7 @@ class GitHubOAuthClientTest {
     }
 
     @Test
-    fun `intercambiarCodePorToken throws UnauthorizedException when restTemplate throws`() {
+    fun `intercambiarCodePorToken throws GitHubOAuthException when restTemplate throws`() {
         val code = "bad-code"
 
         `when`(
@@ -78,15 +78,16 @@ class GitHubOAuthClientTest {
             )
         ).thenThrow(RestClientException("Connection error"))
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.intercambiarCodePorToken(code)
         }
 
         assertTrue(exception.message!!.contains("Error de comunicación con GitHub OAuth"))
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 
     @Test
-    fun `intercambiarCodePorToken throws UnauthorizedException with error_description when token is missing`() {
+    fun `intercambiarCodePorToken throws GitHubOAuthException with error_description when token is missing`() {
         val code = "expired-code"
         val tokenResponse = GitHubOAuthTokenResponse(
             access_token = null,
@@ -103,15 +104,16 @@ class GitHubOAuthClientTest {
             )
         ).thenReturn(responseEntity)
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.intercambiarCodePorToken(code)
         }
 
         assertTrue(exception.message!!.contains("The code passed is incorrect or has expired"))
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 
     @Test
-    fun `intercambiarCodePorToken throws UnauthorizedException with error when error_description is null`() {
+    fun `intercambiarCodePorToken throws GitHubOAuthException with error when error_description is null`() {
         val code = "bad-code"
         val tokenResponse = GitHubOAuthTokenResponse(
             access_token = "",
@@ -128,15 +130,16 @@ class GitHubOAuthClientTest {
             )
         ).thenReturn(responseEntity)
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.intercambiarCodePorToken(code)
         }
 
         assertTrue(exception.message!!.contains("bad_verification_code"))
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 
     @Test
-    fun `intercambiarCodePorToken throws UnauthorizedException default message when body is empty`() {
+    fun `intercambiarCodePorToken throws GitHubOAuthException default message when body is empty`() {
         val code = "code-no-body"
         val tokenResponse = GitHubOAuthTokenResponse()
         val responseEntity = ResponseEntity(tokenResponse, HttpStatus.OK)
@@ -149,11 +152,12 @@ class GitHubOAuthClientTest {
             )
         ).thenReturn(responseEntity)
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.intercambiarCodePorToken(code)
         }
 
         assertTrue(exception.message!!.contains("Código de autorización inválido o expirado"))
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 
     @Test
@@ -187,7 +191,7 @@ class GitHubOAuthClientTest {
     }
 
     @Test
-    fun `obtenerPerfilGitHub throws UnauthorizedException when restTemplate throws`() {
+    fun `obtenerPerfilGitHub throws GitHubOAuthException when restTemplate throws`() {
         val accessToken = "invalid-token"
 
         `when`(
@@ -199,15 +203,16 @@ class GitHubOAuthClientTest {
             )
         ).thenThrow(RestClientException("Unauthorized"))
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.obtenerPerfilGitHub(accessToken)
         }
 
         assertTrue(exception.message!!.contains("Error al consultar el perfil del usuario en GitHub"))
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 
     @Test
-    fun `obtenerPerfilGitHub throws UnauthorizedException when body is null`() {
+    fun `obtenerPerfilGitHub throws GitHubOAuthException when body is null`() {
         val accessToken = "token"
         val responseEntity = ResponseEntity<GitHubUserProfileResponse>(null, HttpStatus.OK)
 
@@ -220,10 +225,11 @@ class GitHubOAuthClientTest {
             )
         ).thenReturn(responseEntity)
 
-        val exception = assertThrows<UnauthorizedException> {
+        val exception = assertThrows<GitHubOAuthException> {
             gitHubOAuthClient.obtenerPerfilGitHub(accessToken)
         }
 
         assertEquals("GitHub no retornó información del usuario", exception.message)
+        assertEquals("GITHUB_OAUTH_ERROR", exception.errorCode)
     }
 }

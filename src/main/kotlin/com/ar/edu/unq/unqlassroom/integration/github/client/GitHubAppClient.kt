@@ -72,9 +72,7 @@ class GitHubAppClient(
 
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() !in 200..299) {
-            throw IllegalStateException(
-                "GitHub installation token request failed with status ${response.statusCode()}: ${response.body()}",
-            )
+            handleNon2xxResponse(response.statusCode(), response.body())
         }
 
         return objectMapper.readValue(response.body(), GitHubInstallationTokenResponse::class.java)
@@ -111,12 +109,8 @@ class GitHubAppClient(
         }
 
         if (response.body().isNullOrBlank()) {
-            if (responseType == Unit::class.java || responseType == Void::class.java || responseType == java.lang.Void::class.java) {
-                @Suppress("UNCHECKED_CAST")
-                return Unit as T
-            }
             @Suppress("UNCHECKED_CAST")
-            return null as T
+            return Unit as T
         }
 
         return objectMapper.readValue(response.body(), responseType)
@@ -153,7 +147,7 @@ class GitHubAppClient(
 
             403 -> {
                 if (body?.contains("rate limit", ignoreCase = true) == true) {
-                    throw GitHubRateLimitException(rawBody = body)
+                    throw GitHubRateLimitException(statusCode = 403, rawBody = body)
                 }
                 throw GitHubForbiddenException(rawBody = body)
             }
@@ -162,7 +156,7 @@ class GitHubAppClient(
 
             422 -> handleUnprocessableEntity(body)
 
-            429 -> throw GitHubRateLimitException(rawBody = body)
+            429 -> throw GitHubRateLimitException(statusCode = 429, rawBody = body)
 
             502, 503, 504 -> throw GitHubServiceUnavailableException(rawBody = body)
 

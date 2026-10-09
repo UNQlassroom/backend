@@ -18,4 +18,4 @@ open class GitHubApiException(
     val userFriendlyMessage: String? = null,
     val errorCode: String = "GITHUB_API_ERROR",
     val httpStatus: HttpStatus = HttpStatus.BAD_GATEWAY,
-) : IllegalStateException(message)
+) : RuntimeException(message)

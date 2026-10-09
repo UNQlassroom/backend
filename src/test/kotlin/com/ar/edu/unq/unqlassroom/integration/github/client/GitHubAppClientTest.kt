@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.integration.github.client
 
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -107,16 +108,17 @@ class GitHubAppClientTest {
     }
 
     @Test
-    fun `createInstallationToken throws IllegalStateException when response status is not 2xx`() {
+    fun `createInstallationToken throws GitHubUnauthorizedException when response status is 401`() {
         server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
             respondJson(exchange, 401, """{"message":"Bad credentials"}""")
         }
 
-        val exception = assertThrows<IllegalStateException> {
+        val exception = assertThrows<GitHubUnauthorizedException> {
             client.createInstallationToken()
         }
 
-        assertTrue(exception.message!!.contains("GitHub installation token request failed with status 401"))
+        assertEquals("GITHUB_UNAUTHORIZED", exception.errorCode)
+        assertEquals(401, exception.statusCode)
     }
 
     @Test
@@ -185,7 +187,7 @@ class GitHubAppClientTest {
     }
 
     @Test
-    fun `executeInstallationRequest with custom HTTP method and throws on failure`() {
+    fun `executeInstallationRequest with custom HTTP method and throws GitHubApiException on 500 failure`() {
         server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
             respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
         }
@@ -202,14 +204,109 @@ class GitHubAppClientTest {
         val customRes = client.executeInstallationRequest("HEAD", "/custom-head", Unit::class.java)
         assertEquals(Unit, customRes)
 
-        val exception = assertThrows<IllegalStateException> {
+        val exception = assertThrows<GitHubApiException> {
             client.executeInstallationRequest("GET", "/fail", String::class.java)
         }
+        assertEquals(500, exception.statusCode)
         assertTrue(exception.message!!.contains("GitHub API request failed with status 500"))
     }
 
     @Test
-    fun `checkResourceExists returns true for 200, false for 404, and throws on other`() {
+    fun `executeInstallationRequest throws GitHubUnauthorizedException on 401`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-401") { exchange ->
+            respondJson(exchange, 401, """{"message":"Bad credentials"}""")
+        }
+
+        val ex = assertThrows<GitHubUnauthorizedException> {
+            client.executeInstallationRequest("GET", "/test-401", String::class.java)
+        }
+        assertEquals("GITHUB_UNAUTHORIZED", ex.errorCode)
+        assertEquals(401, ex.statusCode)
+    }
+
+    @Test
+    fun `executeInstallationRequest throws GitHubNotFoundException on 404`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-404") { exchange ->
+            respondEmpty(exchange, 404)
+        }
+
+        val ex = assertThrows<GitHubNotFoundException> {
+            client.executeInstallationRequest("GET", "/test-404", String::class.java)
+        }
+        assertEquals("GITHUB_RESOURCE_NOT_FOUND", ex.errorCode)
+        assertEquals(404, ex.statusCode)
+    }
+
+    @Test
+    fun `executeInstallationRequest throws RepositorioGitHubDuplicadoException on 422 already exists`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-dup") { exchange ->
+            respondJson(exchange, 422, """{"message":"Repository creation failed.","errors":[{"resource":"Repository","code":"already_exists","field":"name"}]}""")
+        }
+
+        val ex = assertThrows<RepositorioGitHubDuplicadoException> {
+            client.executeInstallationRequest("POST", "/test-dup", String::class.java)
+        }
+        assertEquals("GITHUB_REPO_ALREADY_EXISTS", ex.errorCode)
+    }
+
+    @Test
+    fun `executeInstallationRequest throws GitHubValidationException on 422 validation error`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-validation") { exchange ->
+            respondJson(exchange, 422, """{"message":"Validation Failed","errors":[{"message":"name is too long"}]}""")
+        }
+
+        val ex = assertThrows<GitHubValidationException> {
+            client.executeInstallationRequest("POST", "/test-validation", String::class.java)
+        }
+        assertEquals("GITHUB_VALIDATION_ERROR", ex.errorCode)
+    }
+
+    @Test
+    fun `executeInstallationRequest throws GitHubRateLimitException on 429`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-429") { exchange ->
+            respondJson(exchange, 429, """{"message":"API rate limit exceeded"}""")
+        }
+
+        val ex = assertThrows<GitHubRateLimitException> {
+            client.executeInstallationRequest("GET", "/test-429", String::class.java)
+        }
+        assertEquals("GITHUB_RATE_LIMIT_EXCEEDED", ex.errorCode)
+        assertEquals(429, ex.statusCode)
+    }
+
+    @Test
+    fun `executeInstallationRequest throws GitHubServiceUnavailableException on 503`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+        server.createContext("/test-503") { exchange ->
+            respondEmpty(exchange, 503)
+        }
+
+        val ex = assertThrows<GitHubServiceUnavailableException> {
+            client.executeInstallationRequest("GET", "/test-503", String::class.java)
+        }
+        assertEquals("GITHUB_SERVICE_UNAVAILABLE", ex.errorCode)
+        assertEquals(503, ex.statusCode)
+    }
+
+    @Test
+    fun `checkResourceExists returns true for 200, false for 404, and throws GitHubForbiddenException on 403`() {
         server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
             respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
         }
@@ -227,10 +324,11 @@ class GitHubAppClientTest {
         assertTrue(client.checkResourceExists("/resource-exists"))
         assertFalse(client.checkResourceExists("/resource-not-found"))
 
-        val exception = assertThrows<IllegalStateException> {
+        val exception = assertThrows<GitHubForbiddenException> {
             client.checkResourceExists("/resource-error")
         }
-        assertTrue(exception.message!!.contains("GitHub API request failed with status 403"))
+        assertEquals("GITHUB_FORBIDDEN", exception.errorCode)
+        assertEquals(403, exception.statusCode)
     }
 
     @Test
@@ -252,7 +350,6 @@ class GitHubAppClientTest {
 
     @Test
     fun `loadPrivateKey works with PKCS8 key file`() {
-        // Generate a standard RSA PKCS#8 key pair
         val kpg = KeyPairGenerator.getInstance("RSA")
         kpg.initialize(2048)
         val kp = kpg.generateKeyPair()
@@ -289,7 +386,6 @@ class GitHubAppClientTest {
         kpg.initialize(2048)
         val kp = kpg.generateKeyPair()
         val pkcs8Bytes = kp.private.encoded
-        // In RSA PKCS#8, the PKCS#1 DER key is contained inside the OCTET STRING at offset 26
         val pkcs1Bytes = pkcs8Bytes.copyOfRange(26, pkcs8Bytes.size)
         val base64Key = Base64.getEncoder().encodeToString(pkcs1Bytes)
         val pemContent = "-----BEGIN RSA PRIVATE KEY-----\n$base64Key\n-----END RSA PRIVATE KEY-----"
