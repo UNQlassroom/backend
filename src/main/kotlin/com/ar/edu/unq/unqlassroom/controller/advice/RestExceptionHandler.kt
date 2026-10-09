@@ -2,7 +2,6 @@ package com.ar.edu.unq.unqlassroom.controller.advice
 
 import com.ar.edu.unq.unqlassroom.exception.*
 import jakarta.servlet.http.HttpServletRequest
-import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException

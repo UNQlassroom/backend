@@ -1,7 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
-import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
@@ -13,7 +12,6 @@ import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorS
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueUser
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
@@ -566,7 +564,7 @@ class AsignacionServiceImplTest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(asignacionRepository.save(asignacion)).thenReturn(asignacion)
 
-        val response = asignacionService.calificarAsignacion(10L, 50L, 101L, 10, "Excelente trabajo individual", "profe_owner")
+        asignacionService.calificarAsignacion(10L, 50L, 101L, 10, "Excelente trabajo individual", "profe_owner")
 
         assertEquals("Excelente trabajo individual", grupo.observaciones)
         assertNotNull(grupo.fechaCalificacion)
