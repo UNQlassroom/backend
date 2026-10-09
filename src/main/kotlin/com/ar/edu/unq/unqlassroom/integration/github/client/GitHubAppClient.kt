@@ -109,8 +109,11 @@ class GitHubAppClient(
         }
 
         if (response.body().isNullOrBlank()) {
+            val isVoidType = responseType == Unit::class.java ||
+                responseType == Void::class.java ||
+                responseType == Void.TYPE
             @Suppress("UNCHECKED_CAST")
-            return Unit as T
+            return (if (isVoidType) Unit else null) as T
         }
 
         return objectMapper.readValue(response.body(), responseType)
