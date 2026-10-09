@@ -1,7 +1,5 @@
 package com.ar.edu.unq.unqlassroom.exception
 
-import org.springframework.http.HttpStatus
-
 class GitHubTemplateRepoNotFoundException(
     val templateRepoName: String? = null,
     message: String = if (!templateRepoName.isNullOrBlank()) {
@@ -10,11 +8,8 @@ class GitHubTemplateRepoNotFoundException(
         "El repositorio template no existe o no está configurado como template en GitHub"
     },
     rawBody: String? = null,
-) : GitHubApiException(
-    statusCode = 404,
-    message = "GitHub API request failed with status 404: $message",
+) : GitHubNotFoundException(
+    message = message,
     rawBody = rawBody,
-    userFriendlyMessage = message,
     errorCode = "GITHUB_TEMPLATE_REPO_NOT_FOUND",
-    httpStatus = HttpStatus.NOT_FOUND,
 )
