@@ -1,6 +1,6 @@
-﻿package com.ar.edu.unq.unqlassroom.integration.github.client
+package com.ar.edu.unq.unqlassroom.integration.github.client
 
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -107,9 +107,7 @@ class GitHubAppClient(
 
         val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() !in 200..299) {
-            throw IllegalStateException(
-                "GitHub API request failed with status ${response.statusCode()}: ${response.body()}",
-            )
+            handleNon2xxResponse(response.statusCode(), response.body())
         }
 
         if (response.body().isNullOrBlank()) {
@@ -138,14 +136,81 @@ class GitHubAppClient(
         return when (response.statusCode()) {
             200 -> true
             404 -> false
-            else -> throw IllegalStateException(
-                "GitHub API request failed with status ${response.statusCode()}",
-            )
+            else -> handleNon2xxResponse(response.statusCode(), response.body())
         }
     }
 
     fun userExists(username: String): Boolean {
         return checkResourceExists("/users/$username")
+    }
+
+    private fun handleNon2xxResponse(
+        statusCode: Int,
+        body: String?,
+    ): Nothing {
+        when (statusCode) {
+            401 -> throw GitHubUnauthorizedException(rawBody = body)
+
+            403 -> {
+                if (body?.contains("rate limit", ignoreCase = true) == true) {
+                    throw GitHubRateLimitException(rawBody = body)
+                }
+                throw GitHubForbiddenException(rawBody = body)
+            }
+
+            404 -> throw GitHubNotFoundException(rawBody = body)
+
+            422 -> handleUnprocessableEntity(body)
+
+            429 -> throw GitHubRateLimitException(rawBody = body)
+
+            502, 503, 504 -> throw GitHubServiceUnavailableException(rawBody = body)
+
+            else -> {
+                val parsed = parseGitHubError(body)
+                val friendlyMessage = parsed?.message?.takeIf { it.isNotBlank() }
+                    ?.let { "Error en GitHub: $it" }
+                    ?: "No se pudo completar la operación con GitHub"
+
+                throw GitHubApiException(
+                    statusCode = statusCode,
+                    message = "GitHub API request failed with status $statusCode: $friendlyMessage",
+                    rawBody = body,
+                    userFriendlyMessage = friendlyMessage,
+                )
+            }
+        }
+    }
+
+    private fun handleUnprocessableEntity(body: String?): Nothing {
+        val parsed = parseGitHubError(body)
+        val isAlreadyExists = parsed?.errors?.any {
+            it.message?.contains("already exists", ignoreCase = true) == true ||
+            it.code?.contains("already_exists", ignoreCase = true) == true
+        } == true || parsed?.message?.contains("already exists", ignoreCase = true) == true
+
+        if (isAlreadyExists) {
+            val repoName = parsed?.errors?.firstOrNull { it.field == "name" }?.resource
+            throw RepositorioGitHubDuplicadoException(repoName = repoName, rawBody = body)
+        }
+
+        val detalles = parsed?.errors?.mapNotNull { it.message }?.joinToString(", ")
+            ?: parsed?.message
+            ?: "GitHub no pudo procesar los datos enviados"
+
+        throw GitHubValidationException(
+            message = "Error de validación en GitHub: $detalles",
+            rawBody = body,
+        )
+    }
+
+    private fun parseGitHubError(body: String?): GitHubApiErrorResponse? {
+        if (body.isNullOrBlank()) return null
+        return try {
+            objectMapper.readValue(body, GitHubApiErrorResponse::class.java)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun createAppJwt(): String {
@@ -234,4 +299,19 @@ data class GitHubInstallationTokenResponse(
     @JsonProperty("expires_at") val expiresAt: String = "",
     @JsonProperty("permissions") val permissions: Map<String, String>? = null,
     @JsonProperty("repository_selection") val repositorySelection: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubErrorDetail(
+    @JsonProperty("resource") val resource: String? = null,
+    @JsonProperty("field") val field: String? = null,
+    @JsonProperty("code") val code: String? = null,
+    @JsonProperty("message") val message: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubApiErrorResponse(
+    @JsonProperty("message") val message: String? = null,
+    @JsonProperty("errors") val errors: List<GitHubErrorDetail>? = null,
+    @JsonProperty("documentation_url") val documentationUrl: String? = null,
 )
