@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.util.toRepoSlug
 import jakarta.persistence.*
 import java.time.LocalDateTime
@@ -53,43 +53,43 @@ class Asignacion(
 
     fun validarVencimiento(fecha: LocalDateTime = LocalDateTime.now()) {
         if (estaVencida(fecha)) {
-            throw BadRequestException("No se puede entregar la asignación porque la fecha límite ha vencido")
+            throw AsignacionVencidaException()
         }
     }
 
     fun validarEstructuraGrupos() {
         if (tipo == TipoAsignacion.INDIVIDUAL) {
             if (grupos.isNotEmpty()) {
-                throw BadRequestException("No se pueden especificar grupos para una asignación individual")
+                throw AsignacionIndividualConGruposException()
             }
         } else {
             if (grupos.isEmpty()) {
-                throw BadRequestException("Para una asignación grupal debe especificar al menos un grupo")
+                throw AsignacionGrupalSinGruposException()
             }
             if (grupos.any { it.integrantes.isEmpty() }) {
-                throw BadRequestException("Todos los grupos deben tener al menos un integrante")
+                throw GrupoSinIntegrantesException()
             }
             if (grupos.any { it.nombre.isNullOrBlank() }) {
-                throw BadRequestException("El nombre del grupo no puede estar vacío")
+                throw NombreGrupoVacioException()
             }
             val groupNames = grupos.map { it.normalizarNombre() }
             if (groupNames.size != groupNames.distinct().size) {
-                throw BadRequestException("No puede haber grupos con el mismo nombre en la misma asignación")
+                throw NombreGrupoDuplicadoException()
             }
             val allMembers = grupos.flatMap { it.integrantes.map { u -> u.username.trim() } }
             if (allMembers.size != allMembers.distinct().size) {
-                throw BadRequestException("Un alumno no puede pertenecer a más de un grupo en la misma asignación")
+                throw AlumnoEnMultiplesGruposException()
             }
         }
     }
 
     fun buscarGrupo(grupoId: Long): GrupoAsignacion =
         grupos.find { it.id == grupoId }
-            ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
+            ?: throw GrupoNoPerteneceAAsignacionException()
 
     fun buscarGrupoPorAlumno(username: String): GrupoAsignacion =
         grupos.find { it.tieneIntegrante(username) }
-            ?: throw BadRequestException("El usuario no pertenece a ningún grupo de esta asignación")
+            ?: throw UsuarioNoPerteneceAGrupoException()
 
     fun paraVisualizacionDe(username: String, esOwner: Boolean): Asignacion {
         val gruposVisibles = if (esOwner) {

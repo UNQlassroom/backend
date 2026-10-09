@@ -2,10 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
-import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
-import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
@@ -42,19 +39,19 @@ class AsignacionServiceImpl(
         }
 
         if (!curso.esOwner(solicitanteUsername)) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede crear asignaciones")
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede crear asignaciones")
         }
 
         if (asignacionRepository.findByCursoIdAndTituloIgnoreCase(cursoId, asignacion.titulo.trim()) != null) {
-            throw BadRequestException("Ya existe una asignación con el título '${asignacion.titulo}' en este curso")
+            throw AsignacionDuplicadaException(asignacion.titulo)
         }
 
         if (asignacion.estaVencida()) {
-            throw BadRequestException("La fecha límite no puede ser anterior a la fecha actual")
+            throw FechaLimiteInvalidaException()
         }
 
         if (!gitHubRepoService.repositoryExists(asignacion.templateRepoName)) {
-            throw BadRequestException("El repositorio template '${asignacion.templateRepoName}' no existe en GitHub")
+            throw TemplateRepoNoExisteException(asignacion.templateRepoName)
         }
 
         asignacion.asociarACurso(curso)
@@ -117,7 +114,7 @@ class AsignacionServiceImpl(
             val allMembers = asignacion.grupos.flatMap { it.integrantes.map { u -> u.username.trim() } }
             val notEnrolled = allMembers.filterNot { alumnosInscriptosUsernames.contains(it) }
             if (notEnrolled.isNotEmpty()) {
-                throw BadRequestException("Los siguientes alumnos no están inscriptos en el curso: ${notEnrolled.joinToString()}")
+                throw AlumnosNoInscriptosException(notEnrolled)
             }
 
             val gruposConfigurados = asignacion.grupos.map { grupoOriginal ->
@@ -185,7 +182,7 @@ class AsignacionServiceImpl(
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver las asignaciones de este curso")
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las asignaciones de este curso")
         }
 
         val asignaciones = asignacionRepository.findByCursoId(cursoId)
@@ -205,7 +202,7 @@ class AsignacionServiceImpl(
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver esta asignación")
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -246,19 +243,19 @@ class AsignacionServiceImpl(
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para entregar esta asignación")
+            throw SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
         }
 
         val grupo = if (esOwner) {
             if (grupoId != null) {
                 asignacion.buscarGrupo(grupoId)
             } else {
-                throw BadRequestException("Debe especificar el grupoId para marcar la entrega como docente")
+                throw GrupoIdRequeridoParaDocenteException()
             }
         } else {
             val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
             if (grupoId != null && grupoDelAlumno.id != grupoId) {
-                throw ForbiddenException("No tiene permisos para entregar en nombre de otro grupo")
+                throw SinPermisoEntregaOtroGrupoException()
             }
             grupoDelAlumno
         }
@@ -307,7 +304,7 @@ class AsignacionServiceImpl(
         }
 
         if (!curso.esOwner(solicitanteUsername)) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede calificar asignaciones")
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede calificar asignaciones")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -332,7 +329,7 @@ class AsignacionServiceImpl(
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver las correcciones de esta asignación")
+            throw SinPermisoAccesoCorreccionesException()
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)

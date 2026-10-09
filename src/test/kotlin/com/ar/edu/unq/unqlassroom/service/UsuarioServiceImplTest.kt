@@ -1,6 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -53,11 +53,11 @@ class UsuarioServiceImplTest {
     }
 
     @Test
-    fun `obtenerDocente throws ForbiddenException when user exists but is not docente`() {
+    fun `obtenerDocente throws UsuarioNoEsDocenteException when user exists but is not docente`() {
         val alumno = Usuario(id = 2L, username = "alumno", esDocente = false)
         `when`(usuarioRepository.findByUsername("alumno")).thenReturn(alumno)
 
-        val exception = assertThrows<ForbiddenException> {
+        val exception = assertThrows<UsuarioNoEsDocenteException> {
             usuarioService.obtenerDocente("alumno")
         }
 

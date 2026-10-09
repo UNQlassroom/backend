@@ -2,10 +2,7 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
-import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
-import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgMembershipResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Curso
@@ -153,7 +150,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `agregarAlumnos throws BadRequestException when a username does not exist on GitHub`() {
+    fun `agregarAlumnos throws UsuariosGitHubNoEncontradosException when a username does not exist on GitHub`() {
         val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 1L,
@@ -170,7 +167,7 @@ class CursoServiceImplTest {
             usernames = listOf("alumno_valido", "alumno_fantasma")
         )
 
-        val exception = assertThrows<BadRequestException> {
+        val exception = assertThrows<UsuariosGitHubNoEncontradosException> {
             cursoService.agregarAlumnos(1L, request.usernames, "profe_test")
         }
 
@@ -190,7 +187,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `agregarAlumnos throws ForbiddenException when solicitante is not the owner`() {
+    fun `agregarAlumnos throws NoEsDocenteDelCursoException when solicitante is not the owner`() {
         val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
         val curso = Curso(
             id = 1L,
@@ -202,7 +199,7 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
-        val exception = assertThrows<ForbiddenException> {
+        val exception = assertThrows<NoEsDocenteDelCursoException> {
             cursoService.agregarAlumnos(1L, listOf("alumno1"), "otro_profe")
         }
 
@@ -253,7 +250,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `sincronizarAlumnos throws ForbiddenException when solicitante is not owner`() {
+    fun `sincronizarAlumnos throws NoEsDocenteDelCursoException when solicitante is not owner`() {
         val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
         val curso = Curso(
             id = 1L,
@@ -265,7 +262,7 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
-        val ex = assertThrows<ForbiddenException> {
+        val ex = assertThrows<NoEsDocenteDelCursoException> {
             cursoService.sincronizarAlumnos(1L, "otro_docente")
         }
         assertEquals("Solo el docente a cargo del curso puede sincronizar alumnos", ex.message)
@@ -303,7 +300,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `crearCurso propagates ForbiddenException when owner is not docente`() {
+    fun `crearCurso propagates UsuarioNoEsDocenteException when owner is not docente`() {
         val requestDTO = CursoRequestDTO(
             materia = "Redes",
             anio = 2026,
@@ -311,9 +308,9 @@ class CursoServiceImplTest {
             comision = 1,
         )
         `when`(usuarioService.obtenerDocente("alumno_infiltrado"))
-            .thenThrow(ForbiddenException("El usuario alumno_infiltrado no tiene permisos de docente"))
+            .thenThrow(UsuarioNoEsDocenteException("alumno_infiltrado"))
 
-        val ex = assertThrows<ForbiddenException> {
+        val ex = assertThrows<UsuarioNoEsDocenteException> {
             cursoService.crearCurso(requestDTO.aModelo(), "alumno_infiltrado")
         }
         assertEquals("El usuario alumno_infiltrado no tiene permisos de docente", ex.message)
@@ -369,7 +366,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `obtenerAlumnos throws ForbiddenException when solicitante is neither owner nor enrolled alumno`() {
+    fun `obtenerAlumnos throws SinPermisoAccesoCursoException when solicitante is neither owner nor enrolled alumno`() {
         val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
         val curso = Curso(
             id = 1L,
@@ -382,7 +379,7 @@ class CursoServiceImplTest {
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
 
-        val ex = assertThrows<ForbiddenException> {
+        val ex = assertThrows<SinPermisoAccesoCursoException> {
             cursoService.obtenerAlumnos(1L, "infiltrado")
         }
         assertEquals("No tiene permisos para ver los alumnos de este curso", ex.message)
@@ -471,7 +468,7 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `obtenerCurso throws ForbiddenException when solicitante is neither owner nor enrolled alumno`() {
+    fun `obtenerCurso throws SinPermisoAccesoCursoException when solicitante is neither owner nor enrolled alumno`() {
         val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
         val curso = Curso(
             id = 1L,
@@ -484,14 +481,14 @@ class CursoServiceImplTest {
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
 
-        val ex = assertThrows<ForbiddenException> {
+        val ex = assertThrows<SinPermisoAccesoCursoException> {
             cursoService.obtenerCurso(1L, "infiltrado")
         }
         assertEquals("No tiene permisos para acceder a este curso", ex.message)
     }
 
     @Test
-    fun `crearCurso throws BadRequestException when duplicate curso exists for owner`() {
+    fun `crearCurso throws CursoDuplicadoException when duplicate curso exists for owner`() {
         val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
         `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
         `when`(cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
@@ -505,26 +502,25 @@ class CursoServiceImplTest {
             comision = 1,
         )
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<CursoDuplicadoException> {
             cursoService.crearCurso(requestDTO.aModelo(), "profe_test")
         }
         assertEquals("Ya existe un curso para la materia 'Estructuras de Datos' en el año 2026, semestre 1 y comisión 1", ex.message)
     }
 
     @Test
-    fun `Curso constructor throws IllegalArgumentException on invalid attributes`() {
-        assertThrows<IllegalArgumentException> {
+    fun `Curso constructor throws domain exceptions on invalid attributes`() {
+        assertThrows<NombreMateriaVacioException> {
             Curso(materia = "", anio = 2026, semestre = 1, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<AnioCursoInvalidoException> {
             Curso(materia = "BD", anio = 1999, semestre = 1, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<SemestreInvalidoException> {
             Curso(materia = "BD", anio = 2026, semestre = 3, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<ComisionInvalidaException> {
             Curso(materia = "BD", anio = 2026, semestre = 1, comision = 0)
         }
     }
 }
-

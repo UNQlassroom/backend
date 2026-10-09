@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -35,14 +35,14 @@ class AsignacionTest {
         )
 
         assertTrue(asignacionVencida.estaVencida())
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<AsignacionVencidaException> {
             asignacionVencida.validarVencimiento()
         }
         assertEquals("No se puede entregar la asignación porque la fecha límite ha vencido", ex.message)
     }
 
     @Test
-    fun `validarEstructuraGrupos INDIVIDUAL throws BadRequestException if grupos is not empty`() {
+    fun `validarEstructuraGrupos INDIVIDUAL throws AsignacionIndividualConGruposException if grupos is not empty`() {
         val asignacion = Asignacion(
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
@@ -51,14 +51,14 @@ class AsignacionTest {
         )
         asignacion.grupos.add(GrupoAsignacion(nombre = "Grupo 1"))
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<AsignacionIndividualConGruposException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("No se pueden especificar grupos para una asignación individual", ex.message)
     }
 
     @Test
-    fun `validarEstructuraGrupos GRUPAL throws BadRequestException on missing or empty groups`() {
+    fun `validarEstructuraGrupos GRUPAL throws AsignacionGrupalSinGruposException or GrupoSinIntegrantesException`() {
         val asignacion = Asignacion(
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
@@ -66,20 +66,20 @@ class AsignacionTest {
             curso = cursoDummy()
         )
 
-        val ex1 = assertThrows<BadRequestException> {
+        val ex1 = assertThrows<AsignacionGrupalSinGruposException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("Para una asignación grupal debe especificar al menos un grupo", ex1.message)
 
         asignacion.grupos.add(GrupoAsignacion(nombre = "Grupo Vacío", integrantes = mutableListOf()))
-        val ex2 = assertThrows<BadRequestException> {
+        val ex2 = assertThrows<GrupoSinIntegrantesException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("Todos los grupos deben tener al menos un integrante", ex2.message)
     }
 
     @Test
-    fun `validarEstructuraGrupos GRUPAL throws BadRequestException on blank group name`() {
+    fun `validarEstructuraGrupos GRUPAL throws NombreGrupoVacioException on blank group name`() {
         val asignacion = Asignacion(
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
@@ -88,14 +88,14 @@ class AsignacionTest {
         )
         asignacion.grupos.add(GrupoAsignacion(nombre = "   ", integrantes = mutableListOf(Usuario(username = "u1"))))
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<NombreGrupoVacioException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("El nombre del grupo no puede estar vacío", ex.message)
     }
 
     @Test
-    fun `validarEstructuraGrupos GRUPAL throws BadRequestException on duplicate names or duplicate students`() {
+    fun `validarEstructuraGrupos GRUPAL throws NombreGrupoDuplicadoException or AlumnoEnMultiplesGruposException`() {
         val asignacion = Asignacion(
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
@@ -107,7 +107,7 @@ class AsignacionTest {
         asignacion.grupos.add(GrupoAsignacion(nombre = "Alfa", integrantes = mutableListOf(u1)))
         asignacion.grupos.add(GrupoAsignacion(nombre = "alfa", integrantes = mutableListOf(u2)))
 
-        val ex1 = assertThrows<BadRequestException> {
+        val ex1 = assertThrows<NombreGrupoDuplicadoException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("No puede haber grupos con el mismo nombre en la misma asignación", ex1.message)
@@ -116,7 +116,7 @@ class AsignacionTest {
         asignacion.grupos.add(GrupoAsignacion(nombre = "Alfa", integrantes = mutableListOf(u1)))
         asignacion.grupos.add(GrupoAsignacion(nombre = "Beta", integrantes = mutableListOf(u1)))
 
-        val ex2 = assertThrows<BadRequestException> {
+        val ex2 = assertThrows<AlumnoEnMultiplesGruposException> {
             asignacion.validarEstructuraGrupos()
         }
         assertEquals("Un alumno no puede pertenecer a más de un grupo en la misma asignación", ex2.message)
@@ -137,10 +137,10 @@ class AsignacionTest {
         assertEquals(g1, asignacion.buscarGrupo(10L))
         assertEquals(g1, asignacion.buscarGrupoPorAlumno("alumno1"))
 
-        assertThrows<BadRequestException> {
+        assertThrows<GrupoNoPerteneceAAsignacionException> {
             asignacion.buscarGrupo(99L)
         }
-        assertThrows<BadRequestException> {
+        assertThrows<UsuarioNoPerteneceAGrupoException> {
             asignacion.buscarGrupoPorAlumno("desconocido")
         }
     }

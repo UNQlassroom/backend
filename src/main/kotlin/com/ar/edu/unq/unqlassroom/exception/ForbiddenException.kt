@@ -1,3 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.exception
 
-open class ForbiddenException(message: String) : RuntimeException(message)
+open class ForbiddenException(
+    message: String,
+    open val errorCode: String? = null,
+) : RuntimeException(message)

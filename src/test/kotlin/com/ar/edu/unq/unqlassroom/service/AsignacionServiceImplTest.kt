@@ -1,16 +1,17 @@
 package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
-import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.AsignacionDuplicadaException
+import com.ar.edu.unq.unqlassroom.exception.NombreGrupoDuplicadoException
+import com.ar.edu.unq.unqlassroom.exception.TemplateRepoNoExisteException
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueUser
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
@@ -352,7 +353,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `crearAsignacion throws BadRequestException when template repo does not exist`() {
+    fun `crearAsignacion throws TemplateRepoNoExisteException when template repo does not exist`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
 
@@ -365,7 +366,7 @@ class AsignacionServiceImplTest {
             templateRepoName = "template-inexistente",
         )
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<TemplateRepoNoExisteException> {
             asignacionService.crearAsignacion(10L, request.aModelo(), "profe_test")
         }
         assertEquals("El repositorio template 'template-inexistente' no existe en GitHub", ex.message)
@@ -563,7 +564,7 @@ class AsignacionServiceImplTest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(asignacionRepository.save(asignacion)).thenReturn(asignacion)
 
-        val response = asignacionService.calificarAsignacion(10L, 50L, 101L, 10, "Excelente trabajo individual", "profe_owner")
+        asignacionService.calificarAsignacion(10L, 50L, 101L, 10, "Excelente trabajo individual", "profe_owner")
 
         assertEquals("Excelente trabajo individual", grupo.observaciones)
         assertNotNull(grupo.fechaCalificacion)
@@ -1348,7 +1349,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `crearAsignacion throws BadRequestException when asignacion with same titulo already exists in curso`() {
+    fun `crearAsignacion throws AsignacionDuplicadaException when asignacion with same titulo already exists in curso`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
 
@@ -1358,7 +1359,7 @@ class AsignacionServiceImplTest {
 
         val asignacion = Asignacion(titulo = "TP1", tipo = TipoAsignacion.INDIVIDUAL, templateRepoName = "tmpl")
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<AsignacionDuplicadaException> {
             asignacionService.crearAsignacion(10L, asignacion, "profe_test")
         }
         assertEquals("Ya existe una asignación con el título 'TP1' en este curso", ex.message)
@@ -1432,7 +1433,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `crearAsignacion GRUPAL throws BadRequestException when duplicate group names exist`() {
+    fun `crearAsignacion GRUPAL throws NombreGrupoDuplicadoException when duplicate group names exist`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
 
@@ -1450,7 +1451,7 @@ class AsignacionServiceImplTest {
         asignacion.grupos.add(GrupoAsignacion(nombre = "Grupo Alpha", integrantes = mutableListOf(u1)))
         asignacion.grupos.add(GrupoAsignacion(nombre = "grupo alpha", integrantes = mutableListOf(u2)))
 
-        val ex = assertThrows<BadRequestException> {
+        val ex = assertThrows<NombreGrupoDuplicadoException> {
             asignacionService.crearAsignacion(10L, asignacion, "profe_test")
         }
         assertEquals("No puede haber grupos con el mismo nombre en la misma asignación", ex.message)

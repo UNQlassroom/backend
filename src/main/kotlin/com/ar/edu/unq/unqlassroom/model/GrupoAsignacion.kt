@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.CalificacionInvalidaException
 import com.ar.edu.unq.unqlassroom.util.removerTildes
 import jakarta.persistence.*
 import java.time.LocalDateTime
@@ -54,7 +54,7 @@ class GrupoAsignacion(
 ) {
     fun calificar(nota: Int, observaciones: String?) {
         if (nota < 1 || nota > 10) {
-            throw BadRequestException("La nota debe ser entre 1 y 10")
+            throw CalificacionInvalidaException()
         }
         this.calificacion = nota
         this.observaciones = observaciones

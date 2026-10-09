@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.model
 
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -26,7 +26,7 @@ class CursoTest {
         curso.asignarOwner(docente)
         assertEquals(docente, curso.owner)
 
-        val ex = assertThrows<ForbiddenException> {
+        val ex = assertThrows<UsuarioNoEsDocenteException> {
             curso.asignarOwner(noDocente)
         }
         assertEquals("El usuario alumno no tiene permisos de docente", ex.message)
@@ -40,16 +40,16 @@ class CursoTest {
 
     @Test
     fun `init validates invariants`() {
-        assertThrows<IllegalArgumentException> {
+        assertThrows<NombreMateriaVacioException> {
             Curso(materia = "", anio = 2026, semestre = 1, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<AnioCursoInvalidoException> {
             Curso(materia = "Redes", anio = 1999, semestre = 1, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<SemestreInvalidoException> {
             Curso(materia = "Redes", anio = 2026, semestre = 3, comision = 1)
         }
-        assertThrows<IllegalArgumentException> {
+        assertThrows<ComisionInvalidaException> {
             Curso(materia = "Redes", anio = 2026, semestre = 1, comision = 0)
         }
     }

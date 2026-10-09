@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.security
 
-import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
@@ -9,11 +9,14 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.web.servlet.HandlerExceptionResolver
 
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
-    private val jwtAuthenticationFilter: JwtAuthenticationFilter
+    private val jwtAuthenticationFilter: JwtAuthenticationFilter,
+    @Qualifier("handlerExceptionResolver")
+    private val resolver: HandlerExceptionResolver,
 ) {
 
     @Bean
@@ -22,11 +25,11 @@ class SecurityConfig(
             .csrf { it.disable() }
             .cors { }
             .exceptionHandling {
-                it.authenticationEntryPoint { _, response, _ ->
-                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "No autorizado")
+                it.authenticationEntryPoint { request, response, authException ->
+                    resolver.resolveException(request, response, null, authException)
                 }
-                it.accessDeniedHandler { _, response, _ ->
-                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Acceso denegado: se requieren permisos de docente")
+                it.accessDeniedHandler { request, response, accessDeniedException ->
+                    resolver.resolveException(request, response, null, accessDeniedException)
                 }
             }
             .authorizeHttpRequests { auth ->
