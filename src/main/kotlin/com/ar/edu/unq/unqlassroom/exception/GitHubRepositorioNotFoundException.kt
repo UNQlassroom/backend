@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubRepositorioNotFoundException(
     val repoName: String? = null,
     message: String = if (!repoName.isNullOrBlank()) {
@@ -14,4 +16,5 @@ class GitHubRepositorioNotFoundException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_REPO_NOT_FOUND",
+    httpStatus = HttpStatus.NOT_FOUND,
 )

@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubValidationException(
     message: String = "Los datos enviados no son válidos para la API de GitHub",
     rawBody: String? = null,
@@ -9,4 +11,5 @@ class GitHubValidationException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_VALIDATION_ERROR",
+    httpStatus = HttpStatus.BAD_REQUEST,
 )

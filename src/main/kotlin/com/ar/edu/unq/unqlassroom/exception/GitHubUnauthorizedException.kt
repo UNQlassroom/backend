@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubUnauthorizedException(
     message: String = "Credenciales de GitHub inválidas o expiradas",
     rawBody: String? = null,
@@ -9,4 +11,5 @@ class GitHubUnauthorizedException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_UNAUTHORIZED",
+    httpStatus = HttpStatus.UNAUTHORIZED,
 )

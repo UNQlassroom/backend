@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubUsuarioNotFoundException(
     val username: String? = null,
     message: String = if (!username.isNullOrBlank()) {
@@ -14,4 +16,5 @@ class GitHubUsuarioNotFoundException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_USER_NOT_FOUND",
+    httpStatus = HttpStatus.NOT_FOUND,
 )

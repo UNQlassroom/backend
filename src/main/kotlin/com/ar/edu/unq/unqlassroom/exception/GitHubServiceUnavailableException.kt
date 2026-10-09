@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubServiceUnavailableException(
     message: String = "El servicio de GitHub no está disponible temporalmente",
     rawBody: String? = null,
@@ -9,4 +11,5 @@ class GitHubServiceUnavailableException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_SERVICE_UNAVAILABLE",
+    httpStatus = HttpStatus.SERVICE_UNAVAILABLE,
 )

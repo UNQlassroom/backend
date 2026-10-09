@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.exception
 
+import org.springframework.http.HttpStatus
+
 class GitHubForbiddenException(
     message: String = "La aplicación no tiene permisos suficientes en la organización o repositorio de GitHub",
     rawBody: String? = null,
@@ -9,4 +11,5 @@ class GitHubForbiddenException(
     rawBody = rawBody,
     userFriendlyMessage = message,
     errorCode = "GITHUB_FORBIDDEN",
+    httpStatus = HttpStatus.FORBIDDEN,
 )
