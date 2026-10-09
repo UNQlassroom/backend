@@ -2,5 +2,4 @@ package com.ar.edu.unq.unqlassroom.exception
 
 class FechaLimiteInvalidaException(
     message: String = "La fecha límite no puede ser anterior a la fecha actual",
-    errorCode: String = "FECHA_LIMITE_INVALIDA",
-) : BadRequestException(message, errorCode)
+) : BadRequestException(message, errorCode = "FECHA_LIMITE_INVALIDA")

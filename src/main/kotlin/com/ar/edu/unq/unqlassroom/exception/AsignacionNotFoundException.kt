@@ -2,5 +2,4 @@
 
 class AsignacionNotFoundException(
     message: String = "Asignación no encontrada",
-    errorCode: String = "ASIGNACION_NOT_FOUND",
-) : ResourceNotFoundException(message, errorCode)
+) : ResourceNotFoundException(message, errorCode = "ASIGNACION_NOT_FOUND")

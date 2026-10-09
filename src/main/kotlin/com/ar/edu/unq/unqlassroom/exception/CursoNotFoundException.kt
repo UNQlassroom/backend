@@ -2,5 +2,4 @@
 
 class CursoNotFoundException(
     message: String = "Curso no encontrado",
-    errorCode: String = "CURSO_NOT_FOUND",
-) : ResourceNotFoundException(message, errorCode)
+) : ResourceNotFoundException(message, errorCode = "CURSO_NOT_FOUND")
