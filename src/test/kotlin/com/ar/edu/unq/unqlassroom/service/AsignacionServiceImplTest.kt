@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.SinPermisoAccesoAsignacionException
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
@@ -1181,7 +1182,7 @@ class AsignacionServiceImplTest {
             asignacionService.obtenerAsignacion(999L, 50L, "profe")
         }
 
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe"))
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe", esDocente = true))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
 
@@ -1224,7 +1225,7 @@ class AsignacionServiceImplTest {
             asignacionService.obtenerCorrecciones(999L, 50L, "profe")
         }
 
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe"))
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe", esDocente = true))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
 
@@ -1469,5 +1470,17 @@ class AsignacionServiceImplTest {
         }
         assertEquals("La asignación no está asociada a ningún curso", ex.message)
     }
-}
 
+    @Test
+    fun `obtenerAsignaciones throws SinPermisoAccesoAsignacionException when owner user is no longer docente and not enrolled`() {
+        val exDocente = Usuario(id = 1L, username = "profe_cambiado_a_alumno", esDocente = false)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = exDocente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "profe_cambiado_a_alumno")).thenReturn(null)
+
+        assertThrows<SinPermisoAccesoAsignacionException> {
+            asignacionService.obtenerAsignaciones(10L, "profe_cambiado_a_alumno")
+        }
+    }
+}
