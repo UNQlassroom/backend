@@ -1,8 +1,6 @@
 package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
-import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEventStatus
-import com.ar.edu.unq.unqlassroom.repository.WebhookEventRepository
+import com.ar.edu.unq.unqlassroom.service.WebhookIngestionService
 import com.ar.edu.unq.unqlassroom.util.WebhookSignatureValidator
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
@@ -13,7 +11,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/webhooks")
 class WebhookController(
     private val webhookSignatureValidator: WebhookSignatureValidator,
-    private val webhookEventRepository: WebhookEventRepository,
+    private val webhookIngestionService: WebhookIngestionService,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -29,14 +27,7 @@ class WebhookController(
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
         }
 
-        val evento = WebhookEvent(
-            payload = payload,
-            eventType = eventType,
-            status = WebhookEventStatus.PENDING,
-        )
-        webhookEventRepository.save(evento)
-        logger.info("Webhook recibido y persistido en Inbox con estado PENDING. ID: {}, Evento: {}", evento.id, eventType)
-
+        webhookIngestionService.registrarEvento(payload, eventType)
         return ResponseEntity.ok().build()
     }
 }
