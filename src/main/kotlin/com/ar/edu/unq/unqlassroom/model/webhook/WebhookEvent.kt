@@ -8,7 +8,8 @@ import java.util.UUID
 @Table(
     name = "webhook_events",
     indexes = [
-        Index(name = "idx_webhook_events_status_created_at", columnList = "status, created_at")
+        Index(name = "idx_webhook_events_status_created_at", columnList = "status, created_at"),
+        Index(name = "idx_webhook_events_delivery_id", columnList = "delivery_id", unique = true)
     ]
 )
 class WebhookEvent(
@@ -16,11 +17,17 @@ class WebhookEvent(
     @GeneratedValue(strategy = GenerationType.UUID)
     val id: UUID? = null,
 
-    @Column(name = "payload", columnDefinition = "TEXT", nullable = false)
-    var payload: String,
+    @Column(name = "delivery_id", nullable = true, unique = true)
+    var deliveryId: String? = null,
 
     @Column(name = "event_type", nullable = false)
     var eventType: String,
+
+    @Column(name = "action", nullable = true)
+    var action: String? = null,
+
+    @Column(name = "payload", columnDefinition = "TEXT", nullable = false)
+    var payload: String,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
