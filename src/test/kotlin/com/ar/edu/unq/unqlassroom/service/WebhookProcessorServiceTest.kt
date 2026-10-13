@@ -3,7 +3,7 @@ package com.ar.edu.unq.unqlassroom.service
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEventStatus
 import com.ar.edu.unq.unqlassroom.repository.WebhookEventRepository
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.ar.edu.unq.unqlassroom.service.webhook.WebhookEventHandler
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -22,12 +22,17 @@ class WebhookProcessorServiceTest {
     @Mock
     private lateinit var webhookEventRepository: WebhookEventRepository
 
-    private val objectMapper = ObjectMapper()
+    @Mock
+    private lateinit var webhookEventHandler: WebhookEventHandler
+
     private lateinit var service: WebhookProcessorService
 
     @BeforeEach
     fun setUp() {
-        service = WebhookProcessorService(webhookEventRepository, objectMapper)
+        service = WebhookProcessorService(
+            webhookEventRepository = webhookEventRepository,
+            handlers = listOf(webhookEventHandler)
+        )
     }
 
     private fun eqStatus(status: WebhookEventStatus): WebhookEventStatus {
@@ -41,17 +46,31 @@ class WebhookProcessorServiceTest {
     }
 
     @Test
-    fun `procesarEventosPendientes procesa evento push y cambia estado a PROCESSED`() {
-        val payload = """
-            {
-              "repository": { "name": "2026s1_c1_intro_tp1_juan" },
-              "pusher": { "name": "juanperez" },
-              "commits": [
-                { "id": "commit1", "message": "feat: entrega tp" }
-              ]
-            }
-        """.trimIndent()
+    fun `procesarEventosPendientes delega al handler correspondiente y cambia estado a PROCESSED`() {
+        val payload = """{"action": "added"}"""
+        val evento = WebhookEvent(
+            id = UUID.randomUUID(),
+            payload = payload,
+            eventType = "membership",
+            status = WebhookEventStatus.PENDING,
+        )
 
+        `when`(webhookEventRepository.findByStatusForUpdate(eqStatus(WebhookEventStatus.PENDING), anyPageable()))
+            .thenReturn(listOf(evento))
+        `when`(webhookEventHandler.canHandle(evento)).thenReturn(true)
+
+        service.procesarEventosPendientes()
+
+        verify(webhookEventHandler).handle(evento)
+        assertEquals(WebhookEventStatus.PROCESSED, evento.status)
+        assertNotNull(evento.processedAt)
+        assertNull(evento.errorMessage)
+        verify(webhookEventRepository).save(evento)
+    }
+
+    @Test
+    fun `procesarEventosPendientes cambia estado a ERROR si el handler lanza excepcion`() {
+        val payload = """{"invalid": "data"}"""
         val evento = WebhookEvent(
             id = UUID.randomUUID(),
             payload = payload,
@@ -61,34 +80,37 @@ class WebhookProcessorServiceTest {
 
         `when`(webhookEventRepository.findByStatusForUpdate(eqStatus(WebhookEventStatus.PENDING), anyPageable()))
             .thenReturn(listOf(evento))
+        `when`(webhookEventHandler.canHandle(evento)).thenReturn(true)
+        doThrow(RuntimeException("Error procesando push en handler")).`when`(webhookEventHandler).handle(evento)
 
         service.procesarEventosPendientes()
 
-        assertEquals(WebhookEventStatus.PROCESSED, evento.status)
+        verify(webhookEventHandler).handle(evento)
+        assertEquals(WebhookEventStatus.ERROR, evento.status)
         assertNotNull(evento.processedAt)
-        assertNull(evento.errorMessage)
+        assertEquals("Error procesando push en handler", evento.errorMessage)
         verify(webhookEventRepository).save(evento)
     }
 
     @Test
-    fun `procesarEventosPendientes con payload JSON invalido cambia estado a ERROR`() {
-        val invalidPayload = "{ invalid json content ... "
-
+    fun `procesarEventosPendientes marca PROCESSED si ningun handler soporta el evento`() {
         val evento = WebhookEvent(
             id = UUID.randomUUID(),
-            payload = invalidPayload,
-            eventType = "push",
+            payload = "{}",
+            eventType = "star",
             status = WebhookEventStatus.PENDING,
         )
 
         `when`(webhookEventRepository.findByStatusForUpdate(eqStatus(WebhookEventStatus.PENDING), anyPageable()))
             .thenReturn(listOf(evento))
+        `when`(webhookEventHandler.canHandle(evento)).thenReturn(false)
 
         service.procesarEventosPendientes()
 
-        assertEquals(WebhookEventStatus.ERROR, evento.status)
+        verify(webhookEventHandler, never()).handle(evento)
+        assertEquals(WebhookEventStatus.PROCESSED, evento.status)
         assertNotNull(evento.processedAt)
-        assertNotNull(evento.errorMessage)
+        assertNull(evento.errorMessage)
         verify(webhookEventRepository).save(evento)
     }
 
@@ -99,6 +121,7 @@ class WebhookProcessorServiceTest {
 
         service.procesarEventosPendientes()
 
+        verifyNoInteractions(webhookEventHandler)
         verify(webhookEventRepository, never()).save(any())
     }
 }

@@ -1,14 +1,12 @@
 package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.service.WebhookIngestionService
-import com.ar.edu.unq.unqlassroom.util.WebhookSignatureValidator
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/webhooks")
 class WebhookController(
-    private val webhookSignatureValidator: WebhookSignatureValidator,
     private val webhookIngestionService: WebhookIngestionService,
 ) {
 
@@ -19,8 +17,7 @@ class WebhookController(
         @RequestHeader(value = "X-GitHub-Delivery", required = false) deliveryId: String?,
         @RequestBody payload: String,
     ): ResponseEntity<Void> {
-        webhookSignatureValidator.validate(payload, signature)
-        webhookIngestionService.registrarEvento(payload, eventType, deliveryId)
+        webhookIngestionService.registrarEvento(payload, signature, eventType, deliveryId)
         return ResponseEntity.ok().build()
     }
 }
