@@ -11,7 +11,7 @@ data class AlumnoResponseDTO(
         fun desdeModelo(inscripcion: Inscripcion): AlumnoResponseDTO = AlumnoResponseDTO(
             username = inscripcion.usuario.username,
             role = inscripcion.githubRole,
-            state = inscripcion.githubState,
+            state = inscripcion.usuario.githubState,
         )
     }
 }

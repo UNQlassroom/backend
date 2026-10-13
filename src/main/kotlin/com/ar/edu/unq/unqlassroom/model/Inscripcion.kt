@@ -23,5 +23,5 @@ class Inscripcion(
     var usuario: Usuario,
 
     @Column(nullable = false)
-    var githubRole: String = "push",
+    var githubRole: String = "member",
 )

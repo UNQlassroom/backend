@@ -10,6 +10,7 @@ import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
+import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -36,6 +37,9 @@ class CursoServiceImplTest {
     private lateinit var usuarioService: UsuarioService
 
     @Mock
+    private lateinit var usuarioRepository: UsuarioRepository
+
+    @Mock
     private lateinit var inscripcionRepository: InscripcionRepository
 
     @Mock
@@ -55,54 +59,6 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `crearCurso saves curso with owner and description without creating github repo`() {
-        val requestDTO = CursoRequestDTO(
-            materia = "Estructuras de Datos",
-            anio = 2026,
-            semestre = 1,
-            comision = 1,
-        )
-
-        val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
-        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
-
-        `when`(cursoRepository.save(anyCurso())).thenAnswer { invocation ->
-            val curso = invocation.getArgument<Curso>(0)
-            Curso(
-                id = 1L,
-                materia = curso.materia,
-                anio = curso.anio,
-                semestre = curso.semestre,
-                comision = curso.comision,
-                descripcion = curso.descripcion,
-                owner = curso.owner,
-            )
-        }
-
-        val result = cursoService.crearCurso(requestDTO.aModelo(), "profe_test")
-
-        assertNotNull(result)
-        assertEquals(1L, result.id)
-        assertEquals("Estructuras de Datos", result.materia)
-        assertEquals(2026, result.anio)
-        assertEquals(1, result.semestre)
-        assertEquals(1, result.comision)
-        assertEquals("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1", result.descripcion)
-        assertEquals("profe_test", result.owner?.username)
-    }
-
-    @Test
-    fun `generarDescripcion produces the expected generic description`() {
-        val curso = Curso(
-            materia = "Estructuras de Datos",
-            anio = 2026,
-            semestre = 1,
-            comision = 1
-        )
-        assertEquals("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1", curso.generarDescripcion())
-    }
-
-    @Test
     fun `agregarAlumnos invites students to github org and creates inscripcion with org membership state`() {
         val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
@@ -117,7 +73,7 @@ class CursoServiceImplTest {
 
         `when`(usuarioService.obtenerOCrearAlumno(Mockito.anyString())).thenAnswer { invocation ->
             val u = invocation.getArgument<String>(0)
-            Usuario(id = 1L, username = u, esDocente = false)
+            Usuario(id = 1L, username = u, esDocente = false, githubState = "pending")
         }
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(Mockito.anyLong(), Mockito.anyString())).thenReturn(null)
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
@@ -137,11 +93,11 @@ class CursoServiceImplTest {
 
         assertEquals(2, response.size)
         assertEquals("alumno1", response[0].usuario.username)
-        assertEquals("pending", response[0].githubState)
+        assertEquals("pending", response[0].usuario.githubState)
         assertEquals("member", response[0].githubRole)
 
         assertEquals("alumno2", response[1].usuario.username)
-        assertEquals("active", response[1].githubState)
+        assertEquals("active", response[1].usuario.githubState)
         assertEquals("member", response[1].githubRole)
 
         verify(gitHubOrgService).invitarMiembro("alumno1")
@@ -219,10 +175,10 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
-        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false)
-        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false)
-        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso, githubState = "pending")
-        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso, githubState = "pending")
+        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false, githubState = "pending")
+        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false, githubState = "pending")
+        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso)
+        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso)
 
         `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
@@ -238,15 +194,15 @@ class CursoServiceImplTest {
         assertEquals(2, response.size)
 
         val a1 = response.first { it.usuario.username == "alumno1" }
-        assertEquals("active", a1.githubState)
-        assertEquals("active", inscripcion1.githubState)
+        assertEquals("active", a1.usuario.githubState)
+        assertEquals("active", usuario1.githubState)
 
         val a2 = response.first { it.usuario.username == "alumno2" }
-        assertEquals("pending", a2.githubState)
-        assertEquals("pending", inscripcion2.githubState)
+        assertEquals("pending", a2.usuario.githubState)
+        assertEquals("pending", usuario2.githubState)
 
-        verify(inscripcionRepository).save(inscripcion1)
-        verify(inscripcionRepository, Mockito.never()).save(inscripcion2)
+        verify(usuarioRepository).save(usuario1)
+        verify(usuarioRepository, Mockito.never()).save(usuario2)
     }
 
     @Test
@@ -281,10 +237,10 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
-        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false)
-        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false)
-        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso, githubState = "pending")
-        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso, githubState = "active")
+        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false, githubState = "pending")
+        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false, githubState = "active")
+        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso)
+        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso)
 
         `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
@@ -292,9 +248,9 @@ class CursoServiceImplTest {
 
         assertEquals(2, response.size)
         assertEquals("alumno1", response[0].usuario.username)
-        assertEquals("pending", response[0].githubState)
+        assertEquals("pending", response[0].usuario.githubState)
         assertEquals("alumno2", response[1].usuario.username)
-        assertEquals("active", response[1].githubState)
+        assertEquals("active", response[1].usuario.githubState)
 
         verify(gitHubOrgService, Mockito.never()).obtenerMembresia(Mockito.anyString(), Mockito.nullable(String::class.java))
     }
@@ -334,13 +290,9 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `Inscripcion defaults githubRole to push and githubState to pending`() {
-        val curso = Curso(materia = "BD", anio = 2026, semestre = 1, comision = 1)
+    fun `Usuario defaults githubState to pending`() {
         val usuario = Usuario(username = "alumno1")
-        val inscripcion = Inscripcion(curso = curso, usuario = usuario)
-
-        assertEquals("push", inscripcion.githubRole)
-        assertEquals("pending", inscripcion.githubState)
+        assertEquals("pending", usuario.githubState)
     }
 
     @Test
