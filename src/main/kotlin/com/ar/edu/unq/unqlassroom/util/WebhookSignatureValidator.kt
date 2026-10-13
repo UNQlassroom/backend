@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.util
 
+import com.ar.edu.unq.unqlassroom.exception.InvalidWebhookSignatureException
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
@@ -12,6 +14,15 @@ class WebhookSignatureValidator(
     @Value("\${github.webhook.secret:}")
     private val secret: String
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
+    fun validate(payload: String, signatureHeader: String?) {
+        if (!isValid(payload, signatureHeader)) {
+            logger.warn("Validación de firma HMAC de Webhook fallida")
+            throw InvalidWebhookSignatureException()
+        }
+    }
+
     fun isValid(payload: String, signatureHeader: String?): Boolean {
         if (secret.isBlank() || signatureHeader.isNullOrBlank()) {
             return false

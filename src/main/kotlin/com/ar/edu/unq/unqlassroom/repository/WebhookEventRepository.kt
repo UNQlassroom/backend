@@ -25,4 +25,6 @@ interface WebhookEventRepository : JpaRepository<WebhookEvent, UUID> {
         status: WebhookEventStatus,
         pageable: Pageable
     ): List<WebhookEvent>
+
+    fun existsByDeliveryId(deliveryId: String): Boolean
 }

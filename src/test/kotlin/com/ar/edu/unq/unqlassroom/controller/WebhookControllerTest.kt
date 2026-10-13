@@ -1,7 +1,7 @@
 package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
-import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEventStatus
+import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
+import com.ar.edu.unq.unqlassroom.exception.InvalidWebhookSignatureException
 import com.ar.edu.unq.unqlassroom.service.WebhookIngestionService
 import com.ar.edu.unq.unqlassroom.util.WebhookSignatureValidator
 import org.junit.jupiter.api.BeforeEach
@@ -16,7 +16,6 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
-import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
 class WebhookControllerTest {
@@ -34,34 +33,33 @@ class WebhookControllerTest {
 
     @BeforeEach
     fun setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(webhookController).build()
+        mockMvc = MockMvcBuilders
+            .standaloneSetup(webhookController)
+            .setControllerAdvice(RestExceptionHandler())
+            .build()
     }
 
     @Test
-    fun `recibirWebhookGithub con firma valida delega a webhookIngestionService y retorna 200 OK inmediatamente`() {
+    fun `recibirWebhookGithub con firma valida y deliveryId delega a webhookIngestionService y retorna 200 OK`() {
         val payload = "{\"ref\":\"refs/heads/main\",\"repository\":{\"name\":\"repo-tp\"}}"
         val signature = "sha256=validsignature"
         val eventType = "push"
+        val deliveryId = "72d3162e-cc78-11e3-81ab-4c9367dc0958"
 
-        `when`(webhookSignatureValidator.isValid(payload, signature)).thenReturn(true)
-        val eventoMock = WebhookEvent(
-            id = UUID.randomUUID(),
-            payload = payload,
-            eventType = eventType,
-            status = WebhookEventStatus.PENDING,
-        )
-        `when`(webhookIngestionService.registrarEvento(payload, eventType)).thenReturn(eventoMock)
+        doNothing().`when`(webhookSignatureValidator).validate(payload, signature)
 
         mockMvc.perform(
             post("/api/webhooks/github")
                 .header("X-Hub-Signature-256", signature)
                 .header("X-GitHub-Event", eventType)
+                .header("X-GitHub-Delivery", deliveryId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload)
         )
             .andExpect(status().isOk)
 
-        verify(webhookIngestionService).registrarEvento(payload, eventType)
+        verify(webhookSignatureValidator).validate(payload, signature)
+        verify(webhookIngestionService).registrarEvento(payload, eventType, deliveryId)
     }
 
     @Test
@@ -69,7 +67,8 @@ class WebhookControllerTest {
         val payload = "{\"ref\":\"refs/heads/main\"}"
         val signature = "sha256=invalidsignature"
 
-        `when`(webhookSignatureValidator.isValid(payload, signature)).thenReturn(false)
+        doThrow(InvalidWebhookSignatureException())
+            .`when`(webhookSignatureValidator).validate(payload, signature)
 
         mockMvc.perform(
             post("/api/webhooks/github")

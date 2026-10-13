@@ -8,8 +8,7 @@ import java.util.UUID
 @Table(
     name = "webhook_events",
     indexes = [
-        Index(name = "idx_webhook_events_status_created_at", columnList = "status, created_at"),
-        Index(name = "idx_webhook_events_delivery_id", columnList = "delivery_id", unique = true)
+        Index(name = "idx_webhook_events_status_created_at", columnList = "status, created_at")
     ]
 )
 class WebhookEvent(

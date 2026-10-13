@@ -1,8 +1,10 @@
 package com.ar.edu.unq.unqlassroom.util
 
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
+import com.ar.edu.unq.unqlassroom.exception.InvalidWebhookSignatureException
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
+import org.junit.jupiter.api.assertThrows
 import java.nio.charset.StandardCharsets
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -66,5 +68,26 @@ class WebhookSignatureValidatorTest {
         val signature = computeSignature(payload, "any-key")
 
         assertFalse(emptySecretValidator.isValid(payload, signature))
+    }
+
+    @Test
+    fun `validate no lanza excepcion cuando la firma es valida`() {
+        val payload = "{\"action\":\"completed\"}"
+        val signature = computeSignature(payload, secret)
+
+        assertDoesNotThrow {
+            validator.validate(payload, signature)
+        }
+    }
+
+    @Test
+    fun `validate lanza InvalidWebhookSignatureException cuando la firma es invalida`() {
+        val payload = "{\"action\":\"completed\"}"
+        val signature = "sha256=invalidhash"
+
+        val ex = assertThrows<InvalidWebhookSignatureException> {
+            validator.validate(payload, signature)
+        }
+        assertEquals("Firma HMAC de Webhook inválida o ausente", ex.message)
     }
 }
