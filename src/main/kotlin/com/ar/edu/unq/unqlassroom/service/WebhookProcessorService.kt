@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 @Service
@@ -19,6 +18,7 @@ class WebhookProcessorService(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelayString = "\${github.webhook.cron-interval-ms:10000}")
+    @Transactional
     fun procesarEventosPendientes() {
         val pendientes = webhookEventRepository.findByStatusForUpdate(
             WebhookEventStatus.PENDING,
@@ -40,7 +40,6 @@ class WebhookProcessorService(
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun procesarEventoIndividual(evento: WebhookEvent) {
         try {
             ejecutarLogicaDeDominio(evento)
