@@ -1,0 +1,174 @@
+package com.ar.edu.unq.unqlassroom.service.webhook
+
+import com.ar.edu.unq.unqlassroom.model.Usuario
+import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
+import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.Mock
+import org.mockito.Mockito.*
+import org.mockito.junit.jupiter.MockitoExtension
+import java.util.UUID
+
+@ExtendWith(MockitoExtension::class)
+class MembershipWebhookHandlerTest {
+
+    @Mock
+    private lateinit var usuarioRepository: UsuarioRepository
+
+    private val objectMapper = ObjectMapper()
+    private lateinit var handler: MembershipWebhookHandler
+
+    @BeforeEach
+    fun setUp() {
+        handler = MembershipWebhookHandler(usuarioRepository, objectMapper)
+    }
+
+    @Test
+    fun `canHandle retorna true solo para eventos organization case-insensitive`() {
+        val eventOrg = WebhookEvent(eventType = "organization", payload = "{}")
+        val eventOrgUpper = WebhookEvent(eventType = "ORGANIZATION", payload = "{}")
+        val eventMembership = WebhookEvent(eventType = "membership", payload = "{}")
+        val eventPush = WebhookEvent(eventType = "push", payload = "{}")
+
+        assertTrue(handler.canHandle(eventOrg))
+        assertTrue(handler.canHandle(eventOrgUpper))
+        assertFalse(handler.canHandle(eventMembership))
+        assertFalse(handler.canHandle(eventPush))
+    }
+
+    @Test
+    fun `handle con organization member_added activa githubState del usuario`() {
+        val payload = """
+        {
+          "action": "member_added",
+          "membership": {
+            "state": "active",
+            "role": "member",
+            "user": {
+              "login": "thiagoDePrueba"
+            }
+          },
+          "organization": {
+            "login": "UNQlassroom-cursos"
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        val usuario = Usuario(id = 1L, username = "thiagoDePrueba", githubState = "pending")
+
+        `when`(usuarioRepository.findByUsername("thiagoDePrueba")).thenReturn(usuario)
+
+        handler.handle(event)
+
+        assertEquals("active", usuario.githubState)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `handle con organization member_invited se ignora sin error ni persistencia`() {
+        val payload = """
+        {
+          "action": "member_invited",
+          "membership": {
+            "user": {
+              "login": "thiagoDePrueba"
+            }
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_invited",
+            payload = payload
+        )
+
+        handler.handle(event)
+
+        verifyNoInteractions(usuarioRepository)
+    }
+
+    @Test
+    fun `handle cuando el usuario no existe en la base de datos no persiste ni falla`() {
+        val payload = """
+        {
+          "action": "member_added",
+          "membership": {
+            "user": {
+              "login": "desconocido"
+            }
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        `when`(usuarioRepository.findByUsername("desconocido")).thenReturn(null)
+
+        handler.handle(event)
+
+        verify(usuarioRepository).findByUsername("desconocido")
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `handle cuando el usuario ya estaba active no vuelve a persistir`() {
+        val payload = """
+        {
+          "action": "member_added",
+          "membership": {
+            "user": {
+              "login": "alumnoActivo"
+            }
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        val usuario = Usuario(id = 3L, username = "alumnoActivo", githubState = "active")
+        `when`(usuarioRepository.findByUsername("alumnoActivo")).thenReturn(usuario)
+
+        handler.handle(event)
+
+        verify(usuarioRepository).findByUsername("alumnoActivo")
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `handle cuando no se puede extraer username no interactua con repositorio`() {
+        val payload = """{"action": "member_added"}"""
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        handler.handle(event)
+
+        verifyNoInteractions(usuarioRepository)
+    }
+}
