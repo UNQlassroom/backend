@@ -1,6 +1,6 @@
 package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.service.WebhookIngestionService
+import com.ar.edu.unq.unqlassroom.service.webhook.WebhookIngestionService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 

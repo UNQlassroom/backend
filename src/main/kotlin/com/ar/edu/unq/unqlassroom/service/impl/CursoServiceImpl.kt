@@ -6,6 +6,7 @@ import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
+import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service
 class CursoServiceImpl (
     private val cursoRepository: CursoRepository,
     private val usuarioService: UsuarioService,
+    private val usuarioRepository: UsuarioRepository,
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubOrgService: GitHubOrgService,
 ) : CursoService {
@@ -89,12 +91,19 @@ class CursoServiceImpl (
             if (inscripcionExistente != null) {
                 inscripcionExistente
             } else {
-                val membership = gitHubOrgService.invitarMiembro(username)
+                val role = if (usuario.githubState == "active") {
+                    "member"
+                } else {
+                    val membership = gitHubOrgService.invitarMiembro(username)
+                    usuario.githubState = membership.state
+                    usuarioRepository.save(usuario)
+                    membership.role
+                }
+
                 val nuevaInscripcion = Inscripcion(
                     curso = curso,
                     usuario = usuario,
-                    githubRole = membership.role,
-                    githubState = membership.state,
+                    githubRole = role,
                 )
                 inscripcionRepository.save(nuevaInscripcion)
             }
@@ -114,8 +123,8 @@ class CursoServiceImpl (
 
         return inscripciones.map { inscripcion ->
             val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
-            if (membership != null && inscripcion.activarSiCorresponde(membership.state)) {
-                inscripcionRepository.save(inscripcion)
+            if (membership != null && inscripcion.usuario.activarSiCorresponde(membership.state)) {
+                usuarioRepository.save(inscripcion.usuario)
             }
             inscripcion
         }

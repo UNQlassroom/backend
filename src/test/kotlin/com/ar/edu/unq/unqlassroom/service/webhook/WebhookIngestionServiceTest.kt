@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.exception.InvalidWebhookSignatureException
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent

@@ -2,7 +2,7 @@ package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.exception.InvalidWebhookSignatureException
-import com.ar.edu.unq.unqlassroom.service.WebhookIngestionService
+import com.ar.edu.unq.unqlassroom.service.webhook.WebhookIngestionService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith

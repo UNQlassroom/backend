@@ -46,11 +46,11 @@ class InscripcionRepositoryTest {
     @Test
     fun `findByCursoIdAndUsuarioUsername returns inscription when match exists and null otherwise`() {
         val docente = usuarioRepository.save(Usuario(username = "docente_test", esDocente = true))
-        val alumno = usuarioRepository.save(Usuario(username = "alumno_inscripto", esDocente = false))
+        val alumno = usuarioRepository.save(Usuario(username = "alumno_inscripto", esDocente = false, githubState = "active"))
 
         val curso = cursoRepository.save(Curso(materia = "Materia A", anio = 2026, semestre = 2, comision = 1, owner = docente))
 
-        inscripcionRepository.save(Inscripcion(curso = curso, usuario = alumno, githubRole = "write", githubState = "active"))
+        inscripcionRepository.save(Inscripcion(curso = curso, usuario = alumno, githubRole = "write"))
 
         val found = inscripcionRepository.findByCursoIdAndUsuarioUsername(curso.id!!, "alumno_inscripto")
         assertNotNull(found)

@@ -99,8 +99,8 @@ class CursoControllerTest {
 
         val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
         val inscripciones = listOf(
-            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "push", githubState = "active"),
-            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2"), githubRole = "push", githubState = "pending")
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active"), githubRole = "push"),
+            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2", githubState = "pending"), githubRole = "push")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
@@ -141,8 +141,8 @@ class CursoControllerTest {
     fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
         val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
         val inscripciones = listOf(
-            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "push", githubState = "active"),
-            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2"), githubRole = "push", githubState = "active")
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active"), githubRole = "push"),
+            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2", githubState = "active"), githubRole = "push")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
@@ -165,7 +165,7 @@ class CursoControllerTest {
     fun `obtenerAlumnos endpoint returns 200 and list of students`() {
         val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
         val inscripciones = listOf(
-            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1"), githubRole = "write", githubState = "active")
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active"), githubRole = "write")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))

@@ -20,4 +20,15 @@ class Usuario(
 
     @Column(nullable = true)
     var nombreCompleto: String? = null,
-)
+
+    @Column(name = "github_state", nullable = false)
+    var githubState: String = "pending",
+) {
+    fun activarSiCorresponde(estadoRemoto: String): Boolean {
+        if (githubState == "pending" && estadoRemoto == "active") {
+            githubState = "active"
+            return true
+        }
+        return false
+    }
+}
