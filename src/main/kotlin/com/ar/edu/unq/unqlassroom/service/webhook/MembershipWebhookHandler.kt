@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional
 /**
  * Handler de eventos de Webhook para membresía y organización de GitHub.
  *
- * Procesa cuando un usuario acepta la invitación a la organización de GitHub:
+ * Procesa exclusivamente cuando un usuario acepta la invitación a la organización de GitHub:
  * Evento `organization` con `action = "member_added"`.
  *
  * Al detectarse la aceptación, busca el `Usuario` correspondiente y actualiza su
@@ -25,29 +25,16 @@ class MembershipWebhookHandler(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun canHandle(event: WebhookEvent): Boolean {
-        val eventType = event.eventType.lowercase()
-        return eventType == "organization"
+        if (!event.eventType.equals("organization", ignoreCase = true)) {
+            return false
+        }
+        val action = event.action ?: extraerActionDePayload(event.payload)
+        return action.equals("member_added", ignoreCase = true)
     }
 
     @Transactional
     override fun handle(event: WebhookEvent) {
         val rootNode = objectMapper.readTree(event.payload)
-        val action = event.action ?: rootNode.path("action").asText("")
-
-        val esAceptacion = when (event.eventType.lowercase()) {
-            "organization" -> action.equals("member_added", ignoreCase = true)
-            else -> false
-        }
-
-        if (!esAceptacion) {
-            logger.info(
-                "Evento '{}' con acción '{}' ignorado por MembershipWebhookHandler (no es aceptación de membresía)",
-                event.eventType,
-                action
-            )
-            return
-        }
-
         val username = extraerUsername(rootNode)
         if (username.isNullOrBlank()) {
             logger.warn("No se pudo extraer el username del miembro en el evento {} de tipo '{}'", event.id, event.eventType)
@@ -65,6 +52,15 @@ class MembershipWebhookHandler(
             logger.info("Nuevo usuario activo en la organización: '{}'", username)
         } else {
             logger.info("El usuario '{}' ya se encontraba en estado activo en la organización", username)
+        }
+    }
+
+    private fun extraerActionDePayload(payload: String): String? {
+        return try {
+            val node = objectMapper.readTree(payload).get("action")
+            if (node != null && !node.isNull) node.asText() else null
+        } catch (_: Exception) {
+            null
         }
     }
 
