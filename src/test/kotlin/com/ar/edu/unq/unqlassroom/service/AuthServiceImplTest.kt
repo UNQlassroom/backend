@@ -137,7 +137,8 @@ class AuthServiceImplTest {
             username = "profe_existente",
             esDocente = true,
             email = "profe.viejo@unq.edu.ar",
-            nombreCompleto = "Profesor"
+            nombreCompleto = "Profesor",
+            githubState = "active"
         )
 
         `when`(gitHubOAuthClient.intercambiarCodePorToken("oauth-code-existing")).thenReturn("gho_token_existing")
@@ -182,7 +183,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    fun `loginConGitHub invites user and returns redirect response when user is not member of org`() {
+    fun `loginConGitHub invites user and returns redirect response when new user is not member of org`() {
         val dto = GitHubLoginRequestDTO(code = "code-no-org", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "usuario_sin_org",
@@ -195,7 +196,7 @@ class AuthServiceImplTest {
         `when`(properties.organization).thenReturn("UNQlassroom")
         `when`(gitHubOAuthClient.intercambiarCodePorToken("code-no-org")).thenReturn("gho_token_no_org")
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_no_org")).thenReturn(profile)
-        `when`(gitHubOrgService.obtenerMembresia("usuario_sin_org")).thenReturn(null)
+        `when`(usuarioRepository.findByUsername("usuario_sin_org")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "usuario_sin_org", role = "member"))
             .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "member"))
 
@@ -208,12 +209,12 @@ class AuthServiceImplTest {
         assertNull(response.user)
 
         verify(gitHubOrgService).invitarMiembro(username = "usuario_sin_org", role = "member")
-        verify(usuarioRepository, never()).save(anyUsuario())
+        verify(usuarioRepository).save(anyUsuario())
         verify(jwtService, never()).generateToken(anyUsuario())
     }
 
     @Test
-    fun `loginConGitHub invites docente with admin role when docente is not member of org`() {
+    fun `loginConGitHub invites docente with admin role when new docente is not member of org`() {
         val dto = GitHubLoginRequestDTO(code = "code-docente-no-org", esDocente = true)
         val profile = GitHubUserProfileResponse(
             login = "docente_sin_org",
@@ -226,7 +227,7 @@ class AuthServiceImplTest {
         `when`(properties.organization).thenReturn("UNQlassroom")
         `when`(gitHubOAuthClient.intercambiarCodePorToken("code-docente-no-org")).thenReturn("gho_token_doc_no_org")
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_doc_no_org")).thenReturn(profile)
-        `when`(gitHubOrgService.obtenerMembresia("docente_sin_org")).thenReturn(null)
+        `when`(usuarioRepository.findByUsername("docente_sin_org")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "docente_sin_org", role = "admin"))
             .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "admin"))
 
@@ -239,58 +240,27 @@ class AuthServiceImplTest {
         assertNull(response.user)
 
         verify(gitHubOrgService).invitarMiembro(username = "docente_sin_org", role = "admin")
-        verify(usuarioRepository, never()).save(anyUsuario())
+        verify(usuarioRepository).save(anyUsuario())
         verify(jwtService, never()).generateToken(anyUsuario())
     }
 
     @Test
-    fun `loginConGitHub returns redirect response without inviting when user already has pending invitation`() {
-        val dto = GitHubLoginRequestDTO(code = "code-pending-org", esDocente = false)
+    fun `loginConGitHub succeeds and generates token when new user is already active in org`() {
+        val dto = GitHubLoginRequestDTO(code = "code-new-active-org", esDocente = false)
         val profile = GitHubUserProfileResponse(
-            login = "usuario_pending",
-            id = 777L,
-            name = "Usuario Pending",
-            email = "pending@unq.edu.ar",
-            avatar_url = null
-        )
-
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-pending-org")).thenReturn("gho_token_pending")
-        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_pending")).thenReturn(profile)
-        `when`(gitHubOrgService.obtenerMembresia("usuario_pending"))
-            .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "member"))
-
-        val response = authService.loginConGitHub(dto)
-
-        assertNotNull(response)
-        assertTrue(response.requiereUnirseAOrg)
-        assertEquals("https://github.com/orgs/UNQlassroom/invitation", response.redirectUrl)
-        assertNull(response.token)
-        assertNull(response.user)
-
-        verify(gitHubOrgService).obtenerMembresia("usuario_pending")
-        verifyNoMoreInteractions(gitHubOrgService)
-        verify(usuarioRepository, never()).save(anyUsuario())
-        verify(jwtService, never()).generateToken(anyUsuario())
-    }
-
-    @Test
-    fun `loginConGitHub succeeds and generates token when user is active member of org`() {
-        val dto = GitHubLoginRequestDTO(code = "code-active-org", esDocente = false)
-        val profile = GitHubUserProfileResponse(
-            login = "usuario_activo",
+            login = "usuario_nuevo_activo",
             id = 888L,
-            name = "Usuario Activo",
-            email = "activo@unq.edu.ar",
+            name = "Usuario Nuevo Activo",
+            email = "nuevoactivo@unq.edu.ar",
             avatar_url = null
         )
 
         `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-active-org")).thenReturn("gho_token_activo")
-        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_activo")).thenReturn(profile)
-        `when`(gitHubOrgService.obtenerMembresia("usuario_activo"))
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-new-active-org")).thenReturn("gho_token_nuevo_activo")
+        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_nuevo_activo")).thenReturn(profile)
+        `when`(usuarioRepository.findByUsername("usuario_nuevo_activo")).thenReturn(null)
+        `when`(gitHubOrgService.invitarMiembro(username = "usuario_nuevo_activo", role = "member"))
             .thenReturn(GitHubOrgMembershipResponse(state = "active", role = "member"))
-        `when`(usuarioRepository.findByUsername("usuario_activo")).thenReturn(null)
         `when`(usuarioRepository.save(anyUsuario())).thenAnswer { invocation ->
             val u = invocation.getArgument<Usuario>(0)
             Usuario(
@@ -298,24 +268,24 @@ class AuthServiceImplTest {
                 username = u.username,
                 esDocente = u.esDocente,
                 email = u.email,
-                nombreCompleto = u.nombreCompleto
+                nombreCompleto = u.nombreCompleto,
+                githubState = u.githubState
             )
         }
-        `when`(jwtService.generateToken(anyUsuario())).thenReturn("jwt-token-activo")
+        `when`(jwtService.generateToken(anyUsuario())).thenReturn("jwt-token-nuevo-activo")
 
         val response = authService.loginConGitHub(dto)
 
         assertNotNull(response)
         assertFalse(response.requiereUnirseAOrg)
         assertNull(response.redirectUrl)
-        assertEquals("jwt-token-activo", response.token)
-        assertEquals("usuario_activo", response.user?.username)
-        verify(gitHubOrgService).obtenerMembresia("usuario_activo")
-        verifyNoMoreInteractions(gitHubOrgService)
+        assertEquals("jwt-token-nuevo-activo", response.token)
+        assertEquals("usuario_nuevo_activo", response.user?.username)
+        verify(gitHubOrgService).invitarMiembro(username = "usuario_nuevo_activo", role = "member")
     }
 
     @Test
-    fun `loginConGitHub does not check org membership when user already exists in the app even if org is configured`() {
+    fun `loginConGitHub does not call gitHubOrgService when user already exists in DB with active state`() {
         val dto = GitHubLoginRequestDTO(code = "oauth-code-existing", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "usuario_existente",
@@ -329,7 +299,8 @@ class AuthServiceImplTest {
             username = "usuario_existente",
             esDocente = false,
             email = "existente@unq.edu.ar",
-            nombreCompleto = "Usuario Existente"
+            nombreCompleto = "Usuario Existente",
+            githubState = "active"
         )
 
         Mockito.lenient().`when`(properties.organization).thenReturn("UNQlassroom")
@@ -346,6 +317,40 @@ class AuthServiceImplTest {
         assertEquals(false, response.requiereUnirseAOrg)
         assertNull(response.redirectUrl)
         verifyNoInteractions(gitHubOrgService)
-        verify(properties, never()).organization
+    }
+
+    @Test
+    fun `loginConGitHub does not call gitHubOrgService and redirects directly when user exists in DB with pending state`() {
+        val dto = GitHubLoginRequestDTO(code = "oauth-code-pending-student", esDocente = false)
+        val profile = GitHubUserProfileResponse(
+            login = "alumno_pendiente",
+            id = 222L,
+            name = "Alumno Pendiente",
+            email = "pendiente@unq.edu.ar",
+            avatar_url = null
+        )
+        val existingStudent = Usuario(
+            id = 2L,
+            username = "alumno_pendiente",
+            esDocente = false,
+            email = "pendiente@unq.edu.ar",
+            nombreCompleto = "Alumno Pendiente",
+            githubState = "pending"
+        )
+
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("oauth-code-pending-student")).thenReturn("gho_student")
+        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_student")).thenReturn(profile)
+        `when`(usuarioRepository.findByUsername("alumno_pendiente")).thenReturn(existingStudent)
+
+        val response = authService.loginConGitHub(dto)
+
+        assertNotNull(response)
+        assertTrue(response.requiereUnirseAOrg)
+        assertEquals("https://github.com/orgs/UNQlassroom/invitation", response.redirectUrl)
+        assertNull(response.token)
+        verifyNoInteractions(gitHubOrgService)
+        verify(usuarioRepository).save(existingStudent)
+        verify(jwtService, never()).generateToken(anyUsuario())
     }
 }
