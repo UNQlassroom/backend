@@ -1,9 +1,8 @@
-package com.ar.edu.unq.unqlassroom.service
+package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEventStatus
 import com.ar.edu.unq.unqlassroom.repository.WebhookEventRepository
-import com.ar.edu.unq.unqlassroom.service.webhook.WebhookEventHandler
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

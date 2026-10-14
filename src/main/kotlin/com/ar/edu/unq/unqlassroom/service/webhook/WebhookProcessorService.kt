@@ -1,9 +1,8 @@
-package com.ar.edu.unq.unqlassroom.service
+package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEventStatus
 import com.ar.edu.unq.unqlassroom.repository.WebhookEventRepository
-import com.ar.edu.unq.unqlassroom.service.webhook.WebhookEventHandler
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
