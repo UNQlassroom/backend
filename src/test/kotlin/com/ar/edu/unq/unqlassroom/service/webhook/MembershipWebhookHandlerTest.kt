@@ -28,14 +28,18 @@ class MembershipWebhookHandlerTest {
     }
 
     @Test
-    fun `canHandle retorna true solo para eventos organization case-insensitive`() {
-        val eventOrg = WebhookEvent(eventType = "organization", payload = "{}")
-        val eventOrgUpper = WebhookEvent(eventType = "ORGANIZATION", payload = "{}")
-        val eventMembership = WebhookEvent(eventType = "membership", payload = "{}")
-        val eventPush = WebhookEvent(eventType = "push", payload = "{}")
+    fun `canHandle retorna true solo para eventos organization con action member_added case-insensitive`() {
+        val eventOrgAdded = WebhookEvent(eventType = "organization", action = "member_added", payload = "{}")
+        val eventOrgUpper = WebhookEvent(eventType = "ORGANIZATION", action = "MEMBER_ADDED", payload = "{}")
+        val eventFromPayload = WebhookEvent(eventType = "organization", payload = """{"action": "member_added"}""")
+        val eventOrgInvited = WebhookEvent(eventType = "organization", action = "member_invited", payload = "{}")
+        val eventMembership = WebhookEvent(eventType = "membership", action = "member_added", payload = "{}")
+        val eventPush = WebhookEvent(eventType = "push", action = "member_added", payload = "{}")
 
-        assertTrue(handler.canHandle(eventOrg))
+        assertTrue(handler.canHandle(eventOrgAdded))
         assertTrue(handler.canHandle(eventOrgUpper))
+        assertTrue(handler.canHandle(eventFromPayload))
+        assertFalse(handler.canHandle(eventOrgInvited))
         assertFalse(handler.canHandle(eventMembership))
         assertFalse(handler.canHandle(eventPush))
     }
@@ -73,31 +77,6 @@ class MembershipWebhookHandlerTest {
 
         assertEquals("active", usuario.githubState)
         verify(usuarioRepository).save(usuario)
-    }
-
-    @Test
-    fun `handle con organization member_invited se ignora sin error ni persistencia`() {
-        val payload = """
-        {
-          "action": "member_invited",
-          "membership": {
-            "user": {
-              "login": "thiagoDePrueba"
-            }
-          }
-        }
-        """.trimIndent()
-
-        val event = WebhookEvent(
-            id = UUID.randomUUID(),
-            eventType = "organization",
-            action = "member_invited",
-            payload = payload
-        )
-
-        handler.handle(event)
-
-        verifyNoInteractions(usuarioRepository)
     }
 
     @Test
