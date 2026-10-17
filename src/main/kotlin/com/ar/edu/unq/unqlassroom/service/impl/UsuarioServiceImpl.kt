@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.service.impl
+package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
@@ -17,6 +17,7 @@ class UsuarioServiceImpl(
     @Transactional(readOnly = true)
     override fun obtenerDocente(username: String): Usuario {
         val usuario = usuarioRepository.findByUsername(username)
+            ?: usuarioRepository.findByUsernameIgnoreCase(username)
             ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
 
         if (!usuario.esDocente) {
@@ -28,6 +29,7 @@ class UsuarioServiceImpl(
 
     override fun obtenerOCrearAlumno(username: String): Usuario {
         return usuarioRepository.findByUsername(username)
+            ?: usuarioRepository.findByUsernameIgnoreCase(username)
             ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
     }
 }

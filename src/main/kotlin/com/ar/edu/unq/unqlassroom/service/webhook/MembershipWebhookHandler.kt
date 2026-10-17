@@ -41,15 +41,27 @@ class MembershipWebhookHandler(
             return
         }
 
-        val usuario = usuarioRepository.findByUsername(username)
+        val usuario = usuarioRepository.findByUsernameIgnoreCase(username)
+            ?: usuarioRepository.findByUsername(username)
         if (usuario == null) {
             logger.info("El usuario '{}' no existe en la base de datos de UNQlassroom", username)
             return
         }
 
-        if (usuario.activarSiCorresponde("active")) {
+        val casingCambio = usuario.username != username
+        if (casingCambio) {
+            usuario.username = username
+        }
+
+        val estadoCambio = usuario.activarSiCorresponde("active")
+
+        if (estadoCambio || casingCambio) {
             usuarioRepository.save(usuario)
-            logger.info("Nuevo usuario activo en la organización: '{}'", username)
+            if (estadoCambio) {
+                logger.info("Nuevo usuario activo en la organización: '{}'", username)
+            } else {
+                logger.info("Username actualizado a '{}' para usuario ya activo en la organización", username)
+            }
         } else {
             logger.info("El usuario '{}' ya se encontraba en estado activo en la organización", username)
         }
@@ -67,6 +79,8 @@ class MembershipWebhookHandler(
     private fun extraerUsername(rootNode: com.fasterxml.jackson.databind.JsonNode): String? {
         val membershipUser = rootNode.path("membership").path("user").path("login").asText(null)
         if (!membershipUser.isNullOrBlank()) return membershipUser
+        val memberUser = rootNode.path("member").path("login").asText(null)
+        if (!memberUser.isNullOrBlank()) return memberUser
         return null
     }
 }

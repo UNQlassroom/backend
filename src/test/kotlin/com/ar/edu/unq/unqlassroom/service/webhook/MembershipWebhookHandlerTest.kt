@@ -71,11 +71,48 @@ class MembershipWebhookHandlerTest {
 
         val usuario = Usuario(id = 1L, username = "thiagoDePrueba", githubState = "pending")
 
-        `when`(usuarioRepository.findByUsername("thiagoDePrueba")).thenReturn(usuario)
+        `when`(usuarioRepository.findByUsernameIgnoreCase("thiagoDePrueba")).thenReturn(usuario)
 
         handler.handle(event)
 
         assertEquals("active", usuario.githubState)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `handle con organization member_added actualiza base de datos cuando docente guardo username con mayusculas diferentes`() {
+        val payload = """
+        {
+          "action": "member_added",
+          "membership": {
+            "state": "active",
+            "role": "member",
+            "user": {
+              "login": "thiagoDePrueba"
+            }
+          },
+          "organization": {
+            "login": "UNQlassroom-cursos"
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        // El usuario fue guardado previamente en mayúsculas ("THIAGODEPRUEBA")
+        val usuario = Usuario(id = 1L, username = "THIAGODEPRUEBA", githubState = "pending")
+
+        `when`(usuarioRepository.findByUsernameIgnoreCase("thiagoDePrueba")).thenReturn(usuario)
+
+        handler.handle(event)
+
+        assertEquals("active", usuario.githubState)
+        assertEquals("thiagoDePrueba", usuario.username)
         verify(usuarioRepository).save(usuario)
     }
 
@@ -99,11 +136,11 @@ class MembershipWebhookHandlerTest {
             payload = payload
         )
 
-        `when`(usuarioRepository.findByUsername("desconocido")).thenReturn(null)
+        `when`(usuarioRepository.findByUsernameIgnoreCase("desconocido")).thenReturn(null)
 
         handler.handle(event)
 
-        verify(usuarioRepository).findByUsername("desconocido")
+        verify(usuarioRepository).findByUsernameIgnoreCase("desconocido")
         verify(usuarioRepository, never()).save(any())
     }
 
@@ -128,12 +165,40 @@ class MembershipWebhookHandlerTest {
         )
 
         val usuario = Usuario(id = 3L, username = "alumnoActivo", githubState = "active")
-        `when`(usuarioRepository.findByUsername("alumnoActivo")).thenReturn(usuario)
+        `when`(usuarioRepository.findByUsernameIgnoreCase("alumnoActivo")).thenReturn(usuario)
 
         handler.handle(event)
 
-        verify(usuarioRepository).findByUsername("alumnoActivo")
+        verify(usuarioRepository).findByUsernameIgnoreCase("alumnoActivo")
         verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `handle extrae username desde nodo member si membership user no esta presente`() {
+        val payload = """
+        {
+          "action": "member_added",
+          "member": {
+            "login": "thiagoDePrueba"
+          }
+        }
+        """.trimIndent()
+
+        val event = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "organization",
+            action = "member_added",
+            payload = payload
+        )
+
+        val usuario = Usuario(id = 1L, username = "THIAGODEPRUEBA", githubState = "pending")
+        `when`(usuarioRepository.findByUsernameIgnoreCase("thiagoDePrueba")).thenReturn(usuario)
+
+        handler.handle(event)
+
+        assertEquals("active", usuario.githubState)
+        assertEquals("thiagoDePrueba", usuario.username)
+        verify(usuarioRepository).save(usuario)
     }
 
     @Test

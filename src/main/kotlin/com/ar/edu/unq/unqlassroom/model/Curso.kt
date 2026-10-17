@@ -53,7 +53,7 @@ class Curso (
     }
 
     fun esOwner(username: String?): Boolean =
-        owner?.username != null && owner?.username == username && (owner?.esDocente == true)
+        owner?.username != null && owner?.username.equals(username, ignoreCase = true) && (owner?.esDocente == true)
 
     fun asignarOwner(docente: Usuario) {
         if (!docente.esDocente) {

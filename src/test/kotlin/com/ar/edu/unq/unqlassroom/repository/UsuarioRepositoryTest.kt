@@ -45,4 +45,25 @@ class UsuarioRepositoryTest {
         assertTrue(usuarioRepository.existsByUsername("alumno_maria"))
         assertFalse(usuarioRepository.existsByUsername("alumno_desconocido"))
     }
+
+    @Test
+    fun `findByUsernameIgnoreCase returns user regardless of casing`() {
+        val user = Usuario(
+            username = "THIAGODEPRUEBA",
+            nombreCompleto = "Thiago Prueba",
+            esDocente = false
+        )
+        usuarioRepository.save(user)
+
+        val foundLower = usuarioRepository.findByUsernameIgnoreCase("thiagodeprueba")
+        assertNotNull(foundLower)
+        assertEquals("THIAGODEPRUEBA", foundLower?.username)
+
+        val foundMixed = usuarioRepository.findByUsernameIgnoreCase("thiagoDePrueba")
+        assertNotNull(foundMixed)
+        assertEquals("THIAGODEPRUEBA", foundMixed?.username)
+
+        assertTrue(usuarioRepository.existsByUsernameIgnoreCase("thiagodeprueba"))
+        assertFalse(usuarioRepository.existsByUsernameIgnoreCase("otro_usuario"))
+    }
 }

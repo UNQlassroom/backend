@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.integration.github.service
+package com.ar.edu.unq.unqlassroom.integration.github.service
 
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
@@ -74,7 +74,13 @@ data class SetOrgMembershipRequest(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubUserResponse(
+    @JsonProperty("login") val login: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GitHubOrgMembershipResponse(
     @JsonProperty("state") val state: String = "pending",
     @JsonProperty("role") val role: String = "member",
+    @JsonProperty("user") val user: GitHubUserResponse? = null,
 )

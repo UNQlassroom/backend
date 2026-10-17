@@ -30,6 +30,7 @@ class AuthServiceImpl(
         val perfil = gitHubOAuthClient.obtenerPerfilGitHub(accessToken)
 
         val usuarioExistente = usuarioRepository.findByUsername(perfil.login)
+            ?: usuarioRepository.findByUsernameIgnoreCase(perfil.login)
         val usuario = usuarioExistente ?: Usuario(
             username = perfil.login,
             esDocente = dto.esDocente == true,
@@ -38,6 +39,7 @@ class AuthServiceImpl(
             githubState = "pending",
         )
 
+        usuario.username = perfil.login
         perfil.email?.let { usuario.email = it }
         perfil.name?.let { usuario.nombreCompleto = it }
         usuario.esDocente = dto.esDocente == true
@@ -76,6 +78,7 @@ class AuthServiceImpl(
     @Transactional(readOnly = true)
     override fun loadUserByUsername(username: String): UserDetails {
         val usuario = usuarioRepository.findByUsername(username)
+            ?: usuarioRepository.findByUsernameIgnoreCase(username)
             ?: throw UsernameNotFoundException("Usuario no encontrado: $username")
 
         val rol = if (usuario.esDocente) "ROLE_DOCENTE" else "ROLE_ALUMNO"

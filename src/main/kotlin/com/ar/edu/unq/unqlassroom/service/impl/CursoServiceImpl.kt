@@ -52,7 +52,8 @@ class CursoServiceImpl (
         }
 
         val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null ||
+            inscripcionRepository.findByCursoIdAndUsuarioUsernameIgnoreCase(id, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
             throw SinPermisoAccesoCursoException()
@@ -88,6 +89,7 @@ class CursoServiceImpl (
             val usuario = usuarioService.obtenerOCrearAlumno(username)
 
             val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
+                ?: inscripcionRepository.findByCursoIdAndUsuarioUsernameIgnoreCase(cursoId, username)
             if (inscripcionExistente != null) {
                 inscripcionExistente
             } else {
@@ -96,6 +98,9 @@ class CursoServiceImpl (
                 } else {
                     val membership = gitHubOrgService.invitarMiembro(username)
                     usuario.githubState = membership.state
+                    membership.user?.login?.takeIf { it.isNotBlank() }?.let { canonicalLogin ->
+                        usuario.username = canonicalLogin
+                    }
                     usuarioRepository.save(usuario)
                     membership.role
                 }
@@ -123,8 +128,16 @@ class CursoServiceImpl (
 
         return inscripciones.map { inscripcion ->
             val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
-            if (membership != null && inscripcion.usuario.activarSiCorresponde(membership.state)) {
-                usuarioRepository.save(inscripcion.usuario)
+            if (membership != null) {
+                var modificado = inscripcion.usuario.activarSiCorresponde(membership.state)
+                val canonicalLogin = membership.user?.login
+                if (!canonicalLogin.isNullOrBlank() && canonicalLogin != inscripcion.usuario.username) {
+                    inscripcion.usuario.username = canonicalLogin
+                    modificado = true
+                }
+                if (modificado) {
+                    usuarioRepository.save(inscripcion.usuario)
+                }
             }
             inscripcion
         }
@@ -136,7 +149,8 @@ class CursoServiceImpl (
         }
 
         val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null ||
+            inscripcionRepository.findByCursoIdAndUsuarioUsernameIgnoreCase(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
             throw SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")

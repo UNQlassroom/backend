@@ -60,4 +60,22 @@ class InscripcionRepositoryTest {
         val notFound = inscripcionRepository.findByCursoIdAndUsuarioUsername(curso.id!!, "alumno_inexistente")
         assertNull(notFound)
     }
+
+    @Test
+    fun `findByCursoIdAndUsuarioUsernameIgnoreCase returns inscription regardless of casing`() {
+        val docente = usuarioRepository.save(Usuario(username = "docente_test2", esDocente = true))
+        val alumno = usuarioRepository.save(Usuario(username = "THIAGODEPRUEBA", esDocente = false, githubState = "active"))
+
+        val curso = cursoRepository.save(Curso(materia = "Materia B", anio = 2026, semestre = 2, comision = 1, owner = docente))
+
+        inscripcionRepository.save(Inscripcion(curso = curso, usuario = alumno, githubRole = "member"))
+
+        val foundLower = inscripcionRepository.findByCursoIdAndUsuarioUsernameIgnoreCase(curso.id!!, "thiagodeprueba")
+        assertNotNull(foundLower)
+        assertEquals("THIAGODEPRUEBA", foundLower?.usuario?.username)
+
+        val foundMixed = inscripcionRepository.findByCursoIdAndUsuarioUsernameIgnoreCase(curso.id!!, "thiagoDePrueba")
+        assertNotNull(foundMixed)
+        assertEquals("THIAGODEPRUEBA", foundMixed?.usuario?.username)
+    }
 }
