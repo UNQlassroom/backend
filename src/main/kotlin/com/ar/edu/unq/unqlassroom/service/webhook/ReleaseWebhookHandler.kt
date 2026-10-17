@@ -28,7 +28,7 @@ class ReleaseWebhookHandler(
             return false
         }
         val action = event.action ?: extraerActionDePayload(event.payload)
-        return action == null || action.equals("released", ignoreCase = true) || action.equals("published", ignoreCase = true)
+        return action.equals("released", ignoreCase = true)
     }
 
     @Transactional
