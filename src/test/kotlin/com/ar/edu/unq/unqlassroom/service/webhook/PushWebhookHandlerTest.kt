@@ -44,7 +44,7 @@ class PushWebhookHandlerTest {
     }
 
     @Test
-    fun `handle extrae mensaje, fecha y estadoCI desde head_commit y actualiza Repositorio`() {
+    fun `handle extrae mensaje y fecha desde head_commit y actualiza Repositorio sin modificar estadoCI`() {
         val payload = """
         {
           "repository": {
@@ -84,11 +84,12 @@ class PushWebhookHandlerTest {
         val repoGuardado = captor.value
         assertEquals("feat: resolucion ejercicio 1", repoGuardado.ultimoCommit)
         assertEquals("2026-10-16T15:30:00Z", repoGuardado.fechaUltimoCommit)
-        assertEquals("success", repoGuardado.estadoCI)
+        // No debe modificar estadoCI, mantiene el que ya tenía
+        assertEquals("pending", repoGuardado.estadoCI)
     }
 
     @Test
-    fun `handle extrae mensaje y fecha desde array commits cuando no viene head_commit`() {
+    fun `handle extrae mensaje y fecha desde array commits cuando no viene head_commit sin modificar estadoCI`() {
         val payload = """
         {
           "repository": {
@@ -130,7 +131,8 @@ class PushWebhookHandlerTest {
         val repoGuardado = captor.value
         assertEquals("fix: correcion de tests", repoGuardado.ultimoCommit)
         assertEquals("2026-10-16T18:00:00Z", repoGuardado.fechaUltimoCommit)
-        assertEquals("failure", repoGuardado.estadoCI)
+        // No debe modificar estadoCI
+        assertNull(repoGuardado.estadoCI)
     }
 
     @Test
