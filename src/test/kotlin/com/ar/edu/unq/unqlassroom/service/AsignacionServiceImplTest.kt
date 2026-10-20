@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
@@ -10,9 +10,7 @@ import com.ar.edu.unq.unqlassroom.exception.AsignacionDuplicadaException
 import com.ar.edu.unq.unqlassroom.exception.NombreGrupoDuplicadoException
 import com.ar.edu.unq.unqlassroom.exception.TemplateRepoNoExisteException
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueUser
+import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
@@ -54,7 +52,7 @@ class AsignacionServiceImplTest {
     private lateinit var gitHubCollaboratorService: GitHubCollaboratorService
 
     @Mock
-    private lateinit var gitHubIssueService: GitHubIssueService
+    private lateinit var issueRepository: IssueRepository
 
     @InjectMocks
     private lateinit var asignacionService: AsignacionServiceImpl
@@ -748,21 +746,23 @@ class AsignacionServiceImplTest {
         )
         asignacion.grupos.add(grupo)
 
-        val issue = GitHubIssueItemResponse(
-            number = 1,
-            title = "Corregir test 2",
-            state = "open",
+        val issue = Issue(
+            id = 1L,
+            numero = 1,
+            titulo = "Corregir test 2",
             htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
-            user = GitHubIssueUser(login = "profe_owner"),
-            comments = 0,
-            createdAt = "2026-09-30T10:00:00Z", // 10 AM
-            updatedAt = "2026-09-30T10:00:00Z",
-            closedAt = null
+            autor = "profe_owner",
+            estadoGitHub = "open",
+            cantComentarios = 0,
+            fechaCreacion = "2026-09-30T10:00:00Z", // 10 AM
+            fechaActualizacion = "2026-09-30T10:00:00Z",
+            fechaCierre = null,
+            repositorio = repo
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(100L)).thenReturn(listOf(issue))
 
         val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
 
@@ -771,7 +771,7 @@ class AsignacionServiceImplTest {
         assertEquals("repo-tp1-alumno1", grupoResultado.repoNombre)
         assertEquals(1, grupoResultado.issues.size)
         val issueResultado = grupoResultado.issues[0]
-        assertEquals("ACTUALIZADO", issueResultado.estado)
+        assertEquals(EstadoIssue.ACTUALIZADO, issueResultado.estado)
         assertTrue(issueResultado.tieneCommitsPosteriores)
     }
 
@@ -802,27 +802,29 @@ class AsignacionServiceImplTest {
         )
         asignacion.grupos.add(grupo)
 
-        val issue = GitHubIssueItemResponse(
-            number = 1,
-            title = "Corregir test 2",
-            state = "open",
+        val issue = Issue(
+            id = 1L,
+            numero = 1,
+            titulo = "Corregir test 2",
             htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
-            user = GitHubIssueUser(login = "profe_owner"),
-            comments = 0,
-            createdAt = "2026-09-30T10:00:00Z",
-            updatedAt = "2026-09-30T10:00:00Z",
-            closedAt = null
+            autor = "profe_owner",
+            estadoGitHub = "open",
+            cantComentarios = 0,
+            fechaCreacion = "2026-09-30T10:00:00Z",
+            fechaActualizacion = "2026-09-30T10:00:00Z",
+            fechaCierre = null,
+            repositorio = repo
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(100L)).thenReturn(listOf(issue))
 
         val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
 
         assertEquals(1, resultado.size)
         val issueResultado = resultado[0].issues[0]
-        assertEquals("PENDIENTE", issueResultado.estado)
+        assertEquals(EstadoIssue.PENDIENTE, issueResultado.estado)
         assertFalse(issueResultado.tieneCommitsPosteriores)
     }
 
@@ -853,27 +855,29 @@ class AsignacionServiceImplTest {
         )
         asignacion.grupos.add(grupo)
 
-        val issue = GitHubIssueItemResponse(
-            number = 1,
-            title = "Corregir test 2",
-            state = "closed",
+        val issue = Issue(
+            id = 1L,
+            numero = 1,
+            titulo = "Corregir test 2",
             htmlUrl = "https://github.com/UNQlassroom/repo-tp1-alumno1/issues/1",
-            user = GitHubIssueUser(login = "profe_owner"),
-            comments = 2,
-            createdAt = "2026-09-30T10:00:00Z",
-            updatedAt = "2026-09-30T16:00:00Z",
-            closedAt = "2026-09-30T16:00:00Z"
+            autor = "profe_owner",
+            estadoGitHub = "closed",
+            cantComentarios = 2,
+            fechaCreacion = "2026-09-30T10:00:00Z",
+            fechaActualizacion = "2026-09-30T16:00:00Z",
+            fechaCierre = "2026-09-30T16:00:00Z",
+            repositorio = repo
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubIssueService.getRepositoryIssues("repo-tp1-alumno1")).thenReturn(listOf(issue))
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(100L)).thenReturn(listOf(issue))
 
         val resultado = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
 
         assertEquals(1, resultado.size)
         val issueResultado = resultado[0].issues[0]
-        assertEquals("RESUELTO", issueResultado.estado)
+        assertEquals(EstadoIssue.RESUELTO, issueResultado.estado)
     }
 
     @Test
@@ -1258,8 +1262,7 @@ class AsignacionServiceImplTest {
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1")).thenReturn(inscripcion)
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Repo error"))
-        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(emptyList())
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(1L)).thenReturn(emptyList())
 
         val res = asignacionService.obtenerCorrecciones(10L, 50L, "alumno1")
 
@@ -1288,23 +1291,27 @@ class AsignacionServiceImplTest {
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
         asignacion.grupos.add(grupo)
 
-        val issueWithComments = GitHubIssueItemResponse(
-            number = 1,
-            title = "Feedback",
+        val issueWithComments = Issue(
+            id = 1L,
+            numero = 1,
+            titulo = "Feedback",
             htmlUrl = "https://github.com/issue/1",
-            state = "open",
-            comments = 3,
-            createdAt = "2026-09-15T10:00:00Z"
+            autor = "profe_owner",
+            estadoGitHub = "open",
+            cantComentarios = 3,
+            fechaCreacion = "2026-09-15T10:00:00Z",
+            fechaActualizacion = "2026-09-15T10:00:00Z",
+            repositorio = repo
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(listOf(issueWithComments))
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(1L)).thenReturn(listOf(issueWithComments))
 
         val res = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
 
         assertEquals(1, res.size)
-        assertEquals("ACTUALIZADO", res[0].issues[0].estado)
+        assertEquals(EstadoIssue.ACTUALIZADO, res[0].issues[0].estado)
         assertFalse(res[0].issues[0].tieneCommitsPosteriores)
     }
 
@@ -1329,23 +1336,27 @@ class AsignacionServiceImplTest {
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
         asignacion.grupos.add(grupo)
 
-        val issueNoComments = GitHubIssueItemResponse(
-            number = 1,
-            title = "Feedback",
+        val issueNoComments = Issue(
+            id = 1L,
+            numero = 1,
+            titulo = "Feedback",
             htmlUrl = "https://github.com/issue/1",
-            state = "open",
-            comments = 0,
-            createdAt = "2026-09-15T10:00:00Z"
+            autor = "profe_owner",
+            estadoGitHub = "open",
+            cantComentarios = 0,
+            fechaCreacion = "2026-09-15T10:00:00Z",
+            fechaActualizacion = "2026-09-15T10:00:00Z",
+            repositorio = repo
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubIssueService.getRepositoryIssues("repo1")).thenReturn(listOf(issueNoComments))
+        `when`(issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(1L)).thenReturn(listOf(issueNoComments))
 
         val res = asignacionService.obtenerCorrecciones(10L, 50L, "profe_owner")
 
         assertEquals(1, res.size)
-        assertEquals("PENDIENTE", res[0].issues[0].estado)
+        assertEquals(EstadoIssue.PENDIENTE, res[0].issues[0].estado)
         assertFalse(res[0].issues[0].tieneCommitsPosteriores)
     }
 

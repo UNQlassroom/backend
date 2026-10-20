@@ -352,7 +352,7 @@ class AsignacionControllerTest {
             titulo = "Arreglar tests",
             htmlUrl = "https://github.com/UNQlassroom/repo1/issues/1",
             autor = "profe",
-            estado = "PENDIENTE",
+            estado = EstadoIssue.PENDIENTE,
             tieneCommitsPosteriores = false,
             cantComentarios = 0,
             fechaCreacion = "2026-09-30T10:00:00Z",
