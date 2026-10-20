@@ -7,4 +7,5 @@ import org.springframework.stereotype.Repository
 @Repository
 interface RepositorioRepository : JpaRepository<Repositorio, Long> {
     fun findByNombreIgnoreCase(nombre: String): Repositorio?
+    fun findByEsTemplateTrueAndEliminadoFalseOrderByNombreAsc(): List<Repositorio>
 }
