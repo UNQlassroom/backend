@@ -30,7 +30,7 @@ class ReleaseWebhookHandlerTest {
     }
 
     @Test
-    fun `canHandle retorna true para eventos release con accion released o published o sin accion`() {
+    fun `canHandle retorna true solo para eventos release con accion released`() {
         val eventReleased = WebhookEvent(eventType = "release", action = "released", payload = "{}")
         val eventPublished = WebhookEvent(eventType = "RELEASE", action = "published", payload = "{}")
         val eventNoAction = WebhookEvent(eventType = "release", payload = "{}")
@@ -39,8 +39,8 @@ class ReleaseWebhookHandlerTest {
         val eventPush = WebhookEvent(eventType = "push", action = "released", payload = "{}")
 
         assertTrue(handler.canHandle(eventReleased))
-        assertTrue(handler.canHandle(eventPublished))
-        assertTrue(handler.canHandle(eventNoAction))
+        assertFalse(handler.canHandle(eventPublished))
+        assertFalse(handler.canHandle(eventNoAction))
         assertTrue(handler.canHandle(eventFromPayload))
         assertFalse(handler.canHandle(eventDeleted))
         assertFalse(handler.canHandle(eventPush))

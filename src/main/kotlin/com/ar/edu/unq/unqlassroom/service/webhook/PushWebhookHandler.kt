@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional
  * Handler de eventos de Webhook para 'push' de GitHub.
  *
  * Se encarga de procesar los eventos de tipo PUSH, extraer del payload la información
- * del commit (mensaje y fecha) y el estado de CI para actualizar la entidad Repositorio.
+ * del commit (mensaje y fecha) para actualizar la entidad Repositorio.
  */
 @Component
 class PushWebhookHandler(
@@ -43,21 +43,18 @@ class PushWebhookHandler(
 
         val commitMessage = extraerCommitMessage(rootNode)
         val commitDate = extraerCommitDate(rootNode)
-        val estadoCI = extraerEstadoCI(rootNode)
 
-        repositorio.actualizarInfo(
+        repositorio.actualizarUltimoCommit(
             ultimoCommit = commitMessage ?: repositorio.ultimoCommit,
             fechaUltimoCommit = commitDate ?: repositorio.fechaUltimoCommit,
-            estadoCI = estadoCI ?: repositorio.estadoCI
         )
 
         repositorioRepository.save(repositorio)
         logger.info(
-            "Repositorio '{}' actualizado por push. Ultimo commit: '{}', fecha: '{}', CI: '{}'",
+            "Repositorio '{}' actualizado por push. Ultimo commit: '{}', fecha: '{}'",
             repoName,
             repositorio.ultimoCommit,
             repositorio.fechaUltimoCommit,
-            repositorio.estadoCI
         )
     }
 
@@ -100,25 +97,6 @@ class PushWebhookHandler(
 
         val directDate = rootNode.path("fecha").asText(null)
         if (!directDate.isNullOrBlank()) return directDate
-
-        return null
-    }
-
-    private fun extraerEstadoCI(rootNode: JsonNode): String? {
-        val directFields = listOf("estadoCI", "estado_ci", "ci_status", "status")
-        for (field in directFields) {
-            val value = rootNode.path(field).asText(null)
-            if (!value.isNullOrBlank()) return value
-        }
-
-        val headCommitStatus = rootNode.path("head_commit").path("status").asText(null)
-        if (!headCommitStatus.isNullOrBlank()) return headCommitStatus
-
-        val workflowConclusion = rootNode.path("workflow_run").path("conclusion").asText(null)
-        if (!workflowConclusion.isNullOrBlank()) return workflowConclusion
-
-        val checkConclusion = rootNode.path("check_run").path("conclusion").asText(null)
-        if (!checkConclusion.isNullOrBlank()) return checkConclusion
 
         return null
     }

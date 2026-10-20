@@ -29,5 +29,9 @@ class Repositorio(
         this.fechaUltimoCommit = fechaUltimoCommit
         this.estadoCI = estadoCI
     }
-}
 
+    fun actualizarUltimoCommit(ultimoCommit: String?, fechaUltimoCommit: String?) {
+        this.ultimoCommit = ultimoCommit
+        this.fechaUltimoCommit = fechaUltimoCommit
+    }
+}
