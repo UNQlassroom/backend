@@ -167,4 +167,54 @@ class AsignacionTest {
         assertEquals(1, paraAlumno.grupos.size)
         assertEquals("Alfa", paraAlumno.grupos[0].nombre)
     }
+
+    @Test
+    fun `tieneEntregasOCalificaciones returns false when assignment has no submissions or grades`() {
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl",
+            curso = cursoDummy()
+        )
+        val g1 = GrupoAsignacion(id = 1L, nombre = "Grupo 1", entregada = false, cantidadEntregas = 0, calificacion = null)
+        asignacion.grupos.add(g1)
+
+        assertFalse(asignacion.tieneEntregasOCalificaciones())
+        assertDoesNotThrow { asignacion.validarEliminacion() }
+    }
+
+    @Test
+    fun `tieneEntregasOCalificaciones and validarEliminacion detect submissions or grades`() {
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl",
+            curso = cursoDummy()
+        )
+        val g1 = GrupoAsignacion(id = 1L, nombre = "Grupo 1", entregada = false, cantidadEntregas = 0, calificacion = null)
+        asignacion.grupos.add(g1)
+
+        // Case 1: entregada = true
+        g1.entregada = true
+        assertTrue(asignacion.tieneEntregasOCalificaciones())
+        assertThrows<AsignacionConEntregasOCalificacionesException> {
+            asignacion.validarEliminacion()
+        }
+
+        // Case 2: cantidadEntregas > 0
+        g1.entregada = false
+        g1.cantidadEntregas = 2
+        assertTrue(asignacion.tieneEntregasOCalificaciones())
+        assertThrows<AsignacionConEntregasOCalificacionesException> {
+            asignacion.validarEliminacion()
+        }
+
+        // Case 3: calificacion != null
+        g1.cantidadEntregas = 0
+        g1.calificacion = 8
+        assertTrue(asignacion.tieneEntregasOCalificaciones())
+        assertThrows<AsignacionConEntregasOCalificacionesException> {
+            asignacion.validarEliminacion()
+        }
+    }
 }

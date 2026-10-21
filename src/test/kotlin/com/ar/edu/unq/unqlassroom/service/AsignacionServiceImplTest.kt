@@ -1,7 +1,9 @@
 ﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
+import com.ar.edu.unq.unqlassroom.exception.AsignacionConEntregasOCalificacionesException
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.NoEsDocenteDelCursoException
 import com.ar.edu.unq.unqlassroom.exception.SinPermisoAccesoAsignacionException
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
 import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
@@ -53,6 +55,9 @@ class AsignacionServiceImplTest {
 
     @Mock
     private lateinit var issueRepository: IssueRepository
+
+    @Mock
+    private lateinit var asignacionAsyncDeletionService: AsignacionAsyncDeletionService
 
     @InjectMocks
     private lateinit var asignacionService: AsignacionServiceImpl
@@ -1493,5 +1498,87 @@ class AsignacionServiceImplTest {
         assertThrows<SinPermisoAccesoAsignacionException> {
             asignacionService.obtenerAsignaciones(10L, "profe_cambiado_a_alumno")
         }
+    }
+
+    @Test
+    fun `eliminarAsignacion throws CursoNotFoundException when course does not exist`() {
+        `when`(cursoRepository.findById(99L)).thenReturn(Optional.empty())
+
+        assertThrows<CursoNotFoundException> {
+            asignacionService.eliminarAsignacion(99L, 1L, "profe")
+        }
+    }
+
+    @Test
+    fun `eliminarAsignacion throws NoEsDocenteDelCursoException when user is not owner`() {
+        val docente = Usuario(id = 1L, username = "profe_titular", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        assertThrows<NoEsDocenteDelCursoException> {
+            asignacionService.eliminarAsignacion(10L, 1L, "otro_profe")
+        }
+    }
+
+    @Test
+    fun `eliminarAsignacion throws AsignacionNotFoundException when assignment does not exist in course`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(null)
+
+        assertThrows<AsignacionNotFoundException> {
+            asignacionService.eliminarAsignacion(10L, 1L, "profe")
+        }
+    }
+
+    @Test
+    fun `eliminarAsignacion throws AsignacionConEntregasOCalificacionesException when assignment has deliveries`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl"
+        )
+        val grupo = GrupoAsignacion(id = 100L, asignacion = asignacion, entregada = true)
+        asignacion.grupos.add(grupo)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<AsignacionConEntregasOCalificacionesException> {
+            asignacionService.eliminarAsignacion(10L, 1L, "profe")
+        }
+        assertEquals("No se puede eliminar la asignación porque ya cuenta con entregas o calificaciones registradas", ex.message)
+        assertEquals("ASIGNACION_CON_ENTREGAS_O_CALIFICACIONES", ex.errorCode)
+        verify(asignacionAsyncDeletionService, never()).ejecutarEliminacionAsincronica(anyLong(), anyList())
+    }
+
+    @Test
+    fun `eliminarAsignacion triggers async deletion with repo names when assignment is clean`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl"
+        )
+        val repo1 = Repositorio(id = 10L, nombre = "repo-tp1-alumno1", htmlUrl = "https://github.com/repo1")
+        val repo2 = Repositorio(id = 20L, nombre = "repo-tp1-alumno2", htmlUrl = "https://github.com/repo2")
+        val g1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, entregada = false, cantidadEntregas = 0, calificacion = null)
+        val g2 = GrupoAsignacion(id = 102L, asignacion = asignacion, repositorio = repo2, entregada = false, cantidadEntregas = 0, calificacion = null)
+        asignacion.grupos.addAll(listOf(g1, g2))
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        asignacionService.eliminarAsignacion(10L, 1L, "profe")
+
+        verify(asignacionAsyncDeletionService).ejecutarEliminacionAsincronica(1L, listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
     }
 }

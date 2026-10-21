@@ -57,6 +57,15 @@ class Asignacion(
         }
     }
 
+    fun tieneEntregasOCalificaciones(): Boolean =
+        grupos.any { it.entregada || it.cantidadEntregas > 0 || it.calificacion != null }
+
+    fun validarEliminacion() {
+        if (tieneEntregasOCalificaciones()) {
+            throw AsignacionConEntregasOCalificacionesException()
+        }
+    }
+
     fun validarEstructuraGrupos() {
         if (tipo == TipoAsignacion.INDIVIDUAL) {
             if (grupos.isNotEmpty()) {

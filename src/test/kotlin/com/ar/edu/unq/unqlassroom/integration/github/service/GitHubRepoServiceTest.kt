@@ -622,4 +622,26 @@ class GitHubRepoServiceTest {
         assertEquals("Commit author only", info.ultimoCommit)
         assertEquals("2026-09-10T12:00:00Z", info.fechaUltimoCommit)
     }
+
+    @Test
+    fun `deleteRepository sends DELETE request to repo endpoint`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = anyString(),
+                path = anyString(),
+                responseType = anyClass(Unit::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(Unit)
+
+        gitHubRepoService.deleteRepository("test_repo")
+
+        verify(gitHubAppClient).executeInstallationRequest(
+            method = eqString("DELETE"),
+            path = eqString("/repos/UNQlassroom/test_repo"),
+            responseType = anyClass(Unit::class.java),
+            body = Mockito.isNull()
+        )
+    }
 }

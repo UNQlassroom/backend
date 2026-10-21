@@ -92,4 +92,14 @@ class AsignacionController(
         val response = asignacionService.obtenerCorrecciones(cursoId, asignacionId, authentication.name)
         return ResponseEntity.ok(response)
     }
+
+    @DeleteMapping("/{asignacionId}")
+    fun eliminarAsignacion(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        authentication: Authentication,
+    ): ResponseEntity<Void> {
+        asignacionService.eliminarAsignacion(cursoId, asignacionId, authentication.name)
+        return ResponseEntity.accepted().build()
+    }
 }

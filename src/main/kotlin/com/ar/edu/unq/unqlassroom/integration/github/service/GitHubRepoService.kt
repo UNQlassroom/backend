@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.integration.github.service
+package com.ar.edu.unq.unqlassroom.integration.github.service
 
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
@@ -263,6 +263,19 @@ class GitHubRepoService(
             path = "/repos/$targetOrg/$repoName/releases",
             responseType = GitHubReleaseResponse::class.java,
             body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun deleteRepository(
+        repoName: String,
+        org: String? = null,
+    ) {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        gitHubAppClient.executeInstallationRequest(
+            method = "DELETE",
+            path = "/repos/$targetOrg/$repoName",
+            responseType = Unit::class.java,
         )
     }
 
