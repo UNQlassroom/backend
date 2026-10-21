@@ -22,6 +22,10 @@ class GitHubOrgService(
         return gitHubAppClient.userExists(username)
     }
 
+    fun obtenerUsernameCanonico(username: String): String? {
+        return gitHubAppClient.getUserLogin(username)
+    }
+
     @JvmOverloads
     fun invitarMiembro(
         username: String,

@@ -137,8 +137,37 @@ class GitHubAppClient(
         }
     }
 
+    fun getUserLogin(username: String): String? {
+        val token = getInstallationToken()
+        val request = HttpRequest.newBuilder()
+            .uri(URI.create("${properties.apiBaseUrl}/users/$username"))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        return when (response.statusCode()) {
+            200 -> {
+                val body = response.body()
+                if (body.isNullOrBlank()) {
+                    username
+                } else {
+                    try {
+                        objectMapper.readTree(body).path("login").asText(null)?.takeIf { it.isNotBlank() } ?: username
+                    } catch (_: Exception) {
+                        username
+                    }
+                }
+            }
+            404 -> null
+            else -> handleNon2xxResponse(response.statusCode(), response.body())
+        }
+    }
+
     fun userExists(username: String): Boolean {
-        return checkResourceExists("/users/$username")
+        return getUserLogin(username) != null
     }
 
     private fun handleNon2xxResponse(
