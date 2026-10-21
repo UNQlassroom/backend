@@ -50,7 +50,9 @@ class CursoServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        Mockito.lenient().`when`(gitHubOrgService.userExists(Mockito.anyString())).thenReturn(true)
+        Mockito.lenient().`when`(gitHubOrgService.obtenerUsernameCanonico(Mockito.anyString())).thenAnswer {
+            it.getArgument<String>(0)
+        }
     }
 
     private fun anyCurso(): Curso {
@@ -86,7 +88,7 @@ class CursoServiceImplTest {
         )
 
         val request = AgregarAlumnosRequestDTO(
-            usernames = listOf("alumno1", "alumno2", "alumno1 ")
+            usernames = listOf("alumno1", "alumno2", "alumno1 ", "ALUMNO1")
         )
 
         val response = cursoService.agregarAlumnos(1L, request.usernames, "profe_test")
@@ -106,6 +108,36 @@ class CursoServiceImplTest {
     }
 
     @Test
+    fun `agregarAlumnos saves student with canonical GitHub username when invited with different casing`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(gitHubOrgService.obtenerUsernameCanonico("THIAGOdePRUEBA")).thenReturn("thiagoDePrueba")
+        `when`(usuarioService.obtenerOCrearAlumno("thiagoDePrueba")).thenReturn(
+            Usuario(id = 1L, username = "thiagoDePrueba", esDocente = false, githubState = "pending")
+        )
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "thiagoDePrueba")).thenReturn(null)
+        `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
+        `when`(gitHubOrgService.invitarMiembro("thiagoDePrueba")).thenReturn(
+            GitHubOrgMembershipResponse(state = "pending", role = "member")
+        )
+
+        val response = cursoService.agregarAlumnos(1L, listOf("THIAGOdePRUEBA"), "profe_test")
+
+        assertEquals(1, response.size)
+        assertEquals("thiagoDePrueba", response[0].usuario.username)
+        verify(usuarioService).obtenerOCrearAlumno("thiagoDePrueba")
+        verify(gitHubOrgService).invitarMiembro("thiagoDePrueba")
+    }
+
+    @Test
     fun `agregarAlumnos throws UsuariosGitHubNoEncontradosException when a username does not exist on GitHub`() {
         val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
@@ -117,7 +149,7 @@ class CursoServiceImplTest {
             owner = owner
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
-        `when`(gitHubOrgService.userExists("alumno_fantasma")).thenReturn(false)
+        `when`(gitHubOrgService.obtenerUsernameCanonico("alumno_fantasma")).thenReturn(null)
 
         val request = AgregarAlumnosRequestDTO(
             usernames = listOf("alumno_valido", "alumno_fantasma")

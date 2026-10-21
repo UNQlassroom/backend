@@ -53,6 +53,15 @@ class GitHubOrgServiceTest {
     }
 
     @Test
+    fun `obtenerUsernameCanonico delegates to gitHubAppClient getUserLogin`() {
+        `when`(gitHubAppClient.getUserLogin("THIAGOdePRUEBA")).thenReturn("thiagoDePrueba")
+        `when`(gitHubAppClient.getUserLogin("usuario_invalido")).thenReturn(null)
+
+        assertEquals("thiagoDePrueba", gitHubOrgService.obtenerUsernameCanonico("THIAGOdePRUEBA"))
+        assertNull(gitHubOrgService.obtenerUsernameCanonico("usuario_invalido"))
+    }
+
+    @Test
     fun `invitarMiembro sends PUT request to org memberships and returns response`() {
         `when`(properties.organization).thenReturn("UNQlassroom")
         val membership = GitHubOrgMembershipResponse(state = "pending", role = "member")

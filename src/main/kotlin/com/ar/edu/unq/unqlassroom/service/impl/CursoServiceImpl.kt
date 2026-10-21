@@ -77,14 +77,16 @@ class CursoServiceImpl (
         val distinctUsernames = usernames
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .distinct()
+            .distinctBy { it.lowercase() }
 
-        val usuariosInexistentes = distinctUsernames.filterNot { gitHubOrgService.userExists(it) }
+        val usernamesCanonicos = distinctUsernames.associateWith { gitHubOrgService.obtenerUsernameCanonico(it) }
+        val usuariosInexistentes = usernamesCanonicos.filterValues { it == null }.keys.toList()
         if (usuariosInexistentes.isNotEmpty()) {
             throw UsuariosGitHubNoEncontradosException(usuariosInexistentes)
         }
 
-        return distinctUsernames.map { username ->
+        return distinctUsernames.map { rawUsername ->
+            val username = usernamesCanonicos.getValue(rawUsername)!!
             val usuario = usuarioService.obtenerOCrearAlumno(username)
 
             val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)

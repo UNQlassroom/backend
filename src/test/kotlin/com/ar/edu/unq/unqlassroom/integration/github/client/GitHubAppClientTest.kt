@@ -338,14 +338,16 @@ class GitHubAppClientTest {
         }
 
         server.createContext("/users/existing-user") { exchange ->
-            respondEmpty(exchange, 200)
+            respondJson(exchange, 200, """{"login":"Existing-User"}""")
         }
         server.createContext("/users/missing-user") { exchange ->
             respondEmpty(exchange, 404)
         }
 
         assertTrue(client.userExists("existing-user"))
+        assertEquals("Existing-User", client.getUserLogin("existing-user"))
         assertFalse(client.userExists("missing-user"))
+        assertNull(client.getUserLogin("missing-user"))
     }
 
     @Test
