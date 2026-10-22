@@ -10,10 +10,14 @@ import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.slf4j.LoggerFactory
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.server.ResponseStatusException
 
 @RestControllerAdvice
 class RestExceptionHandler {
+
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     @ExceptionHandler(ResourceNotFoundException::class)
     fun handleResourceNotFound(ex: ResourceNotFoundException, request: HttpServletRequest): ResponseEntity<ApiError> {
@@ -104,8 +108,14 @@ class RestExceptionHandler {
         return buildErrorResponse(ex.reason ?: ex.message, status, request, errorCode = status.name)
     }
 
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(ex: HttpRequestMethodNotSupportedException, request: HttpServletRequest): ResponseEntity<ApiError> {
+        return buildErrorResponse(ex.message, HttpStatus.METHOD_NOT_ALLOWED, request, errorCode = "METHOD_NOT_ALLOWED")
+    }
+
     @ExceptionHandler(Exception::class)
     fun handleGenericException(ex: Exception, request: HttpServletRequest): ResponseEntity<ApiError> {
+        logger.error("Error no controlado procesando {} {}: {}", request.method, request.requestURI, ex.message, ex)
         return buildErrorResponse(
             "Ocurrió un error interno en el servidor",
             HttpStatus.INTERNAL_SERVER_ERROR,

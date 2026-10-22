@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
-class AsignacionAsyncDeletionServiceTest {
+class AsignacionAsyncServiceTest {
 
     @Mock
     private lateinit var gitHubRepoService: GitHubRepoService
@@ -36,11 +36,11 @@ class AsignacionAsyncDeletionServiceTest {
     @Mock
     private lateinit var transactionTemplate: TransactionTemplate
 
-    private lateinit var asyncDeletionService: AsignacionAsyncDeletionService
+    private lateinit var asyncDeletionService: AsignacionAsyncService
 
     @BeforeEach
     fun setUp() {
-        asyncDeletionService = AsignacionAsyncDeletionService(
+        asyncDeletionService = AsignacionAsyncService(
             gitHubRepoService = gitHubRepoService,
             asignacionRepository = asignacionRepository,
             issueRepository = issueRepository,

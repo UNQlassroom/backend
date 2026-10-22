@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 
 @Service
-class AsignacionAsyncDeletionService(
+class AsignacionAsyncService(
     private val gitHubRepoService: GitHubRepoService,
     private val asignacionRepository: AsignacionRepository,
     private val issueRepository: IssueRepository,

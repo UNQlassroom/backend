@@ -10,7 +10,7 @@ import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
-import com.ar.edu.unq.unqlassroom.service.AsignacionAsyncDeletionService
+import com.ar.edu.unq.unqlassroom.service.AsignacionAsyncService
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
@@ -26,7 +26,7 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val issueRepository: IssueRepository,
-    private val asignacionAsyncDeletionService: AsignacionAsyncDeletionService,
+    private val asignacionAsyncService: AsignacionAsyncService,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -396,6 +396,6 @@ class AsignacionServiceImpl(
 
         val repoNames = asignacion.grupos.mapNotNull { it.repositorio?.nombre }
 
-        asignacionAsyncDeletionService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
+        AsignacionAsyncService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
     }
 }

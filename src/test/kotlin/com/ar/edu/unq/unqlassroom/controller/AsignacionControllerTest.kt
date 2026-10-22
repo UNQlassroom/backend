@@ -61,7 +61,7 @@ class AsignacionControllerTest {
     @Test
     fun `crearAsignacion returns 201 and created assignment`() {
         val request = CrearAsignacionRequestDTO(
-            titulo = "TP1 - RecursiÃ³n",
+            titulo = "TP1 - Recursión",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
         )
@@ -70,7 +70,7 @@ class AsignacionControllerTest {
         val asignacionGuardada = Asignacion(
             id = 1L,
             curso = curso,
-            titulo = "TP1 - RecursiÃ³n",
+            titulo = "TP1 - Recursión",
             descripcion = null,
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
@@ -98,7 +98,7 @@ class AsignacionControllerTest {
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.id").value(1))
             .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.titulo").value("TP1 - RecursiÃ³n"))
+            .andExpect(jsonPath("$.titulo").value("TP1 - Recursión"))
             .andExpect(jsonPath("$.tipo").value("INDIVIDUAL"))
             .andExpect(jsonPath("$.grupos[0].integrantes[0].username").value("alumno1"))
     }
@@ -232,7 +232,7 @@ class AsignacionControllerTest {
         val request = CalificarAsignacionRequestDTO(
             grupoId = 50L,
             calificacion = 9,
-            observaciones = "Excelente resoluciÃ³n"
+            observaciones = "Excelente resolución"
         )
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
         val asignacion = Asignacion(
@@ -252,12 +252,12 @@ class AsignacionControllerTest {
             repositorio = repo,
             integrantes = mutableListOf(Usuario(username = "alumno1")),
             calificacion = 9,
-            observaciones = "Excelente resoluciÃ³n",
+            observaciones = "Excelente resolución",
         )
         asignacion.grupos.add(grupo)
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(asignacionService.calificarAsignacion(eq(10L), eq(5L), eq(50L), eq(9), eq("Excelente resoluciÃ³n"), eqString("profe"))).thenReturn(asignacion)
+        `when`(asignacionService.calificarAsignacion(eq(10L), eq(5L), eq(50L), eq(9), eq("Excelente resolución"), eqString("profe"))).thenReturn(asignacion)
 
         mockMvc.perform(
             post("/cursos/10/asignaciones/5/calificar")
@@ -268,7 +268,7 @@ class AsignacionControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.id").value(5))
             .andExpect(jsonPath("$.grupos[0].calificacion").value(9))
-            .andExpect(jsonPath("$.grupos[0].observaciones").value("Excelente resoluciÃ³n"))
+            .andExpect(jsonPath("$.grupos[0].observaciones").value("Excelente resolución"))
     }
 
     @Test
