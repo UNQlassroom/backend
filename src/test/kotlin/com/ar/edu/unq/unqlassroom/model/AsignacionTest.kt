@@ -217,4 +217,77 @@ class AsignacionTest {
             asignacion.validarEliminacion()
         }
     }
+
+    @Test
+    fun `actualizar modifies descripcion and fechaLimite correctly`() {
+        val originalFecha = LocalDateTime.now().plusDays(2)
+        val asignacion = Asignacion(
+            titulo = "TP Original",
+            descripcion = "Desc Original",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "repo-template",
+            fechaLimite = originalFecha,
+            curso = cursoDummy()
+        )
+
+        val nuevaFecha = LocalDateTime.now().plusDays(10)
+        asignacion.actualizar("Nueva Descripcion", nuevaFecha)
+
+        assertEquals("Nueva Descripcion", asignacion.descripcion)
+        assertEquals(nuevaFecha, asignacion.fechaLimite)
+        assertEquals("TP Original", asignacion.titulo)
+        assertEquals(TipoAsignacion.INDIVIDUAL, asignacion.tipo)
+        assertEquals("repo-template", asignacion.templateRepoName)
+    }
+
+    @Test
+    fun `actualizar with fechaLimite in the past throws FechaLimiteInvalidaException`() {
+        val asignacion = Asignacion(
+            titulo = "TP Original",
+            descripcion = "Desc Original",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "repo-template",
+            fechaLimite = LocalDateTime.now().plusDays(2),
+            curso = cursoDummy()
+        )
+
+        val fechaPasada = LocalDateTime.now().minusDays(1)
+        val ex = assertThrows<FechaLimiteInvalidaException> {
+            asignacion.actualizar("Nueva Desc", fechaPasada)
+        }
+        assertEquals("La fecha límite no puede ser anterior a la fecha actual", ex.message)
+    }
+
+    @Test
+    fun `actualizar with null fechaLimite allows clearing deadline`() {
+        val asignacion = Asignacion(
+            titulo = "TP Original",
+            descripcion = "Desc Original",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "repo-template",
+            fechaLimite = LocalDateTime.now().plusDays(2),
+            curso = cursoDummy()
+        )
+
+        asignacion.actualizar("Nueva Desc", null)
+        assertNull(asignacion.fechaLimite)
+        assertEquals("Nueva Desc", asignacion.descripcion)
+    }
+
+    @Test
+    fun `actualizar keeping the same past fechaLimite does not throw`() {
+        val fechaPasada = LocalDateTime.now().minusDays(2)
+        val asignacion = Asignacion(
+            titulo = "TP Original",
+            descripcion = "Desc Original",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "repo-template",
+            fechaLimite = fechaPasada,
+            curso = cursoDummy()
+        )
+
+        asignacion.actualizar("Corrigiendo solo la descripción", fechaPasada)
+        assertEquals("Corrigiendo solo la descripción", asignacion.descripcion)
+        assertEquals(fechaPasada, asignacion.fechaLimite)
+    }
 }

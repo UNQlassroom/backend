@@ -48,6 +48,15 @@ class Asignacion(
         this.curso = curso
     }
 
+    fun actualizar(nuevaDescripcion: String?, nuevaFechaLimite: LocalDateTime?) {
+        val deadlineCambio = nuevaFechaLimite != null && (this.fechaLimite == null || !nuevaFechaLimite.isEqual(this.fechaLimite))
+        if (deadlineCambio && LocalDateTime.now().isAfter(nuevaFechaLimite)) {
+            throw FechaLimiteInvalidaException()
+        }
+        this.descripcion = nuevaDescripcion
+        this.fechaLimite = nuevaFechaLimite
+    }
+
     fun estaVencida(fecha: LocalDateTime = LocalDateTime.now()): Boolean =
         fechaLimite != null && fecha.isAfter(fechaLimite)
 

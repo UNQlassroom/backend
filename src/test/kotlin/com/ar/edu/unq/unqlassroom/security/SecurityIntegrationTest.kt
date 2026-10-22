@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.bind.annotation.PathVariable
@@ -243,5 +244,57 @@ class SecurityIntegrationTest {
                 .header("Authorization", "Bearer $token")
         )
             .andExpect(status().isAccepted)
+    }
+
+    @Test
+    fun `PUT asignacion without token returns 401 Unauthorized`() {
+        mockMvc.perform(
+            put("/cursos/10/asignaciones/5")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+        )
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `PUT asignacion with alumno token returns 403 Forbidden`() {
+        val token = jwtService.generateToken(alumno)
+
+        mockMvc.perform(
+            put("/cursos/10/asignaciones/5")
+                .header("Authorization", "Bearer $token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+        )
+            .andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `PUT asignacion with docente token returns 200 OK`() {
+        val token = jwtService.generateToken(docente)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacion = Asignacion(
+            id = 5L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl"
+        )
+
+        Mockito.`when`(asignacionService.modificarAsignacion(
+            Mockito.eq(10L),
+            Mockito.eq(5L),
+            Mockito.isNull(),
+            Mockito.isNull(),
+            eqString("profe")
+        )).thenReturn(asignacion)
+
+        mockMvc.perform(
+            put("/cursos/10/asignaciones/5")
+                .header("Authorization", "Bearer $token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+        )
+            .andExpect(status().isOk)
     }
 }

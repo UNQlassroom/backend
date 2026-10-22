@@ -27,6 +27,23 @@ class AsignacionController(
         return ResponseEntity.created(URI.create("/cursos/$cursoId/asignaciones/${response.id}")).body(response)
     }
 
+    @PutMapping("/{asignacionId}")
+    fun modificarAsignacion(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestBody @Valid request: ModificarAsignacionRequestDTO,
+        authentication: Authentication,
+    ): ResponseEntity<AsignacionResponseDTO> {
+        val asignacion = asignacionService.modificarAsignacion(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            descripcion = request.descripcion,
+            fechaLimite = request.fechaLimite,
+            solicitanteUsername = authentication.name,
+        )
+        return ResponseEntity.ok(AsignacionResponseDTO.desdeModelo(asignacion))
+    }
+
     @GetMapping
     fun obtenerAsignaciones(
         @PathVariable cursoId: Long,

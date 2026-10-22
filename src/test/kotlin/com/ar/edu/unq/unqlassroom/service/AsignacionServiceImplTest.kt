@@ -1581,4 +1581,160 @@ class AsignacionServiceImplTest {
 
         verify(asignacionAsyncService).ejecutarEliminacionAsincronica(1L, listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
     }
+
+    @Test
+    fun `modificarAsignacion with owner docente updates descripcion and fechaLimite successfully and returns saved entity`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1 - SO",
+            descripcion = "Descripcion vieja",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl-so",
+            fechaLimite = LocalDateTime.now().plusDays(5)
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+        `when`(asignacionRepository.save(any(Asignacion::class.java))).thenAnswer { it.arguments[0] }
+
+        val nuevaFecha = LocalDateTime.now().plusDays(15)
+        val resultado = asignacionService.modificarAsignacion(
+            cursoId = 10L,
+            asignacionId = 1L,
+            descripcion = "Nueva descripcion actualizada",
+            fechaLimite = nuevaFecha,
+            solicitanteUsername = "profe"
+        )
+
+        assertEquals("Nueva descripcion actualizada", resultado.descripcion)
+        assertEquals(nuevaFecha, resultado.fechaLimite)
+        assertEquals("TP1 - SO", resultado.titulo)
+        assertEquals(TipoAsignacion.INDIVIDUAL, resultado.tipo)
+        assertEquals("tmpl-so", resultado.templateRepoName)
+        verify(asignacionRepository).save(asignacion)
+    }
+
+    @Test
+    fun `modificarAsignacion throws CursoNotFoundException when curso does not exist`() {
+        `when`(cursoRepository.findById(999L)).thenReturn(Optional.empty())
+
+        assertThrows<CursoNotFoundException> {
+            asignacionService.modificarAsignacion(
+                cursoId = 999L,
+                asignacionId = 1L,
+                descripcion = "Nueva",
+                fechaLimite = LocalDateTime.now().plusDays(5),
+                solicitanteUsername = "profe"
+            )
+        }
+        verify(asignacionRepository, never()).save(any(Asignacion::class.java))
+    }
+
+    @Test
+    fun `modificarAsignacion throws NoEsDocenteDelCursoException when solicitante is not course owner`() {
+        val docenteOwner = Usuario(id = 1L, username = "profeOwner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+
+        val ex = assertThrows<NoEsDocenteDelCursoException> {
+            asignacionService.modificarAsignacion(
+                cursoId = 10L,
+                asignacionId = 1L,
+                descripcion = "Nueva",
+                fechaLimite = LocalDateTime.now().plusDays(5),
+                solicitanteUsername = "otroDocente"
+            )
+        }
+        assertEquals("Solo el docente a cargo del curso puede modificar asignaciones", ex.message)
+        assertEquals("NO_ES_DOCENTE_DEL_CURSO", ex.errorCode)
+        verify(asignacionRepository, never()).save(any(Asignacion::class.java))
+    }
+
+    @Test
+    fun `modificarAsignacion throws AsignacionNotFoundException when asignacion not found in curso`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
+
+        val ex = assertThrows<AsignacionNotFoundException> {
+            asignacionService.modificarAsignacion(
+                cursoId = 10L,
+                asignacionId = 999L,
+                descripcion = "Nueva",
+                fechaLimite = LocalDateTime.now().plusDays(5),
+                solicitanteUsername = "profe"
+            )
+        }
+        assertEquals("ASIGNACION_NOT_FOUND", ex.errorCode)
+        verify(asignacionRepository, never()).save(any(Asignacion::class.java))
+    }
+
+    @Test
+    fun `modificarAsignacion preserves immutable fields even if called multiple times`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "Titulo Inmutable",
+            descripcion = "Original",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "template-inmutable",
+            fechaLimite = LocalDateTime.now().plusDays(2)
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+        `when`(asignacionRepository.save(any(Asignacion::class.java))).thenAnswer { it.arguments[0] }
+
+        val resultado = asignacionService.modificarAsignacion(
+            cursoId = 10L,
+            asignacionId = 1L,
+            descripcion = "Solo descripcion cambia",
+            fechaLimite = null,
+            solicitanteUsername = "profe"
+        )
+
+        assertEquals("Titulo Inmutable", resultado.titulo)
+        assertEquals(TipoAsignacion.GRUPAL, resultado.tipo)
+        assertEquals("template-inmutable", resultado.templateRepoName)
+        assertEquals("Solo descripcion cambia", resultado.descripcion)
+        assertNull(resultado.fechaLimite)
+    }
+
+    @Test
+    fun `modificarAsignacion throws FechaLimiteInvalidaException when changing deadline to the past`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            descripcion = "Desc",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            fechaLimite = LocalDateTime.now().plusDays(2)
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<com.ar.edu.unq.unqlassroom.exception.FechaLimiteInvalidaException> {
+            asignacionService.modificarAsignacion(
+                cursoId = 10L,
+                asignacionId = 1L,
+                descripcion = "Desc",
+                fechaLimite = LocalDateTime.now().minusDays(1),
+                solicitanteUsername = "profe"
+            )
+        }
+        assertEquals("FECHA_LIMITE_INVALIDA", ex.errorCode)
+        verify(asignacionRepository, never()).save(any(Asignacion::class.java))
+    }
 }
