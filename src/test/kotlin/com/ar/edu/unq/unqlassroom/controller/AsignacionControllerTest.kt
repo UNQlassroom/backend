@@ -13,11 +13,14 @@ import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.any
+import org.mockito.Mockito.doNothing
 import org.mockito.Mockito.eq
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -380,5 +383,19 @@ class AsignacionControllerTest {
             .andExpect(jsonPath("$[0].repoNombre").value("repo1"))
             .andExpect(jsonPath("$[0].issues[0].numero").value(1))
             .andExpect(jsonPath("$[0].issues[0].estado").value("PENDIENTE"))
+    }
+
+    @Test
+    fun `eliminarAsignacion returns 202 Accepted`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        doNothing().`when`(asignacionService).eliminarAsignacion(10L, 5L, "profe")
+
+        mockMvc.perform(
+            delete("/cursos/10/asignaciones/5")
+                .principal(auth)
+        )
+            .andExpect(status().isAccepted)
+
+        verify(asignacionService).eliminarAsignacion(10L, 5L, "profe")
     }
 }

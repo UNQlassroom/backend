@@ -10,6 +10,7 @@ import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
+import com.ar.edu.unq.unqlassroom.service.AsignacionAsyncService
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
@@ -25,6 +26,7 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val issueRepository: IssueRepository,
+    private val asignacionAsyncService: AsignacionAsyncService,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -372,5 +374,28 @@ class AsignacionServiceImpl(
                 issues = issuesDTOs,
             )
         }
+    }
+
+    override fun eliminarAsignacion(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String
+    ) {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede eliminar asignaciones")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        asignacion.validarEliminacion()
+
+        val repoNames = asignacion.grupos.mapNotNull { it.repositorio?.nombre }
+
+        asignacionAsyncService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
     }
 }

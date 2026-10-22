@@ -11,4 +11,5 @@ interface AsignacionService {
     fun marcarAsignacionComoEntregada(cursoId: Long, asignacionId: Long, solicitanteUsername: String, grupoId: Long? = null): Asignacion
     fun calificarAsignacion(cursoId: Long, asignacionId: Long, grupoId: Long, calificacion: Int, observaciones: String?, solicitanteUsername: String): Asignacion
     fun obtenerCorrecciones(cursoId: Long, asignacionId: Long, solicitanteUsername: String): List<CorreccionGrupoResponseDTO>
+    fun eliminarAsignacion(cursoId: Long, asignacionId: Long, solicitanteUsername: String)
 }

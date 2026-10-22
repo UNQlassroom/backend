@@ -27,6 +27,7 @@ import org.springframework.security.core.Authentication
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -210,5 +211,37 @@ class SecurityIntegrationTest {
                 .content(objectMapper.writeValueAsString(request))
         )
             .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `DELETE asignacion without token returns 401 Unauthorized`() {
+        mockMvc.perform(
+            delete("/cursos/10/asignaciones/5")
+        )
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `DELETE asignacion with alumno token returns 403 Forbidden`() {
+        val token = jwtService.generateToken(alumno)
+
+        mockMvc.perform(
+            delete("/cursos/10/asignaciones/5")
+                .header("Authorization", "Bearer $token")
+        )
+            .andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `DELETE asignacion with docente token returns 202 Accepted`() {
+        val token = jwtService.generateToken(docente)
+
+        Mockito.doNothing().`when`(asignacionService).eliminarAsignacion(10L, 5L, "profe")
+
+        mockMvc.perform(
+            delete("/cursos/10/asignaciones/5")
+                .header("Authorization", "Bearer $token")
+        )
+            .andExpect(status().isAccepted)
     }
 }
