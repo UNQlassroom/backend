@@ -1,11 +1,14 @@
 package com.ar.edu.unq.unqlassroom.controller
 
+import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -24,8 +27,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
-import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
-import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -40,7 +41,9 @@ class AsignacionControllerTest {
     private lateinit var asignacionController: AsignacionController
 
     private lateinit var mockMvc: MockMvc
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = ObjectMapper()
+        .findAndRegisterModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
@@ -63,9 +66,7 @@ class AsignacionControllerTest {
 
     @BeforeEach
     fun setUp() {
-        val messageConverter = org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper)
         mockMvc = MockMvcBuilders.standaloneSetup(asignacionController)
-            .setMessageConverters(messageConverter)
             .setControllerAdvice(RestExceptionHandler())
             .build()
     }
@@ -415,9 +416,6 @@ class AsignacionControllerTest {
     fun `modificarAsignacion returns 200 OK and updated assignment`() {
         val auth = UsernamePasswordAuthenticationToken("profe", null)
         val request = ModificarAsignacionRequestDTO(
-            titulo = "Intentando cambiar titulo inmutable",
-            tipo = TipoAsignacion.GRUPAL,
-            templateRepoName = "nuevo-template",
             descripcion = "Descripcion modificada",
             fechaLimite = java.time.LocalDateTime.of(2026, 11, 20, 23, 59, 0),
         )
