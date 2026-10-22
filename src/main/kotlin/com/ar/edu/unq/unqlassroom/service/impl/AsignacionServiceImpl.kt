@@ -15,6 +15,7 @@ import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import java.time.LocalDateTime
 
 @Service
 @Transactional
@@ -169,6 +170,29 @@ class AsignacionServiceImpl(
             }
             asignacion.grupos = gruposConfigurados.toMutableList()
         }
+
+        return asignacionRepository.save(asignacion)
+    }
+
+    override fun modificarAsignacion(
+        cursoId: Long,
+        asignacionId: Long,
+        descripcion: String?,
+        fechaLimite: LocalDateTime?,
+        solicitanteUsername: String
+    ): Asignacion {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede modificar asignaciones")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        asignacion.actualizar(descripcion, fechaLimite)
 
         return asignacionRepository.save(asignacion)
     }

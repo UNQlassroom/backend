@@ -1,11 +1,14 @@
 package com.ar.edu.unq.unqlassroom.controller
 
+import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -23,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -38,6 +42,8 @@ class AsignacionControllerTest {
 
     private lateinit var mockMvc: MockMvc
     private val objectMapper = ObjectMapper()
+        .findAndRegisterModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
@@ -53,9 +59,16 @@ class AsignacionControllerTest {
         return value
     }
 
+    private fun <T> anyNullable(clazz: Class<T>): T? {
+        org.mockito.Mockito.nullable(clazz)
+        return null
+    }
+
     @BeforeEach
     fun setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(asignacionController).build()
+        mockMvc = MockMvcBuilders.standaloneSetup(asignacionController)
+            .setControllerAdvice(RestExceptionHandler())
+            .build()
     }
 
     @Test
@@ -397,5 +410,96 @@ class AsignacionControllerTest {
             .andExpect(status().isAccepted)
 
         verify(asignacionService).eliminarAsignacion(10L, 5L, "profe")
+    }
+
+    @Test
+    fun `modificarAsignacion returns 200 OK and updated assignment`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        val request = ModificarAsignacionRequestDTO(
+            descripcion = "Descripcion modificada",
+            fechaLimite = java.time.LocalDateTime.of(2026, 11, 20, 23, 59, 0),
+        )
+
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
+        val asignacionActualizada = Asignacion(
+            id = 5L,
+            curso = curso,
+            titulo = "TP Original",
+            descripcion = "Descripcion modificada",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl-original",
+            fechaLimite = java.time.LocalDateTime.of(2026, 11, 20, 23, 59, 0),
+        )
+        val repo = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val grupo = GrupoAsignacion(
+            id = 100L,
+            nombre = null,
+            asignacion = asignacionActualizada,
+            repositorio = repo,
+            integrantes = mutableListOf(Usuario(username = "alumno1")),
+        )
+        asignacionActualizada.grupos.add(grupo)
+
+        val fechaEsperada = java.time.LocalDateTime.of(2026, 11, 20, 23, 59, 0)
+        `when`(
+            asignacionService.modificarAsignacion(
+                eq(10L),
+                eq(5L),
+                eqString("Descripcion modificada"),
+                eq(fechaEsperada),
+                eqString("profe")
+            )
+        ).thenReturn(asignacionActualizada)
+
+        mockMvc.perform(
+            put("/cursos/10/asignaciones/5")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(5))
+            .andExpect(jsonPath("$.cursoId").value(10))
+            .andExpect(jsonPath("$.titulo").value("TP Original"))
+            .andExpect(jsonPath("$.tipo").value("INDIVIDUAL"))
+            .andExpect(jsonPath("$.templateRepoName").value("tmpl-original"))
+            .andExpect(jsonPath("$.descripcion").value("Descripcion modificada"))
+
+        verify(asignacionService).modificarAsignacion(
+            eq(10L),
+            eq(5L),
+            eqString("Descripcion modificada"),
+            eq(fechaEsperada),
+            eqString("profe")
+        )
+    }
+
+    @Test
+    fun `modificarAsignacion returns 404 Not Found when assignment does not exist in course`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        val request = ModificarAsignacionRequestDTO(
+            descripcion = "Nueva desc",
+            fechaLimite = null,
+        )
+
+        `when`(
+            asignacionService.modificarAsignacion(
+                eq(10L),
+                eq(999L),
+                eqString("Nueva desc"),
+                anyNullable(java.time.LocalDateTime::class.java),
+                eqString("profe")
+            )
+        ).thenThrow(AsignacionNotFoundException())
+
+        mockMvc.perform(
+            put("/cursos/10/asignaciones/999")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.status").value(404))
+            .andExpect(jsonPath("$.errorCode").value("ASIGNACION_NOT_FOUND"))
     }
 }
