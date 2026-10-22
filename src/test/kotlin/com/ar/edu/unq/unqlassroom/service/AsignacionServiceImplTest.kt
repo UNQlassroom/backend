@@ -57,7 +57,7 @@ class AsignacionServiceImplTest {
     private lateinit var issueRepository: IssueRepository
 
     @Mock
-    private lateinit var asignacionAsyncService: AsignacionAsyncService
+    private lateinit var asyncService: AsyncService
 
     @InjectMocks
     private lateinit var asignacionService: AsignacionServiceImpl
@@ -1554,7 +1554,8 @@ class AsignacionServiceImplTest {
         }
         assertEquals("No se puede eliminar la asignación porque ya cuenta con entregas o calificaciones registradas", ex.message)
         assertEquals("ASIGNACION_CON_ENTREGAS_O_CALIFICACIONES", ex.errorCode)
-        verify(asignacionAsyncService, never()).ejecutarEliminacionAsincronica(anyLong(), anyList())
+        verify(asignacionRepository, never()).delete(any())
+        verify(asyncService, never()).eliminarRepositoriosAsincronicamente(anyList())
     }
 
     @Test
@@ -1579,6 +1580,8 @@ class AsignacionServiceImplTest {
 
         asignacionService.eliminarAsignacion(10L, 1L, "profe")
 
-        verify(asignacionAsyncService).ejecutarEliminacionAsincronica(1L, listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
+        verify(issueRepository).deleteAllByRepositorioIdIn(listOf(10L, 20L))
+        verify(asignacionRepository).delete(asignacion)
+        verify(asyncService).eliminarRepositoriosAsincronicamente(listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
     }
 }

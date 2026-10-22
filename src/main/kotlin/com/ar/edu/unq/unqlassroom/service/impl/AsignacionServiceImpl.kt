@@ -10,8 +10,8 @@ import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
-import com.ar.edu.unq.unqlassroom.service.AsignacionAsyncService
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
+import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
@@ -26,7 +26,7 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val issueRepository: IssueRepository,
-    private val asignacionAsyncService: AsignacionAsyncService,
+    private val asyncService: AsyncService,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -395,7 +395,15 @@ class AsignacionServiceImpl(
         asignacion.validarEliminacion()
 
         val repoNames = asignacion.grupos.mapNotNull { it.repositorio?.nombre }
+        val repoIds = asignacion.grupos.mapNotNull { it.repositorio?.id }
 
-        asignacionAsyncService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
+        if (repoIds.isNotEmpty()) {
+            issueRepository.deleteAllByRepositorioIdIn(repoIds)
+        }
+
+        curso.asignaciones.remove(asignacion)
+        asignacionRepository.delete(asignacion)
+
+        asyncService.eliminarRepositoriosAsincronicamente(repoNames)
     }
 }
