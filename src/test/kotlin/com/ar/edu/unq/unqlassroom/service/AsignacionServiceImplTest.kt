@@ -1,4 +1,4 @@
-﻿package com.ar.edu.unq.unqlassroom.service
+package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionConEntregasOCalificacionesException
@@ -57,7 +57,7 @@ class AsignacionServiceImplTest {
     private lateinit var issueRepository: IssueRepository
 
     @Mock
-    private lateinit var AsignacionAsyncService: AsignacionAsyncService
+    private lateinit var asignacionAsyncService: AsignacionAsyncService
 
     @InjectMocks
     private lateinit var asignacionService: AsignacionServiceImpl
@@ -1554,7 +1554,7 @@ class AsignacionServiceImplTest {
         }
         assertEquals("No se puede eliminar la asignación porque ya cuenta con entregas o calificaciones registradas", ex.message)
         assertEquals("ASIGNACION_CON_ENTREGAS_O_CALIFICACIONES", ex.errorCode)
-        verify(AsignacionAsyncService, never()).ejecutarEliminacionAsincronica(anyLong(), anyList())
+        verify(asignacionAsyncService, never()).ejecutarEliminacionAsincronica(anyLong(), anyList())
     }
 
     @Test
@@ -1579,6 +1579,6 @@ class AsignacionServiceImplTest {
 
         asignacionService.eliminarAsignacion(10L, 1L, "profe")
 
-        verify(AsignacionAsyncService).ejecutarEliminacionAsincronica(1L, listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
+        verify(asignacionAsyncService).ejecutarEliminacionAsincronica(1L, listOf("repo-tp1-alumno1", "repo-tp1-alumno2"))
     }
 }

@@ -396,6 +396,6 @@ class AsignacionServiceImpl(
 
         val repoNames = asignacion.grupos.mapNotNull { it.repositorio?.nombre }
 
-        AsignacionAsyncService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
+        asignacionAsyncService.ejecutarEliminacionAsincronica(asignacionId, repoNames)
     }
 }
