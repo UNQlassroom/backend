@@ -10,6 +10,12 @@ enum class TipoAsignacion {
     GRUPAL
 }
 
+enum class EstadoAsignacion {
+    CREANDO,
+    LISTA,
+    ERROR
+}
+
 @Entity
 @Table(name = "asignaciones")
 class Asignacion(
@@ -33,6 +39,10 @@ class Asignacion(
     @Column(nullable = true)
     var fechaLimite: LocalDateTime? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var estado: EstadoAsignacion = EstadoAsignacion.CREANDO,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "curso_id", nullable = false)
     var curso: Curso? = null,
@@ -48,7 +58,22 @@ class Asignacion(
         this.curso = curso
     }
 
+    fun marcarComoLista() {
+        this.estado = EstadoAsignacion.LISTA
+    }
+
+    fun marcarComoError() {
+        this.estado = EstadoAsignacion.ERROR
+    }
+
+    fun validarEstadoLista() {
+        if (estado != EstadoAsignacion.LISTA) {
+            throw AsignacionNoListaException()
+        }
+    }
+
     fun actualizar(nuevaDescripcion: String?, nuevaFechaLimite: LocalDateTime?) {
+        validarEstadoLista()
         val deadlineCambio = nuevaFechaLimite != null && (this.fechaLimite == null || !nuevaFechaLimite.isEqual(this.fechaLimite))
         if (deadlineCambio && LocalDateTime.now().isAfter(nuevaFechaLimite)) {
             throw FechaLimiteInvalidaException()
@@ -70,6 +95,9 @@ class Asignacion(
         grupos.any { it.entregada || it.cantidadEntregas > 0 || it.calificacion != null }
 
     fun validarEliminacion() {
+        if (estado == EstadoAsignacion.CREANDO) {
+            throw AsignacionEnCreacionException()
+        }
         if (tieneEntregasOCalificaciones()) {
             throw AsignacionConEntregasOCalificacionesException()
         }
@@ -122,6 +150,7 @@ class Asignacion(
             tipo = this.tipo,
             templateRepoName = this.templateRepoName,
             fechaLimite = this.fechaLimite,
+            estado = this.estado,
             curso = this.curso,
             grupos = gruposVisibles.toMutableList()
         )

@@ -3,7 +3,6 @@ package com.ar.edu.unq.unqlassroom.service.impl
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
@@ -15,6 +14,8 @@ import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime
 
 @Service
@@ -25,7 +26,6 @@ class AsignacionServiceImpl(
     private val inscripcionRepository: InscripcionRepository,
     private val usuarioService: UsuarioService,
     private val gitHubRepoService: GitHubRepoService,
-    private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val issueRepository: IssueRepository,
     private val asyncService: AsyncService,
 ) : AsignacionService {
@@ -57,61 +57,23 @@ class AsignacionServiceImpl(
 
         asignacion.asociarACurso(curso)
         asignacion.validarEstructuraGrupos()
+        asignacion.estado = EstadoAsignacion.CREANDO
 
         val docenteUsername = curso.owner?.username ?: solicitanteUsername
         val inscripcionesCurso = inscripcionRepository.findByCursoId(cursoId)
         val alumnosInscriptosUsernames = inscripcionesCurso.map { it.usuario.username }.toSet()
 
         if (asignacion.tipo == TipoAsignacion.INDIVIDUAL) {
-            val gruposGenerados = mutableListOf<GrupoAsignacion>()
-            inscripcionesCurso.forEach { inscripcion ->
-                val alumno = inscripcion.usuario
-                val repoName = asignacion.generarNombreRepo(alumno.username)
-                val repoDesc = asignacion.generarDescripcionRepo(alumno.username)
-
-                if (!gitHubRepoService.repositoryExists(repoName)) {
-                    gitHubRepoService.createRepositoryFromTemplate(
-                        templateRepoName = asignacion.templateRepoName,
-                        newRepoName = repoName,
-                        description = repoDesc,
-                        private = true,
-                    )
-                }
-
-                gitHubCollaboratorService.addCollaborator(
-                    repoName = repoName,
-                    username = alumno.username,
-                    permission = "push",
-                )
-
-                if (docenteUsername != alumno.username) {
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = docenteUsername,
-                        permission = "push",
-                    )
-                }
-
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                val repositorio = Repositorio(
-                    nombre = info.nombre,
-                    htmlUrl = info.htmlUrl,
-                    ultimoCommit = info.ultimoCommit,
-                    fechaUltimoCommit = info.fechaUltimoCommit,
-                    estadoCI = info.estadoCI,
-                )
-
-                val grupo = GrupoAsignacion(
+            val gruposGenerados = inscripcionesCurso.map { inscripcion ->
+                GrupoAsignacion(
                     nombre = null,
                     asignacion = asignacion,
-                    repositorio = repositorio,
-                    integrantes = mutableListOf(alumno),
+                    repositorio = null,
+                    integrantes = mutableListOf(inscripcion.usuario),
                 )
-                gruposGenerados.add(grupo)
-            }
+            }.toMutableList()
             asignacion.grupos = gruposGenerados
         } else {
-            // GRUPAL: validar inscripción en el curso
             val allMembers = asignacion.grupos.flatMap { it.integrantes.map { u -> u.username.trim() } }
             val notEnrolled = allMembers.filterNot { alumnosInscriptosUsernames.contains(it) }
             if (notEnrolled.isNotEmpty()) {
@@ -120,58 +82,28 @@ class AsignacionServiceImpl(
 
             val gruposConfigurados = asignacion.grupos.map { grupoOriginal ->
                 val grupoNombre = grupoOriginal.nombre!!.trim()
-                val repoName = asignacion.generarNombreRepo(grupoNombre)
-                val repoDesc = asignacion.generarDescripcionRepo(grupoNombre)
-
-                if (!gitHubRepoService.repositoryExists(repoName)) {
-                    gitHubRepoService.createRepositoryFromTemplate(
-                        templateRepoName = asignacion.templateRepoName,
-                        newRepoName = repoName,
-                        description = repoDesc,
-                        private = true,
-                    )
-                }
-
                 val integrantesUsuarios = grupoOriginal.integrantes.map { u ->
                     usuarioService.obtenerOCrearAlumno(u.username.trim())
                 }
 
-                integrantesUsuarios.forEach { integrante ->
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = integrante.username,
-                        permission = "push",
-                    )
-                }
-
-                if (integrantesUsuarios.none { it.username == docenteUsername }) {
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = docenteUsername,
-                        permission = "push",
-                    )
-                }
-
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                val repositorio = Repositorio(
-                    nombre = info.nombre,
-                    htmlUrl = info.htmlUrl,
-                    ultimoCommit = info.ultimoCommit,
-                    fechaUltimoCommit = info.fechaUltimoCommit,
-                    estadoCI = info.estadoCI,
-                )
-
                 GrupoAsignacion(
                     nombre = grupoNombre,
                     asignacion = asignacion,
-                    repositorio = repositorio,
+                    repositorio = null,
                     integrantes = integrantesUsuarios.toMutableList(),
                 )
             }
             asignacion.grupos = gruposConfigurados.toMutableList()
         }
 
-        return asignacionRepository.save(asignacion)
+        val asignacionGuardada = asignacionRepository.save(asignacion)
+        val asignacionId = asignacionGuardada.id!!
+
+        ejecutarDespuesDeCommit {
+            asyncService.crearRepositoriosAsignacionAsincronicamente(asignacionId, docenteUsername)
+        }
+
+        return asignacionGuardada
     }
 
     override fun modificarAsignacion(
@@ -261,6 +193,7 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
+        asignacion.validarEstadoLista()
         asignacion.validarVencimiento()
 
         val esOwner = curso.esOwner(solicitanteUsername)
@@ -333,6 +266,8 @@ class AsignacionServiceImpl(
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
+
+        asignacion.validarEstadoLista()
 
         val grupo = asignacion.buscarGrupo(grupoId)
         grupo.calificar(calificacion, observaciones)
@@ -428,6 +363,20 @@ class AsignacionServiceImpl(
         curso.asignaciones.remove(asignacion)
         asignacionRepository.delete(asignacion)
 
-        asyncService.eliminarRepositoriosAsincronicamente(repoNames)
+        ejecutarDespuesDeCommit {
+            asyncService.eliminarRepositoriosAsincronicamente(repoNames)
+        }
+    }
+
+    private fun ejecutarDespuesDeCommit(accion: () -> Unit) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    accion()
+                }
+            })
+        } else {
+            accion()
+        }
     }
 }

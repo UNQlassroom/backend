@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.dto.asignacion.response
 
 import com.ar.edu.unq.unqlassroom.model.Asignacion
+import com.ar.edu.unq.unqlassroom.model.EstadoAsignacion
 import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import java.time.LocalDateTime
@@ -13,6 +14,7 @@ data class AsignacionResponseDTO(
     val tipo: TipoAsignacion,
     val templateRepoName: String,
     val fechaLimite: LocalDateTime?,
+    val estado: EstadoAsignacion,
     val grupos: List<GrupoAsignacionResponseDTO>,
 ) {
     companion object {
@@ -27,6 +29,7 @@ data class AsignacionResponseDTO(
             tipo = asignacion.tipo,
             templateRepoName = asignacion.templateRepoName,
             fechaLimite = asignacion.fechaLimite,
+            estado = asignacion.estado,
             grupos = gruposAMostrar.map { GrupoAsignacionResponseDTO.desdeModelo(it) },
         )
     }

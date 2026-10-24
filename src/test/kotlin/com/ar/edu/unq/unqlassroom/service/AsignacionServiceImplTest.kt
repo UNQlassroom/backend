@@ -2,6 +2,8 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionConEntregasOCalificacionesException
+import com.ar.edu.unq.unqlassroom.exception.AsignacionEnCreacionException
+import com.ar.edu.unq.unqlassroom.exception.AsignacionNoListaException
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.NoEsDocenteDelCursoException
 import com.ar.edu.unq.unqlassroom.exception.SinPermisoAccesoAsignacionException
@@ -11,7 +13,6 @@ import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
 import com.ar.edu.unq.unqlassroom.exception.AsignacionDuplicadaException
 import com.ar.edu.unq.unqlassroom.exception.NombreGrupoDuplicadoException
 import com.ar.edu.unq.unqlassroom.exception.TemplateRepoNoExisteException
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
@@ -49,9 +50,6 @@ class AsignacionServiceImplTest {
 
     @Mock
     private lateinit var gitHubRepoService: GitHubRepoService
-
-    @Mock
-    private lateinit var gitHubCollaboratorService: GitHubCollaboratorService
 
     @Mock
     private lateinit var issueRepository: IssueRepository
@@ -113,7 +111,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `crearAsignacion INDIVIDUAL generates repos from template including curso name, titulo and username`() {
+    fun `crearAsignacion INDIVIDUAL persists assignment with CREANDO state, enrolled student groups and triggers async repo creation`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 10L,
@@ -132,29 +130,6 @@ class AsignacionServiceImplTest {
         `when`(gitHubRepoService.repositoryExists("template-tp1")).thenReturn(true)
         `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
-        val repoName1 = "2026s1_c1_estructuras_de_datos_tp1_alumno1"
-        val repoName2 = "2026s1_c1_estructuras_de_datos_tp1_alumno2"
-
-        `when`(gitHubRepoService.repositoryExists(repoName1)).thenReturn(false)
-        `when`(gitHubRepoService.repositoryExists(repoName2)).thenReturn(false)
-
-        val repoInfo1 = RepositorioInfo(
-            nombre = repoName1,
-            htmlUrl = "https://github.com/UNQlassroom/$repoName1",
-            ultimoCommit = "Initial commit",
-            fechaUltimoCommit = "2026-09-24T18:00:00Z",
-            estadoCI = "success"
-        )
-        val repoInfo2 = RepositorioInfo(
-            nombre = repoName2,
-            htmlUrl = "https://github.com/UNQlassroom/$repoName2",
-            ultimoCommit = "Initial commit",
-            fechaUltimoCommit = "2026-09-24T18:00:00Z",
-            estadoCI = "pending"
-        )
-        `when`(gitHubRepoService.obtenerInformacionRepositorio(repoName1)).thenReturn(repoInfo1)
-        `when`(gitHubRepoService.obtenerInformacionRepositorio(repoName2)).thenReturn(repoInfo2)
-
         `when`(asignacionRepository.save(anyAsignacion())).thenAnswer { invocation ->
             val asig = invocation.getArgument<Asignacion>(0)
             Asignacion(
@@ -164,6 +139,7 @@ class AsignacionServiceImplTest {
                 tipo = asig.tipo,
                 templateRepoName = asig.templateRepoName,
                 fechaLimite = asig.fechaLimite,
+                estado = asig.estado,
                 curso = asig.curso,
                 grupos = asig.grupos,
             )
@@ -183,44 +159,19 @@ class AsignacionServiceImplTest {
         assertEquals(10L, result.curso?.id)
         assertEquals("TP1", result.titulo)
         assertEquals(TipoAsignacion.INDIVIDUAL, result.tipo)
+        assertEquals(EstadoAsignacion.CREANDO, result.estado)
         assertEquals(2, result.grupos.size)
+        assertNull(result.grupos[0].repositorio)
+        assertNull(result.grupos[1].repositorio)
+        assertEquals(listOf("alumno1"), result.grupos[0].integrantes.map { it.username })
+        assertEquals(listOf("alumno2"), result.grupos[1].integrantes.map { it.username })
 
-        verify(gitHubRepoService).createRepositoryFromTemplate(
-            templateRepoName = "template-tp1",
-            newRepoName = repoName1,
-            description = "Repositorio de asignación 'TP1' (alumno1) - Estructuras de Datos (2026s1 comision 1)",
-            private = true,
-        )
-        verify(gitHubCollaboratorService).addCollaborator(
-            repoName = repoName1,
-            username = "alumno1",
-            permission = "push",
-        )
-        verify(gitHubCollaboratorService).addCollaborator(
-            repoName = repoName1,
-            username = "profe_test",
-            permission = "push",
-        )
-        verify(gitHubRepoService).createRepositoryFromTemplate(
-            templateRepoName = "template-tp1",
-            newRepoName = repoName2,
-            description = "Repositorio de asignación 'TP1' (alumno2) - Estructuras de Datos (2026s1 comision 1)",
-            private = true,
-        )
-        verify(gitHubCollaboratorService).addCollaborator(
-            repoName = repoName2,
-            username = "alumno2",
-            permission = "push",
-        )
-        verify(gitHubCollaboratorService).addCollaborator(
-            repoName = repoName2,
-            username = "profe_test",
-            permission = "push",
-        )
+        verify(asyncService).crearRepositoriosAsignacionAsincronicamente(100L, "profe_test")
+        verify(gitHubRepoService, never()).createRepositoryFromTemplate(anyString(), anyString(), anyNullable(String::class.java), anyBoolean(), anyNullable(String::class.java))
     }
 
     @Test
-    fun `crearAsignacion GRUPAL creates shared repo and adds all group members as collaborators`() {
+    fun `crearAsignacion GRUPAL persists assignment with CREANDO state, configured groups and triggers async repo creation`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(
             id = 10L,
@@ -239,20 +190,8 @@ class AsignacionServiceImplTest {
         `when`(gitHubRepoService.repositoryExists("template-tp2")).thenReturn(true)
         `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
-        val repoName = "2026s1_c1_estructuras_de_datos_tp2_grupo_alpha"
-        `when`(gitHubRepoService.repositoryExists(repoName)).thenReturn(false)
-
         `when`(usuarioService.obtenerOCrearAlumno("alumno1")).thenReturn(alumno1)
         `when`(usuarioService.obtenerOCrearAlumno("alumno2")).thenReturn(alumno2)
-
-        val repoInfo = RepositorioInfo(
-            nombre = repoName,
-            htmlUrl = "https://github.com/UNQlassroom/$repoName",
-            ultimoCommit = "Initial commit",
-            fechaUltimoCommit = "2026-09-24T18:00:00Z",
-            estadoCI = "sin_ci"
-        )
-        `when`(gitHubRepoService.obtenerInformacionRepositorio(repoName)).thenReturn(repoInfo)
 
         `when`(asignacionRepository.save(anyAsignacion())).thenAnswer { invocation ->
             val asig = invocation.getArgument<Asignacion>(0)
@@ -263,6 +202,7 @@ class AsignacionServiceImplTest {
                 tipo = asig.tipo,
                 templateRepoName = asig.templateRepoName,
                 fechaLimite = asig.fechaLimite,
+                estado = asig.estado,
                 curso = asig.curso,
                 grupos = asig.grupos,
             )
@@ -286,24 +226,16 @@ class AsignacionServiceImplTest {
         assertNotNull(result)
         assertEquals(200L, result.id)
         assertEquals(TipoAsignacion.GRUPAL, result.tipo)
+        assertEquals(EstadoAsignacion.CREANDO, result.estado)
         assertEquals(1, result.grupos.size)
         val grupo = result.grupos[0]
         assertEquals("Grupo Alpha", grupo.nombre)
         assertEquals(listOf("alumno1", "alumno2"), grupo.integrantes.map { it.username })
-        assertEquals(repoName, grupo.repositorio?.nombre)
+        assertNull(grupo.repositorio)
 
-        verify(gitHubRepoService).createRepositoryFromTemplate(
-            templateRepoName = "template-tp2",
-            newRepoName = repoName,
-            description = "Repositorio de asignación 'TP2' (Grupo Alpha) - Estructuras de Datos (2026s1 comision 1)",
-            private = true,
-        )
-        verify(gitHubCollaboratorService).addCollaborator(repoName, "alumno1", "push")
-        verify(gitHubCollaboratorService).addCollaborator(repoName, "alumno2", "push")
-        verify(gitHubCollaboratorService).addCollaborator(repoName, "profe_test", "push")
+        verify(asyncService).crearRepositoriosAsignacionAsincronicamente(200L, "profe_test")
+        verify(gitHubRepoService, never()).createRepositoryFromTemplate(anyString(), anyString(), anyNullable(String::class.java), anyBoolean(), anyNullable(String::class.java))
     }
-
-    @Test
     fun `crearAsignacion GRUPAL throws BadRequestException when a student is repeated across groups`() {
         val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
@@ -560,6 +492,7 @@ class AsignacionServiceImplTest {
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = curso,
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
@@ -591,6 +524,7 @@ class AsignacionServiceImplTest {
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = curso,
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
@@ -624,6 +558,7 @@ class AsignacionServiceImplTest {
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = curso,
         )
         val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
@@ -649,6 +584,7 @@ class AsignacionServiceImplTest {
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = curso,
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion)
@@ -712,6 +648,7 @@ class AsignacionServiceImplTest {
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = curso,
         )
 
@@ -722,6 +659,34 @@ class AsignacionServiceImplTest {
             asignacionService.calificarAsignacion(10L, 50L, 999L, 8, null, "profe_owner")
         }
         assertEquals("El grupo especificado no pertenece a la asignación", ex.message)
+    }
+
+    @Test
+    fun `calificarAsignacion throws AsignacionNoListaException when asignacion is in CREANDO or ERROR state`() {
+        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.CREANDO,
+            curso = curso,
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val exCreando = assertThrows<AsignacionNoListaException> {
+            asignacionService.calificarAsignacion(10L, 50L, 101L, 8, null, "profe_owner")
+        }
+        assertEquals("ASIGNACION_NO_LISTA", exCreando.errorCode)
+
+        asignacion.marcarComoError()
+        val exError = assertThrows<AsignacionNoListaException> {
+            asignacionService.calificarAsignacion(10L, 50L, 101L, 8, null, "profe_owner")
+        }
+        assertEquals("ASIGNACION_NO_LISTA", exError.errorCode)
     }
 
     @Test
@@ -920,6 +885,26 @@ class AsignacionServiceImplTest {
     }
 
     @Test
+    fun `marcarAsignacionComoEntregada throws AsignacionNoListaException when asignacion is not in LISTA state`() {
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1)
+        val asignacion = Asignacion(
+            id = 50L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.CREANDO,
+            curso = curso
+        )
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<AsignacionNoListaException> {
+            asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno", null)
+        }
+        assertEquals("ASIGNACION_NO_LISTA", ex.errorCode)
+    }
+
+    @Test
     fun `marcarAsignacionComoEntregada throws BadRequestException when deadline expired`() {
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1)
         val asignacion = Asignacion(
@@ -928,6 +913,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().minusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -949,6 +935,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -971,6 +958,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -992,6 +980,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -1013,6 +1002,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         val alumno = Usuario(id = 2L, username = "alumno_sin_grupo", esDocente = false)
@@ -1040,6 +1030,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
@@ -1069,6 +1060,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
@@ -1122,6 +1114,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         val grupo = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo, integrantes = mutableListOf(alumno))
@@ -1168,6 +1161,7 @@ class AsignacionServiceImplTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = LocalDateTime.now().plusDays(1),
+            estado = EstadoAsignacion.LISTA,
             curso = curso
         )
         val grupo1 = GrupoAsignacion(id = 101L, asignacion = asignacion, repositorio = repo1, integrantes = mutableListOf(alumno1))
@@ -1533,6 +1527,52 @@ class AsignacionServiceImplTest {
     }
 
     @Test
+    fun `eliminarAsignacion throws AsignacionEnCreacionException when assignment is in CREANDO state`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.CREANDO
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<AsignacionEnCreacionException> {
+            asignacionService.eliminarAsignacion(10L, 1L, "profe")
+        }
+        assertEquals("ASIGNACION_EN_CREACION", ex.errorCode)
+        verify(asignacionRepository, never()).delete(any())
+        verify(asyncService, never()).eliminarRepositoriosAsincronicamente(anyList())
+    }
+
+    @Test
+    fun `eliminarAsignacion allows deleting assignment in ERROR state`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.ERROR
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        asignacionService.eliminarAsignacion(10L, 1L, "profe")
+
+        verify(asignacionRepository).delete(asignacion)
+        verify(asyncService).eliminarRepositoriosAsincronicamente(emptyList())
+    }
+
+    @Test
     fun `eliminarAsignacion throws AsignacionConEntregasOCalificacionesException when assignment has deliveries`() {
         val docente = Usuario(id = 1L, username = "profe", esDocente = true)
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
@@ -1541,7 +1581,8 @@ class AsignacionServiceImplTest {
             curso = curso,
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "tmpl"
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA
         )
         val grupo = GrupoAsignacion(id = 100L, asignacion = asignacion, entregada = true)
         asignacion.grupos.add(grupo)
@@ -1567,7 +1608,8 @@ class AsignacionServiceImplTest {
             curso = curso,
             titulo = "TP1",
             tipo = TipoAsignacion.INDIVIDUAL,
-            templateRepoName = "tmpl"
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA
         )
         val repo1 = Repositorio(id = 10L, nombre = "repo-tp1-alumno1", htmlUrl = "https://github.com/repo1")
         val repo2 = Repositorio(id = 20L, nombre = "repo-tp1-alumno2", htmlUrl = "https://github.com/repo2")
@@ -1596,7 +1638,8 @@ class AsignacionServiceImplTest {
             descripcion = "Descripcion vieja",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl-so",
-            fechaLimite = LocalDateTime.now().plusDays(5)
+            fechaLimite = LocalDateTime.now().plusDays(5),
+            estado = EstadoAsignacion.LISTA
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -1618,6 +1661,35 @@ class AsignacionServiceImplTest {
         assertEquals(TipoAsignacion.INDIVIDUAL, resultado.tipo)
         assertEquals("tmpl-so", resultado.templateRepoName)
         verify(asignacionRepository).save(asignacion)
+    }
+
+    @Test
+    fun `modificarAsignacion throws AsignacionNoListaException when asignacion is not in LISTA state`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1 - SO",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl-so",
+            estado = EstadoAsignacion.CREANDO
+        )
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        val ex = assertThrows<AsignacionNoListaException> {
+            asignacionService.modificarAsignacion(
+                cursoId = 10L,
+                asignacionId = 1L,
+                descripcion = "Nueva",
+                fechaLimite = null,
+                solicitanteUsername = "profe"
+            )
+        }
+        assertEquals("ASIGNACION_NO_LISTA", ex.errorCode)
+        verify(asignacionRepository, never()).save(any(Asignacion::class.java))
     }
 
     @Test
@@ -1689,7 +1761,8 @@ class AsignacionServiceImplTest {
             descripcion = "Original",
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "template-inmutable",
-            fechaLimite = LocalDateTime.now().plusDays(2)
+            fechaLimite = LocalDateTime.now().plusDays(2),
+            estado = EstadoAsignacion.LISTA
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -1722,7 +1795,8 @@ class AsignacionServiceImplTest {
             descripcion = "Desc",
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
-            fechaLimite = LocalDateTime.now().plusDays(2)
+            fechaLimite = LocalDateTime.now().plusDays(2),
+            estado = EstadoAsignacion.LISTA
         )
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
