@@ -12,6 +12,24 @@ class AsignacionTest {
         Curso(materia = "Base de Datos", anio = 2026, semestre = 1, comision = 1)
 
     @Test
+    fun `nueva asignacion inicia en estado CREANDO y puede transicionar a LISTA o ERROR`() {
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = cursoDummy()
+        )
+
+        assertEquals(EstadoAsignacion.CREANDO, asignacion.estado)
+
+        asignacion.marcarComoLista()
+        assertEquals(EstadoAsignacion.LISTA, asignacion.estado)
+
+        asignacion.marcarComoError()
+        assertEquals(EstadoAsignacion.ERROR, asignacion.estado)
+    }
+
+    @Test
     fun `estaVencida and validarNoVencida work according to fechaLimite`() {
         val futuro = LocalDateTime.now().plusDays(5)
         val asignacion = Asignacion(
@@ -152,6 +170,7 @@ class AsignacionTest {
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
         val u1 = Usuario(username = "alumno1")
@@ -162,10 +181,12 @@ class AsignacionTest {
 
         val paraOwner = asignacion.paraVisualizacionDe("profe", esOwner = true)
         assertEquals(2, paraOwner.grupos.size)
+        assertEquals(EstadoAsignacion.LISTA, paraOwner.estado)
 
         val paraAlumno = asignacion.paraVisualizacionDe("alumno1", esOwner = false)
         assertEquals(1, paraAlumno.grupos.size)
         assertEquals("Alfa", paraAlumno.grupos[0].nombre)
+        assertEquals(EstadoAsignacion.LISTA, paraAlumno.estado)
     }
 
     @Test
