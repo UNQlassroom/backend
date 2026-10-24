@@ -66,7 +66,14 @@ class Asignacion(
         this.estado = EstadoAsignacion.ERROR
     }
 
+    fun validarEstadoLista() {
+        if (estado != EstadoAsignacion.LISTA) {
+            throw AsignacionNoListaException()
+        }
+    }
+
     fun actualizar(nuevaDescripcion: String?, nuevaFechaLimite: LocalDateTime?) {
+        validarEstadoLista()
         val deadlineCambio = nuevaFechaLimite != null && (this.fechaLimite == null || !nuevaFechaLimite.isEqual(this.fechaLimite))
         if (deadlineCambio && LocalDateTime.now().isAfter(nuevaFechaLimite)) {
             throw FechaLimiteInvalidaException()
@@ -88,6 +95,9 @@ class Asignacion(
         grupos.any { it.entregada || it.cantidadEntregas > 0 || it.calificacion != null }
 
     fun validarEliminacion() {
+        if (estado == EstadoAsignacion.CREANDO) {
+            throw AsignacionEnCreacionException()
+        }
         if (tieneEntregasOCalificaciones()) {
             throw AsignacionConEntregasOCalificacionesException()
         }

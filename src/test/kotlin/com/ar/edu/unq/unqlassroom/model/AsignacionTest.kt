@@ -30,6 +30,30 @@ class AsignacionTest {
     }
 
     @Test
+    fun `validarEstadoLista throws AsignacionNoListaException when estado is CREANDO or ERROR and succeeds when LISTA`() {
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = cursoDummy()
+        )
+
+        val exCreando = assertThrows<AsignacionNoListaException> {
+            asignacion.validarEstadoLista()
+        }
+        assertEquals("ASIGNACION_NO_LISTA", exCreando.errorCode)
+
+        asignacion.marcarComoError()
+        val exError = assertThrows<AsignacionNoListaException> {
+            asignacion.validarEstadoLista()
+        }
+        assertEquals("ASIGNACION_NO_LISTA", exError.errorCode)
+
+        asignacion.marcarComoLista()
+        assertDoesNotThrow { asignacion.validarEstadoLista() }
+    }
+
+    @Test
     fun `estaVencida and validarNoVencida work according to fechaLimite`() {
         val futuro = LocalDateTime.now().plusDays(5)
         val asignacion = Asignacion(
@@ -195,6 +219,7 @@ class AsignacionTest {
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
         val g1 = GrupoAsignacion(id = 1L, nombre = "Grupo 1", entregada = false, cantidadEntregas = 0, calificacion = null)
@@ -205,11 +230,34 @@ class AsignacionTest {
     }
 
     @Test
+    fun `validarEliminacion throws AsignacionEnCreacionException when estado is CREANDO and allows ERROR or LISTA`() {
+        val asignacion = Asignacion(
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.CREANDO,
+            curso = cursoDummy()
+        )
+
+        val ex = assertThrows<AsignacionEnCreacionException> {
+            asignacion.validarEliminacion()
+        }
+        assertEquals("ASIGNACION_EN_CREACION", ex.errorCode)
+
+        asignacion.marcarComoError()
+        assertDoesNotThrow { asignacion.validarEliminacion() }
+
+        asignacion.marcarComoLista()
+        assertDoesNotThrow { asignacion.validarEliminacion() }
+    }
+
+    @Test
     fun `tieneEntregasOCalificaciones and validarEliminacion detect submissions or grades`() {
         val asignacion = Asignacion(
             titulo = "TP1",
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
         val g1 = GrupoAsignacion(id = 1L, nombre = "Grupo 1", entregada = false, cantidadEntregas = 0, calificacion = null)
@@ -248,6 +296,7 @@ class AsignacionTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "repo-template",
             fechaLimite = originalFecha,
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
 
@@ -262,6 +311,22 @@ class AsignacionTest {
     }
 
     @Test
+    fun `actualizar throws AsignacionNoListaException when estado is not LISTA`() {
+        val asignacion = Asignacion(
+            titulo = "TP Original",
+            descripcion = "Desc Original",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "repo-template",
+            estado = EstadoAsignacion.CREANDO,
+            curso = cursoDummy()
+        )
+
+        assertThrows<AsignacionNoListaException> {
+            asignacion.actualizar("Nueva Desc", null)
+        }
+    }
+
+    @Test
     fun `actualizar with fechaLimite in the past throws FechaLimiteInvalidaException`() {
         val asignacion = Asignacion(
             titulo = "TP Original",
@@ -269,6 +334,7 @@ class AsignacionTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "repo-template",
             fechaLimite = LocalDateTime.now().plusDays(2),
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
 
@@ -287,6 +353,7 @@ class AsignacionTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "repo-template",
             fechaLimite = LocalDateTime.now().plusDays(2),
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
 
@@ -304,6 +371,7 @@ class AsignacionTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "repo-template",
             fechaLimite = fechaPasada,
+            estado = EstadoAsignacion.LISTA,
             curso = cursoDummy()
         )
 

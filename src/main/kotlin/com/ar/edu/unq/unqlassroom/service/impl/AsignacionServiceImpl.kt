@@ -14,6 +14,8 @@ import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime
 
 @Service
@@ -95,7 +97,11 @@ class AsignacionServiceImpl(
         }
 
         val asignacionGuardada = asignacionRepository.save(asignacion)
-        asyncService.crearRepositoriosAsignacionAsincronicamente(asignacionGuardada.id!!, docenteUsername)
+        val asignacionId = asignacionGuardada.id!!
+
+        ejecutarDespuesDeCommit {
+            asyncService.crearRepositoriosAsignacionAsincronicamente(asignacionId, docenteUsername)
+        }
 
         return asignacionGuardada
     }
@@ -187,6 +193,7 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
+        asignacion.validarEstadoLista()
         asignacion.validarVencimiento()
 
         val esOwner = curso.esOwner(solicitanteUsername)
@@ -259,6 +266,8 @@ class AsignacionServiceImpl(
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
+
+        asignacion.validarEstadoLista()
 
         val grupo = asignacion.buscarGrupo(grupoId)
         grupo.calificar(calificacion, observaciones)
@@ -354,6 +363,20 @@ class AsignacionServiceImpl(
         curso.asignaciones.remove(asignacion)
         asignacionRepository.delete(asignacion)
 
-        asyncService.eliminarRepositoriosAsincronicamente(repoNames)
+        ejecutarDespuesDeCommit {
+            asyncService.eliminarRepositoriosAsincronicamente(repoNames)
+        }
+    }
+
+    private fun ejecutarDespuesDeCommit(accion: () -> Unit) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    accion()
+                }
+            })
+        } else {
+            accion()
+        }
     }
 }
