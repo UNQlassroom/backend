@@ -7,7 +7,6 @@ import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
-import java.net.URI
 
 @RestController
 @RequestMapping("/cursos/{cursoId}/asignaciones")
@@ -24,7 +23,7 @@ class AsignacionController(
         val asignacion = request.aModelo()
         val asignacionGuardada = asignacionService.crearAsignacion(cursoId, asignacion, authentication.name)
         val response = AsignacionResponseDTO.desdeModelo(asignacionGuardada)
-        return ResponseEntity.created(URI.create("/cursos/$cursoId/asignaciones/${response.id}")).body(response)
+        return ResponseEntity.accepted().body(response)
     }
 
     @PutMapping("/{asignacionId}")

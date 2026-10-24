@@ -10,6 +10,12 @@ enum class TipoAsignacion {
     GRUPAL
 }
 
+enum class EstadoAsignacion {
+    CREANDO,
+    LISTA,
+    ERROR
+}
+
 @Entity
 @Table(name = "asignaciones")
 class Asignacion(
@@ -33,6 +39,10 @@ class Asignacion(
     @Column(nullable = true)
     var fechaLimite: LocalDateTime? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var estado: EstadoAsignacion = EstadoAsignacion.CREANDO,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "curso_id", nullable = false)
     var curso: Curso? = null,
@@ -46,6 +56,14 @@ class Asignacion(
 
     fun asociarACurso(curso: Curso) {
         this.curso = curso
+    }
+
+    fun marcarComoLista() {
+        this.estado = EstadoAsignacion.LISTA
+    }
+
+    fun marcarComoError() {
+        this.estado = EstadoAsignacion.ERROR
     }
 
     fun actualizar(nuevaDescripcion: String?, nuevaFechaLimite: LocalDateTime?) {
@@ -122,6 +140,7 @@ class Asignacion(
             tipo = this.tipo,
             templateRepoName = this.templateRepoName,
             fechaLimite = this.fechaLimite,
+            estado = this.estado,
             curso = this.curso,
             grupos = gruposVisibles.toMutableList()
         )

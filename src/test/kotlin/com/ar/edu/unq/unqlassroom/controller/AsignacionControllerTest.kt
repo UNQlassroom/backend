@@ -72,7 +72,7 @@ class AsignacionControllerTest {
     }
 
     @Test
-    fun `crearAsignacion returns 201 and created assignment`() {
+    fun `crearAsignacion returns 202 Accepted and assignment in CREANDO state`() {
         val request = CrearAsignacionRequestDTO(
             titulo = "TP1 - Recursión",
             tipo = TipoAsignacion.INDIVIDUAL,
@@ -88,13 +88,13 @@ class AsignacionControllerTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "template-tp1",
             fechaLimite = null,
+            estado = EstadoAsignacion.CREANDO,
         )
-        val repo = Repositorio(nombre = "repo1", htmlUrl = "https://github.com/repo1")
         val grupo = GrupoAsignacion(
             id = 100L,
             nombre = null,
             asignacion = asignacionGuardada,
-            repositorio = repo,
+            repositorio = null,
             integrantes = mutableListOf(Usuario(username = "alumno1")),
         )
         asignacionGuardada.grupos.add(grupo)
@@ -108,11 +108,12 @@ class AsignacionControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
         )
-            .andExpect(status().isCreated)
+            .andExpect(status().isAccepted)
             .andExpect(jsonPath("$.id").value(1))
             .andExpect(jsonPath("$.cursoId").value(10))
             .andExpect(jsonPath("$.titulo").value("TP1 - Recursión"))
             .andExpect(jsonPath("$.tipo").value("INDIVIDUAL"))
+            .andExpect(jsonPath("$.estado").value("CREANDO"))
             .andExpect(jsonPath("$.grupos[0].integrantes[0].username").value("alumno1"))
     }
 
@@ -127,6 +128,7 @@ class AsignacionControllerTest {
             tipo = TipoAsignacion.INDIVIDUAL,
             templateRepoName = "tmpl",
             fechaLimite = null,
+            estado = EstadoAsignacion.LISTA,
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
@@ -139,6 +141,7 @@ class AsignacionControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.size()").value(1))
             .andExpect(jsonPath("$[0].titulo").value("TP1"))
+            .andExpect(jsonPath("$[0].estado").value("LISTA"))
     }
 
     @Test
@@ -152,6 +155,7 @@ class AsignacionControllerTest {
             tipo = TipoAsignacion.GRUPAL,
             templateRepoName = "tmpl-grupal",
             fechaLimite = null,
+            estado = EstadoAsignacion.LISTA,
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
@@ -165,6 +169,7 @@ class AsignacionControllerTest {
             .andExpect(jsonPath("$.id").value(2))
             .andExpect(jsonPath("$.titulo").value("TP2"))
             .andExpect(jsonPath("$.tipo").value("GRUPAL"))
+            .andExpect(jsonPath("$.estado").value("LISTA"))
     }
 
     @Test
