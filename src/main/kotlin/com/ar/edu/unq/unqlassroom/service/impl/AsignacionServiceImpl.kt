@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.DiagnosticoCIResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
@@ -171,6 +172,17 @@ class AsignacionServiceImpl(
                 try {
                     val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
                     repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
+                    if (repo.estadoCI == "failure" && repo.ciEtapaFallida.isNullOrBlank()) {
+                        val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                        if (diagnostico != null) {
+                            repo.registrarFallaCI(
+                                etapaFallida = diagnostico.etapaFallida,
+                                logError = diagnostico.logError,
+                                runUrl = diagnostico.runUrl,
+                                runId = diagnostico.runId,
+                            )
+                        }
+                    }
                 } catch (_: Exception) {
                     // Si falla consulta puntual a github, mantener el estado persistido
                 }
@@ -333,6 +345,63 @@ class AsignacionServiceImpl(
                 issues = issuesDTOs,
             )
         }
+    }
+
+    override fun obtenerDiagnosticoCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): DiagnosticoCIResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver el diagnóstico de CI de esta asignación")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val grupo = if (esOwner) {
+            if (grupoId != null) {
+                asignacion.buscarGrupo(grupoId)
+            } else {
+                throw GrupoIdRequeridoParaDocenteException()
+            }
+        } else {
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
+            if (grupoId != null && grupoDelAlumno.id != grupoId) {
+                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver el diagnóstico de CI de otro grupo")
+            }
+            grupoDelAlumno
+        }
+
+        val repo = grupo.repositorio
+            ?: throw ResourceNotFoundException("El grupo no posee un repositorio asociado", "REPOSITORIO_NOT_FOUND")
+
+        if (repo.estadoCI == "failure" && (repo.ciEtapaFallida.isNullOrBlank() || repo.ciLogError.isNullOrBlank())) {
+            try {
+                val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                if (diagnostico != null) {
+                    repo.registrarFallaCI(
+                        etapaFallida = diagnostico.etapaFallida,
+                        logError = diagnostico.logError,
+                        runUrl = diagnostico.runUrl,
+                        runId = diagnostico.runId,
+                    )
+                    asignacionRepository.save(asignacion)
+                }
+            } catch (_: Exception) {
+                // Si falla la consulta a GitHub, devolver el estado persistido
+            }
+        }
+
+        return DiagnosticoCIResponseDTO.desdeModelo(repo)
     }
 
     override fun eliminarAsignacion(

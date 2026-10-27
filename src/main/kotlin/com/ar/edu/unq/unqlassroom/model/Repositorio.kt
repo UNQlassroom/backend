@@ -24,6 +24,18 @@ class Repositorio(
     @Column(nullable = true)
     var estadoCI: String? = null,
 
+    @Column(nullable = true)
+    var ciRunId: Long? = null,
+
+    @Column(nullable = true, length = 500)
+    var ciEtapaFallida: String? = null,
+
+    @Column(nullable = true, columnDefinition = "TEXT")
+    var ciLogError: String? = null,
+
+    @Column(nullable = true, length = 1000)
+    var ciRunUrl: String? = null,
+
     @Column(nullable = false)
     var esTemplate: Boolean = false,
 
@@ -37,6 +49,31 @@ class Repositorio(
         this.ultimoCommit = ultimoCommit
         this.fechaUltimoCommit = fechaUltimoCommit
         this.estadoCI = estadoCI
+        if (estadoCI == "success" || estadoCI == "sin_ci") {
+            limpiarFallaCI()
+        }
+    }
+
+    fun registrarFallaCI(
+        etapaFallida: String?,
+        logError: String?,
+        runUrl: String?,
+        runId: Long? = null,
+    ) {
+        this.estadoCI = "failure"
+        this.ciEtapaFallida = etapaFallida
+        this.ciLogError = logError
+        this.ciRunUrl = runUrl
+        if (runId != null && runId > 0) {
+            this.ciRunId = runId
+        }
+    }
+
+    fun limpiarFallaCI() {
+        this.ciRunId = null
+        this.ciEtapaFallida = null
+        this.ciLogError = null
+        this.ciRunUrl = null
     }
 
     fun actualizarUltimoCommit(ultimoCommit: String?, fechaUltimoCommit: String?) {
