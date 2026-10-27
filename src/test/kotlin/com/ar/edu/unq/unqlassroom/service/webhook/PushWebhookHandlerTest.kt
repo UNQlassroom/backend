@@ -20,12 +20,15 @@ class PushWebhookHandlerTest {
     @Mock
     private lateinit var repositorioRepository: RepositorioRepository
 
+    @Mock
+    private lateinit var commitAnalysisService: CommitAnalysisService
+
     private val objectMapper = ObjectMapper()
     private lateinit var handler: PushWebhookHandler
 
     @BeforeEach
     fun setUp() {
-        handler = PushWebhookHandler(repositorioRepository, objectMapper)
+        handler = PushWebhookHandler(repositorioRepository, objectMapper, commitAnalysisService)
     }
 
     @Test
@@ -75,6 +78,7 @@ class PushWebhookHandlerTest {
         )
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
 
         handler.handle(evento)
 
@@ -122,6 +126,7 @@ class PushWebhookHandlerTest {
         )
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp2-obj-equipo1")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
 
         handler.handle(evento)
 
@@ -133,6 +138,42 @@ class PushWebhookHandlerTest {
         assertEquals("2026-10-16T18:00:00Z", repoGuardado.fechaUltimoCommit)
         // No debe modificar estadoCI
         assertNull(repoGuardado.estadoCI)
+    }
+
+    @Test
+    fun `handle no rompe el flujo principal del webhook si ocurre un fallo al analizar o persistir alertas secundarias`() {
+        val payload = """
+        {
+          "repository": {
+            "name": "tp1-resiliente"
+          },
+          "head_commit": {
+            "id": "commit999",
+            "message": "fix",
+            "timestamp": "2026-10-20T12:00:00Z"
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(eventType = "push", payload = payload)
+        val repoExistente = Repositorio(
+            id = 5L,
+            nombre = "tp1-resiliente",
+            htmlUrl = "https://github.com/UNQlassroom/tp1-resiliente"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-resiliente")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
+        `when`(commitAnalysisService.analizarCommitsDePush(eq(repoExistente), any())).thenThrow(
+            RuntimeException("Error inesperado en base de datos de alertas")
+        )
+
+        assertDoesNotThrow {
+            handler.handle(evento)
+        }
+
+        verify(repositorioRepository).save(repoExistente)
+        assertEquals("fix", repoExistente.ultimoCommit)
     }
 
     @Test

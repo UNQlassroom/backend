@@ -51,6 +51,9 @@ class GrupoAsignacion(
 
     @Column(nullable = true)
     var fechaCalificacion: LocalDateTime? = null,
+
+    @OneToMany(mappedBy = "grupoAsignacion", cascade = [CascadeType.ALL], orphanRemoval = true)
+    var advertenciasGit: MutableList<AdvertenciaGit> = mutableListOf(),
 ) {
     fun calificar(nota: Int, observaciones: String?) {
         if (nota < 1 || nota > 10) {

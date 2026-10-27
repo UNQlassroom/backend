@@ -5,6 +5,7 @@ import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
@@ -28,6 +29,7 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val issueRepository: IssueRepository,
     private val asyncService: AsyncService,
+    private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -358,6 +360,7 @@ class AsignacionServiceImpl(
 
         if (repoIds.isNotEmpty()) {
             issueRepository.deleteAllByRepositorioIdIn(repoIds)
+            advertenciaGitRepository?.deleteAllByRepositorioIdIn(repoIds)
         }
 
         curso.asignaciones.remove(asignacion)

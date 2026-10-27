@@ -16,6 +16,7 @@ data class GrupoAsignacionResponseDTO(
     val calificacion: Int? = null,
     val observaciones: String? = null,
     val fechaCalificacion: LocalDateTime? = null,
+    val advertenciasGit: List<AdvertenciaGitResponseDTO> = emptyList(),
 ) {
     companion object {
         fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO = GrupoAsignacionResponseDTO(
@@ -29,6 +30,7 @@ data class GrupoAsignacionResponseDTO(
             calificacion = grupo.calificacion,
             observaciones = grupo.observaciones,
             fechaCalificacion = grupo.fechaCalificacion,
+            advertenciasGit = grupo.advertenciasGit.map { AdvertenciaGitResponseDTO.desdeModelo(it) },
         )
     }
 }
