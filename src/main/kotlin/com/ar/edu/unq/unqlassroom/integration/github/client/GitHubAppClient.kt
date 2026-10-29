@@ -170,6 +170,40 @@ class GitHubAppClient(
         return getUserLogin(username) != null
     }
 
+    fun downloadTextResource(path: String): String? {
+        val token = getInstallationToken()
+        val initialUri = URI.create("${properties.apiBaseUrl}/${path.trimStart('/')}")
+        val request = HttpRequest.newBuilder()
+            .uri(initialUri)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+
+        val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+        return when (response.statusCode()) {
+            in 200..299 -> response.body()
+            301, 302, 303, 307, 308 -> {
+                val location = response.headers().firstValue("Location").orElse(null)
+                    ?: return null
+                val redirectUri = initialUri.resolve(location)
+                val redirectRequest = HttpRequest.newBuilder()
+                    .uri(redirectUri)
+                    .GET()
+                    .build()
+                val redirectResponse = httpClient.send(redirectRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                if (redirectResponse.statusCode() in 200..299) {
+                    redirectResponse.body()
+                } else {
+                    null
+                }
+            }
+            404 -> null
+            else -> handleNon2xxResponse(response.statusCode(), response.body())
+        }
+    }
+
     private fun handleNon2xxResponse(
         statusCode: Int,
         body: String?,

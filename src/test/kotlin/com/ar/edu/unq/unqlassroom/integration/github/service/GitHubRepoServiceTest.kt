@@ -644,4 +644,145 @@ class GitHubRepoServiceTest {
             body = Mockito.isNull()
         )
     }
+
+    @Test
+    fun `obtenerDiagnosticoCorridaFallida extracts failed step and cleaned log snippet`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+
+        val jobsResponse = GitHubWorkflowJobsResponse(
+            totalCount = 1,
+            jobs = listOf(
+                GitHubWorkflowJobItem(
+                    id = 987L,
+                    name = "build",
+                    status = "completed",
+                    conclusion = "failure",
+                    htmlUrl = "https://github.com/UNQlassroom/tp1-juan/actions/runs/555/job/987",
+                    steps = listOf(
+                        GitHubWorkflowStepItem(name = "Set up job", status = "completed", conclusion = "success", number = 1),
+                        GitHubWorkflowStepItem(name = "mvn test", status = "completed", conclusion = "failure", number = 2),
+                    )
+                )
+            )
+        )
+
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = eqString("GET"),
+                path = eqString("/repos/UNQlassroom/tp1-juan/actions/runs/555/jobs"),
+                responseType = anyClass(GitHubWorkflowJobsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(jobsResponse)
+
+        val rawLog = """
+            2026-10-27T18:00:00.1234567Z ##[group]Set up job
+            2026-10-27T18:00:01.0000000Z Runner initialized
+            2026-10-27T18:00:02.0000000Z ##[endgroup]
+            2026-10-27T18:00:03.0000000Z ##[group]Run mvn test
+            2026-10-27T18:00:04.0000000Z [INFO] Scanning for projects...
+            2026-10-27T18:00:05.0000000Z [ERROR] Failures:
+            2026-10-27T18:00:06.0000000Z [ERROR]   CalculadoraTest.suma:15 expected: <4> but was: <5>
+            2026-10-27T18:00:07.0000000Z ##[error]Process completed with exit code 1.
+        """.trimIndent()
+
+        `when`(gitHubAppClient.downloadTextResource("/repos/UNQlassroom/tp1-juan/actions/jobs/987/logs"))
+            .thenReturn(rawLog)
+
+        val diagnostico = gitHubRepoService.obtenerDiagnosticoCorridaFallida(
+            repoName = "tp1-juan",
+            runId = 555L,
+            runHtmlUrl = "https://github.com/UNQlassroom/tp1-juan/actions/runs/555"
+        )
+
+        assertEquals(555L, diagnostico.runId)
+        assertEquals("build", diagnostico.jobName)
+        assertEquals("mvn test", diagnostico.etapaFallida)
+        assertEquals("https://github.com/UNQlassroom/tp1-juan/actions/runs/555", diagnostico.runUrl)
+        org.junit.jupiter.api.Assertions.assertTrue(diagnostico.logError.contains("CalculadoraTest.suma:15 expected: <4> but was: <5>"))
+        org.junit.jupiter.api.Assertions.assertTrue(diagnostico.logError.contains("[ERROR] Process completed with exit code 1."))
+        org.junit.jupiter.api.Assertions.assertFalse(diagnostico.logError.contains("2026-10-27T18:00"))
+    }
+
+    @Test
+    fun `obtenerDiagnosticoCorridaFallida falls back gracefully when jobs or logs fail`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = eqString("GET"),
+                path = eqString("/repos/UNQlassroom/tp1-juan/actions/runs/556/jobs"),
+                responseType = anyClass(GitHubWorkflowJobsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenThrow(RuntimeException("GitHub error"))
+
+        val diagnostico = gitHubRepoService.obtenerDiagnosticoCorridaFallida(
+            repoName = "tp1-juan",
+            runId = 556L,
+            runHtmlUrl = null
+        )
+
+        assertEquals(556L, diagnostico.runId)
+        assertEquals("Ejecución de workflow", diagnostico.etapaFallida)
+        assertEquals("https://github.com/UNQlassroom/tp1-juan/actions/runs/556", diagnostico.runUrl)
+        org.junit.jupiter.api.Assertions.assertTrue(diagnostico.logError.isNotBlank())
+    }
+
+    @Test
+    fun `obtenerUltimoDiagnosticoCIFallido returns DiagnosticoCIInfo when latest run failed`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+
+        val runsResponse = GitHubWorkflowRunsResponse(
+            totalCount = 1,
+            workflowRuns = listOf(
+                GitHubWorkflowRunItem(
+                    id = 777L,
+                    status = "completed",
+                    conclusion = "failure",
+                    htmlUrl = "https://github.com/UNQlassroom/tp1-juan/actions/runs/777"
+                )
+            )
+        )
+
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = eqString("GET"),
+                path = eqString("/repos/UNQlassroom/tp1-juan/actions/runs?per_page=5"),
+                responseType = anyClass(GitHubWorkflowRunsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(runsResponse)
+
+        val jobsResponse = GitHubWorkflowJobsResponse(
+            totalCount = 1,
+            jobs = listOf(
+                GitHubWorkflowJobItem(
+                    id = 888L,
+                    name = "build",
+                    status = "completed",
+                    conclusion = "failure",
+                    steps = listOf(
+                        GitHubWorkflowStepItem(name = "npm run build", status = "completed", conclusion = "failure", number = 3)
+                    )
+                )
+            )
+        )
+
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = eqString("GET"),
+                path = eqString("/repos/UNQlassroom/tp1-juan/actions/runs/777/jobs"),
+                responseType = anyClass(GitHubWorkflowJobsResponse::class.java),
+                body = Mockito.isNull()
+            )
+        ).thenReturn(jobsResponse)
+
+        `when`(gitHubAppClient.downloadTextResource("/repos/UNQlassroom/tp1-juan/actions/jobs/888/logs"))
+            .thenReturn(null)
+
+        val result = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido("tp1-juan")
+        assertNotNull(result)
+        assertEquals("npm run build", result!!.etapaFallida)
+        assertEquals("Fallo en la etapa 'npm run build' (job 'build').", result.logError)
+    }
 }
