@@ -1,12 +1,11 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
-import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
-import com.ar.edu.unq.unqlassroom.service.impl.CommitAnalysisServiceImpl
-
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
+import com.ar.edu.unq.unqlassroom.service.impl.CommitAnalysisServiceImpl
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -38,6 +37,7 @@ class CommitAnalysisServiceTest {
             grupoAsignacionRepository = grupoAsignacionRepository,
             usuarioRepository = usuarioRepository,
             maxFiles = 15,
+            maxLines = 300,
         )
     }
 
@@ -74,7 +74,7 @@ class CommitAnalysisServiceTest {
         `when`(grupoAsignacionRepository.findByRepositorioNombreIgnoreCase("tp1-juanperez")).thenReturn(grupo)
         `when`(advertenciaGitRepository.save(anyAdvertencia())).thenAnswer { it.getArgument(0) }
 
-        val addedFilesJson = (1..16).joinToString(",") { "\"src/File$it.kt\"" }
+        val addedFilesJson = (1..16).joinToString(",") { "\"src/domain/Clase$it.java\"" }
         val payload = """
         {
           "repository": { "name": "tp1-juanperez" },
@@ -113,7 +113,44 @@ class CommitAnalysisServiceTest {
     }
 
     @Test
-    fun `analizarCommitsDePush no genera COMMIT_NO_ATOMICO si no supera el umbral de 15 archivos modificados`() {
+    fun `analizarCommitsDePush genera COMMIT_NO_ATOMICO cuando supera umbral de 300 lineas aunque sean pocos archivos`() {
+        val repo = Repositorio(id = 100L, nombre = "tp1-lineas", htmlUrl = "https://github.com/org/tp1-lineas")
+        `when`(advertenciaGitRepository.save(anyAdvertencia())).thenAnswer { it.getArgument(0) }
+
+        val payload = """
+        {
+          "repository": { "name": "tp1-lineas" },
+          "commits": [
+            {
+              "id": "c_lineas_gigante",
+              "message": "feat: agregar módulo gigante con 450 lineas",
+              "timestamp": "2026-10-21T10:00:00Z",
+              "modified": ["src/Main.java", "src/Util.java"],
+              "stats": {
+                "additions": 400,
+                "deletions": 50,
+                "total": 450,
+                "files_changed": 2
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val resultado = service.analizarCommitsDePush(repo, objectMapper.readTree(payload))
+
+        assertEquals(1, resultado.size)
+        val adv = resultado[0]
+        assertEquals(TipoAdvertenciaGit.COMMIT_NO_ATOMICO, adv.tipo)
+        assertEquals(450, adv.lineasModificadas)
+        assertEquals(400, adv.lineasAgregadas)
+        assertEquals(50, adv.lineasEliminadas)
+        assertEquals(2, adv.archivosModificados)
+        assertTrue(adv.mensajeExplicativo.contains("450 líneas modificadas"))
+    }
+
+    @Test
+    fun `analizarCommitsDePush no genera COMMIT_NO_ATOMICO si no supera el umbral de 15 archivos ni de 300 lineas`() {
         val repo = Repositorio(id = 100L, nombre = "tp1-ana", htmlUrl = "https://github.com/org/tp1-ana")
 
         val payload = """
@@ -139,47 +176,41 @@ class CommitAnalysisServiceTest {
     fun `analizarCommitsDePush omite commits de init y merge de la validacion de tamano`() {
         val repo = Repositorio(id = 100L, nombre = "tp1-equipo", htmlUrl = "https://github.com/org/tp1-equipo")
 
-        val addedFilesJson = (1..25).joinToString(",") { "\"src/Init$it.kt\"" }
-        val payload = """
+        val modifiedFilesJson = (1..25).joinToString(",") { "\"src/Archivo$it.java\"" }
+        val payloadInit = """
         {
           "repository": { "name": "tp1-equipo" },
           "commits": [
             {
-              "id": "init001",
+              "id": "c_init",
               "message": "Initial commit",
-              "added": [$addedFilesJson],
-              "additions": 1200,
-              "deletions": 0
-            },
-            {
-              "id": "init002",
-              "message": "init",
-              "added": [$addedFilesJson],
-              "additions": 800,
-              "deletions": 0
-            },
-            {
-              "id": "merge001",
-              "message": "Merge pull request #12 from org/feature-rama",
-              "modified": [$addedFilesJson],
-              "additions": 600,
-              "deletions": 300
-            },
-            {
-              "id": "merge002",
-              "message": "Merge branch 'main' into develop",
-              "modified": [$addedFilesJson],
-              "additions": 700,
-              "deletions": 100
+              "modified": [$modifiedFilesJson],
+              "additions": 1000
             }
           ]
         }
         """.trimIndent()
 
-        val resultado = service.analizarCommitsDePush(repo, objectMapper.readTree(payload))
+        val resultadoInit = service.analizarCommitsDePush(repo, objectMapper.readTree(payloadInit))
+        assertEquals(0, resultadoInit.size)
 
-        assertTrue(resultado.isEmpty())
-        verify(advertenciaGitRepository, never()).save(anyAdvertencia())
+        val payloadMerge = """
+        {
+          "repository": { "name": "tp1-equipo" },
+          "commits": [
+            {
+              "id": "c_merge",
+              "message": "Merge branch 'feature' into main",
+              "merge": true,
+              "modified": [$modifiedFilesJson],
+              "additions": 1500
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val resultadoMerge = service.analizarCommitsDePush(repo, objectMapper.readTree(payloadMerge))
+        assertEquals(0, resultadoMerge.size)
     }
 
     @Test
@@ -187,55 +218,56 @@ class CommitAnalysisServiceTest {
         val repo = Repositorio(id = 100L, nombre = "tp1-carlos", htmlUrl = "https://github.com/org/tp1-carlos")
         `when`(advertenciaGitRepository.save(anyAdvertencia())).thenAnswer { it.getArgument(0) }
 
-        val payload = """
+        val payloadVago = """
         {
           "repository": { "name": "tp1-carlos" },
           "commits": [
             {
-              "id": "c1",
-              "message": "fix",
-              "modified": ["a.kt"],
-              "additions": 5,
-              "deletions": 2
-            },
-            {
-              "id": "c2",
-              "message": "asd",
-              "modified": ["b.kt"],
-              "additions": 3,
-              "deletions": 1
-            },
-            {
-              "id": "c3",
+              "id": "c_vago_1",
               "message": "cambios",
-              "modified": ["c.kt"],
-              "additions": 10,
-              "deletions": 0
-            },
-            {
-              "id": "c4",
-              "message": "feat: implementar calculadora de impuestos",
-              "modified": ["d.kt"],
-              "additions": 20,
-              "deletions": 5
-            },
-            {
-              "id": "c5",
-              "message": "test(impuestos): agregar casos borde de IVA",
-              "modified": ["e.kt"],
-              "additions": 30,
-              "deletions": 0
+              "modified": ["src/A.kt"]
             }
           ]
         }
         """.trimIndent()
 
-        val resultado = service.analizarCommitsDePush(repo, objectMapper.readTree(payload))
+        val resVago = service.analizarCommitsDePush(repo, objectMapper.readTree(payloadVago))
+        assertEquals(1, resVago.size)
+        assertEquals(TipoAdvertenciaGit.MENSAJE_INADECUADO, resVago[0].tipo)
+        assertTrue(resVago[0].mensajeExplicativo.contains("Conventional Commits"))
 
-        assertEquals(3, resultado.size)
-        assertTrue(resultado.all { it.tipo == TipoAdvertenciaGit.MENSAJE_INADECUADO })
-        assertEquals(listOf("c1", "c2", "c3"), resultado.map { it.commitSha })
-        assertTrue(resultado.all { it.mensajeExplicativo.contains("Conventional Commits (feat:, fix:, docs:, test:)") })
+        val payloadSinPrefijo = """
+        {
+          "repository": { "name": "tp1-carlos" },
+          "commits": [
+            {
+              "id": "c_sin_prefijo",
+              "message": "arregle el bug del login",
+              "modified": ["src/Auth.kt"]
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val resSinPrefijo = service.analizarCommitsDePush(repo, objectMapper.readTree(payloadSinPrefijo))
+        assertEquals(1, resSinPrefijo.size)
+        assertEquals(TipoAdvertenciaGit.MENSAJE_INADECUADO, resSinPrefijo[0].tipo)
+
+        val payloadCorrecto = """
+        {
+          "repository": { "name": "tp1-carlos" },
+          "commits": [
+            {
+              "id": "c_ok",
+              "message": "fix(auth): corregir validacion de credenciales",
+              "modified": ["src/Auth.kt"]
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val resCorrecto = service.analizarCommitsDePush(repo, objectMapper.readTree(payloadCorrecto))
+        assertEquals(0, resCorrecto.size)
     }
 
     @Test

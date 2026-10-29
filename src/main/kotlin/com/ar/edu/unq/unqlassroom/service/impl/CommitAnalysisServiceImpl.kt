@@ -7,6 +7,7 @@ import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.fasterxml.jackson.databind.JsonNode
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
@@ -15,7 +16,11 @@ class CommitAnalysisServiceImpl(
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val usuarioRepository: UsuarioRepository,
 
+    @Value("\${git.analysis.max-files:15}")
     private val maxFiles: Int = 15,
+
+    @Value("\${git.analysis.max-lines:300}")
+    private val maxLines: Int = 300,
 ) : CommitAnalysisService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -117,9 +122,21 @@ class CommitAnalysisServiceImpl(
         val esInitOMerge = esCommitInitOMerge(metricas.mensaje, metricas.nodo)
 
         // 1. Validación de tamaño (omite commits de init o merge)
-        if (!esInitOMerge && metricas.archivosModificados > maxFiles) {
-            val explicacion = "Detectamos un commit grande (${metricas.archivosModificados} archivos modificados). " +
-                "Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad."
+        val commitGrandePorArchivos = metricas.archivosModificados > maxFiles
+        val commitGrandePorLineas = maxLines > 0 && metricas.lineasModificadas > maxLines
+
+        if (!esInitOMerge && (commitGrandePorArchivos || commitGrandePorLineas)) {
+            val explicacion = when {
+                commitGrandePorArchivos && commitGrandePorLineas ->
+                    "Detectamos un commit grande (${metricas.archivosModificados} archivos modificados y ${metricas.lineasModificadas} líneas modificadas). " +
+                        "Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad."
+                commitGrandePorLineas ->
+                    "Detectamos un commit grande (${metricas.lineasModificadas} líneas modificadas, superando el umbral de $maxLines). " +
+                        "Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad."
+                else ->
+                    "Detectamos un commit grande (${metricas.archivosModificados} archivos modificados). " +
+                        "Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad."
+            }
 
             resultado.add(
                 AdvertenciaGit(
@@ -338,17 +355,19 @@ class CommitAnalysisServiceImpl(
 
         var agregadas = commitNode.firstPositiveInt("additions", "lines_added", "lineas_agregadas", "insertions")
             ?: statsNode.firstPositiveInt("additions", "lines_added", "lineas_agregadas", "insertions")
+            ?: rootFallback?.path("stats")?.firstPositiveInt("additions", "lines_added", "lineas_agregadas", "insertions")
             ?: 0
 
         var eliminadas = commitNode.firstPositiveInt("deletions", "lines_removed", "lineas_eliminadas")
             ?: statsNode.firstPositiveInt("deletions", "lines_removed", "lineas_eliminadas")
+            ?: rootFallback?.path("stats")?.firstPositiveInt("deletions", "lines_removed", "lineas_eliminadas")
             ?: 0
 
         var totalDirecto = commitNode.firstPositiveInt("total_lines", "lines_modified", "lineas_modificadas", "changes")
             ?: statsNode.firstPositiveInt("total", "total_lines", "lines_modified", "lineas_modificadas")
+            ?: rootFallback?.path("stats")?.firstPositiveInt("total", "total_lines", "lines_modified", "lineas_modificadas")
             ?: 0
 
-        // Si las líneas vienen desglosadas dentro del array 'files'
         val filesNode = commitNode.path("files")
         if (agregadas == 0 && eliminadas == 0 && totalDirecto == 0 && filesNode.isArray) {
             var sumAdd = 0
@@ -361,21 +380,24 @@ class CommitAnalysisServiceImpl(
             }
             agregadas = sumAdd
             eliminadas = sumDel
-            totalDirecto = sumChanges
+            totalDirecto = if (sumChanges > 0) sumChanges else (sumAdd + sumDel)
         }
 
-        // Fallback al nodo raíz (por ejemplo cuando el script de CI envía las métricas en el root del payload)
         if (agregadas == 0 && eliminadas == 0 && totalDirecto == 0 && rootFallback != null) {
-            val rootStats = rootFallback.path("stats")
-            agregadas = rootFallback.firstPositiveInt("additions", "lines_added", "lineas_agregadas", "insertions")
-                ?: rootStats.firstPositiveInt("additions", "lines_added", "lineas_agregadas", "insertions")
-                ?: 0
-            eliminadas = rootFallback.firstPositiveInt("deletions", "lines_removed", "lineas_eliminadas")
-                ?: rootStats.firstPositiveInt("deletions", "lines_removed", "lineas_eliminadas")
-                ?: 0
-            totalDirecto = rootFallback.firstPositiveInt("total_lines", "lines_modified", "lineas_modificadas", "changes")
-                ?: rootStats.firstPositiveInt("total", "total_lines", "lines_modified", "lineas_modificadas")
-                ?: 0
+            val rootFiles = rootFallback.path("files")
+            if (rootFiles.isArray) {
+                var sumAdd = 0
+                var sumDel = 0
+                var sumChanges = 0
+                rootFiles.forEach { fileItem ->
+                    sumAdd += fileItem.path("additions").asInt(0)
+                    sumDel += fileItem.path("deletions").asInt(0)
+                    sumChanges += fileItem.path("changes").asInt(0)
+                }
+                agregadas = sumAdd
+                eliminadas = sumDel
+                totalDirecto = if (sumChanges > 0) sumChanges else (sumAdd + sumDel)
+            }
         }
 
         val suma = agregadas + eliminadas

@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.model.MetricaCI
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -25,6 +26,9 @@ class CoverageWebhookHandlerTest {
     @Mock
     private lateinit var metricasCIService: MetricasCIService
 
+    @Mock
+    private lateinit var commitAnalysisService: CommitAnalysisService
+
     private val objectMapper = ObjectMapper()
     private lateinit var handler: CoverageWebhookHandler
 
@@ -40,6 +44,7 @@ class CoverageWebhookHandlerTest {
             repositorioRepository = repositorioRepository,
             objectMapper = objectMapper,
             metricasCIService = metricasCIService,
+            commitAnalysisService = commitAnalysisService,
         )
     }
 
@@ -104,6 +109,10 @@ class CoverageWebhookHandlerTest {
             eq(repoExistente) ?: repoExistente,
             anyObject(JsonNode::class.java)
         )
+        verify(commitAnalysisService).analizarCommitsDePush(
+            eq(repoExistente) ?: repoExistente,
+            anyObject(JsonNode::class.java)
+        )
     }
 
     @Test
@@ -141,6 +150,10 @@ class CoverageWebhookHandlerTest {
             eq(repoExistente) ?: repoExistente,
             anyObject(JsonNode::class.java)
         )
+        verify(commitAnalysisService).analizarCommitsDePush(
+            eq(repoExistente) ?: repoExistente,
+            anyObject(JsonNode::class.java)
+        )
     }
 
     @Test
@@ -160,5 +173,6 @@ class CoverageWebhookHandlerTest {
         handler.handle(evento)
 
         verifyNoInteractions(metricasCIService)
+        verifyNoInteractions(commitAnalysisService)
     }
 }

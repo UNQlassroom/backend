@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -18,6 +19,7 @@ class CoverageWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
     private val metricasCIService: MetricasCIService,
+    private val commitAnalysisService: CommitAnalysisService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -63,6 +65,16 @@ class CoverageWebhookHandler(
                 e
             )
             throw e
+        }
+
+        try {
+            commitAnalysisService?.analizarCommitsDePush(repositorio, rootNode)
+        } catch (e: Exception) {
+            logger.error(
+                "Fallo secundario al analizar commits desde evento coverage_report para '{}': {}",
+                repoName,
+                e.message
+            )
         }
     }
 
