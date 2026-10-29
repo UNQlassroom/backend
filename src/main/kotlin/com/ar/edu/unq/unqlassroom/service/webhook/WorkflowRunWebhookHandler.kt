@@ -4,8 +4,6 @@ import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
-import com.ar.edu.unq.unqlassroom.service.LinterCIService
-import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -13,46 +11,26 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Handler de eventos de Webhook para 'workflow_run', métricas de CI ('ci_metrics') y reportes de linter ('linter_report') de GitHub Actions.
+ * Handler de eventos de Webhook para 'workflow_run' nativos de GitHub Actions.
  *
  * Escucha los eventos de ejecución de workflows de CI/CD:
  * - Si el estado es 'in_progress' (o encolado): actualiza el estado de CI a 'pending'.
  * - Si el estado es 'completed': evalúa la 'conclusion' para asignar 'success' o 'failure'.
  * - Cuando resulta en 'failure', consulta la API de GitHub Actions para extraer el step
  *   fallido y el extracto acotado del log del error, y los persiste en el repositorio.
- * - Si el payload contiene métricas de cobertura (JaCoCo) y/o tests (JUnit), las procesa y persiste.
- * - Si el payload contiene un reporte de análisis estático del linter, lo procesa y persiste.
+ * - Cuando resulta en 'success', limpia cualquier falla previa de CI.
  */
 @Component
 class WorkflowRunWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
     private val gitHubRepoService: GitHubRepoService? = null,
-    private val metricasCIService: MetricasCIService? = null,
-    private val linterCIService: LinterCIService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    companion object {
-        private val SUPPORTED_EVENTS = setOf(
-            "workflow_run",
-            "ci_metrics",
-            "coverage_report",
-            "test_report",
-            "linter_report",
-            "linter",
-            "static_analysis",
-            "checkstyle_report",
-            "ktlint_report",
-            "detekt_report",
-            "eslint_report",
-            "sarif_report",
-        )
-    }
-
     override fun canHandle(event: WebhookEvent): Boolean {
-        return event.eventType.lowercase() in SUPPORTED_EVENTS
+        return event.eventType.equals("workflow_run", ignoreCase = true)
     }
 
     @Transactional
@@ -71,7 +49,7 @@ class WorkflowRunWebhookHandler(
         }
 
         val nuevoEstadoCI = determinarEstadoCI(rootNode)
-        val repositorioActualizado = if (nuevoEstadoCI != null) {
+        if (nuevoEstadoCI != null) {
             repositorio.estadoCI = nuevoEstadoCI
 
             when (nuevoEstadoCI) {
@@ -85,29 +63,6 @@ class WorkflowRunWebhookHandler(
                 repoName,
                 event.eventType,
                 nuevoEstadoCI
-            )
-            repositorio
-        } else {
-            repositorio
-        }
-
-        try {
-            metricasCIService?.procesarMetricasDeEvento(repositorioActualizado, rootNode)
-        } catch (e: Exception) {
-            logger.error(
-                "Fallo secundario al procesar o persistir métricas de CI para el repositorio '{}': {}",
-                repoName,
-                e.message
-            )
-        }
-
-        try {
-            linterCIService?.procesarReporteDeEvento(repositorioActualizado, rootNode)
-        } catch (e: Exception) {
-            logger.error(
-                "Fallo secundario al procesar o persistir reporte de linter para el repositorio '{}': {}",
-                repoName,
-                e.message
             )
         }
     }
