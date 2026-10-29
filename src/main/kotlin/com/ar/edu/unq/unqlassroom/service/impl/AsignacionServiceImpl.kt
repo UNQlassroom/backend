@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.MetricasCIResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
@@ -9,10 +10,12 @@ import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
+import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -28,7 +31,11 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val issueRepository: IssueRepository,
     private val asyncService: AsyncService,
+    private val metricaCIRepository: MetricaCIRepository? = null,
 ) : AsignacionService {
+
+    @Value("\${ci.metrics.min-coverage:80.0}")
+    private var umbralCoberturaDefault: Double = 80.0
 
     override fun crearAsignacion(
         cursoId: Long,
@@ -335,6 +342,54 @@ class AsignacionServiceImpl(
         }
     }
 
+    override fun obtenerMetricasCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): MetricasCIResponseDTO {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las métricas de CI de esta asignación")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val grupo = if (esOwner) {
+            if (grupoId != null) {
+                asignacion.buscarGrupo(grupoId)
+            } else {
+                throw GrupoIdRequeridoParaDocenteException()
+            }
+        } else {
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
+            if (grupoId != null && grupoDelAlumno.id != grupoId) {
+                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las métricas de CI de otro grupo")
+            }
+            grupoDelAlumno
+        }
+
+        val repo = grupo.repositorio
+            ?: throw ResourceNotFoundException("El grupo no posee un repositorio asociado", "REPOSITORIO_NOT_FOUND")
+
+        val metrica = repo.id?.let { repoId ->
+            metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return if (metrica != null) {
+            MetricasCIResponseDTO.desdeModelo(metrica)
+        } else {
+            MetricasCIResponseDTO.sinMetricas(repo.nombre, umbralCoberturaDefault)
+        }
+    }
+
     override fun eliminarAsignacion(
         cursoId: Long,
         asignacionId: Long,
@@ -358,6 +413,7 @@ class AsignacionServiceImpl(
 
         if (repoIds.isNotEmpty()) {
             issueRepository.deleteAllByRepositorioIdIn(repoIds)
+            metricaCIRepository?.deleteAllByRepositorioIdIn(repoIds)
         }
 
         curso.asignaciones.remove(asignacion)
