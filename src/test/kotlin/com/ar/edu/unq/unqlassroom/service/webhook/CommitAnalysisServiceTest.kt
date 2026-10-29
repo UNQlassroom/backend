@@ -1,5 +1,8 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
+import com.ar.edu.unq.unqlassroom.service.impl.CommitAnalysisServiceImpl
+
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
@@ -31,7 +34,7 @@ class CommitAnalysisServiceTest {
 
     @BeforeEach
     fun setUp() {
-        service = CommitAnalysisService(
+        service = CommitAnalysisServiceImpl(
             advertenciaGitRepository = advertenciaGitRepository,
             grupoAsignacionRepository = grupoAsignacionRepository,
             usuarioRepository = usuarioRepository,

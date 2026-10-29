@@ -1853,12 +1853,12 @@ class AsignacionServiceImplTest {
 
         val result = asignacionService.obtenerDiagnosticoCI(10L, 1L, "alumno1")
 
-        assertEquals("2026s1_c1_so_tp1_alumno1", result.repoNombre)
+        assertEquals("2026s1_c1_so_tp1_alumno1", result.nombre)
         assertEquals("failure", result.estadoCI)
-        assertEquals("mvn compile", result.etapaFallida)
-        assertEquals("[ERROR] Compilation failure", result.logError)
-        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456", result.runUrl)
-        assertEquals(123456L, result.runId)
+        assertEquals("mvn compile", result.ciEtapaFallida)
+        assertEquals("[ERROR] Compilation failure", result.ciLogError)
+        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456", result.ciRunUrl)
+        assertEquals(123456L, result.ciRunId)
     }
 
     @Test
@@ -1903,9 +1903,9 @@ class AsignacionServiceImplTest {
 
         val result = asignacionService.obtenerDiagnosticoCI(10L, 1L, "profe", grupoId = 100L)
 
-        assertEquals("mvn test", result.etapaFallida)
-        assertEquals("[ERROR] Tests run: 1, Failures: 1", result.logError)
-        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/789", result.runUrl)
+        assertEquals("mvn test", result.ciEtapaFallida)
+        assertEquals("[ERROR] Tests run: 1, Failures: 1", result.ciLogError)
+        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/789", result.ciRunUrl)
         verify(asignacionRepository).save(asignacion)
     }
 }

@@ -136,10 +136,11 @@ class AsignacionReporteLinterTest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(reporteLinterRepository.findFirstByRepositorioIdOrderByFechaActualizacionDesc(100L)).thenReturn(reporte)
 
-        val dto = asignacionService.obtenerReporteLinter(10L, 50L, "alumno1", null)
+        val (repoResult, dto) = asignacionService.obtenerReporteLinter(10L, 50L, "alumno1", null)
+        assertNotNull(dto)
 
-        assertEquals(300L, dto.id)
-        assertEquals("repo-alumno1", dto.repoNombre)
+        assertEquals(300L, dto!!.id)
+        assertEquals("repo-alumno1", repoResult.nombre)
         assertEquals("sha-linter-1", dto.commitSha)
         assertEquals("ktlint", dto.herramienta)
         assertEquals(1, dto.cantidadErrores)
@@ -179,14 +180,10 @@ class AsignacionReporteLinterTest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(reporteLinterRepository.findFirstByRepositorioIdOrderByFechaActualizacionDesc(100L)).thenReturn(null)
 
-        val dto = asignacionService.obtenerReporteLinter(10L, 50L, "alumno1", null)
+        val (repoResult, dto) = asignacionService.obtenerReporteLinter(10L, 50L, "alumno1", null)
 
-        assertNull(dto.id)
-        assertEquals("repo-alumno1", dto.repoNombre)
-        assertEquals(0, dto.cantidadErrores)
-        assertEquals(0, dto.cantidadAdvertencias)
-        assertEquals(0, dto.totalIncidencias)
-        assertTrue(dto.incidencias.isEmpty())
+        assertNull(dto)
+        assertEquals("repo-alumno1", repoResult.nombre)
     }
 
     @Test

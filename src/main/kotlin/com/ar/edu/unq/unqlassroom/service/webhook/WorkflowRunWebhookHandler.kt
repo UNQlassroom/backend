@@ -3,6 +3,8 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.LinterCIService
+import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory

@@ -1,9 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.asignacion.response.DiagnosticoCIResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.asignacion.response.MetricasCIResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.asignacion.response.ReporteLinterResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
@@ -19,7 +16,6 @@ import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
@@ -39,9 +35,6 @@ class AsignacionServiceImpl(
     private val metricaCIRepository: MetricaCIRepository? = null,
     private val reporteLinterRepository: ReporteLinterRepository? = null,
 ) : AsignacionService {
-
-    @Value("\${ci.metrics.min-coverage:80.0}")
-    private var umbralCoberturaDefault: Double = 80.0
 
     override fun crearAsignacion(
         cursoId: Long,
@@ -364,7 +357,7 @@ class AsignacionServiceImpl(
         asignacionId: Long,
         solicitanteUsername: String,
         grupoId: Long?,
-    ): DiagnosticoCIResponseDTO {
+    ): Repositorio {
         val (asignacion, repo) = resolverAsignacionYRepositorio(
             cursoId = cursoId,
             asignacionId = asignacionId,
@@ -390,7 +383,7 @@ class AsignacionServiceImpl(
             }
         }
 
-        return DiagnosticoCIResponseDTO.desdeModelo(repo)
+        return repo
     }
 
     override fun obtenerMetricasCI(
@@ -398,7 +391,7 @@ class AsignacionServiceImpl(
         asignacionId: Long,
         solicitanteUsername: String,
         grupoId: Long?,
-    ): MetricasCIResponseDTO {
+    ): Pair<Repositorio, MetricaCI?> {
         val (_, repo) = resolverAsignacionYRepositorio(
             cursoId = cursoId,
             asignacionId = asignacionId,
@@ -411,11 +404,7 @@ class AsignacionServiceImpl(
             metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
         }
 
-        return if (metrica != null) {
-            MetricasCIResponseDTO.desdeModelo(metrica)
-        } else {
-            MetricasCIResponseDTO.sinMetricas(repo.nombre, umbralCoberturaDefault)
-        }
+        return Pair(repo, metrica)
     }
 
     override fun obtenerReporteLinter(
@@ -423,7 +412,7 @@ class AsignacionServiceImpl(
         asignacionId: Long,
         solicitanteUsername: String,
         grupoId: Long?,
-    ): ReporteLinterResponseDTO {
+    ): Pair<Repositorio, ReporteLinter?> {
         val (_, repo) = resolverAsignacionYRepositorio(
             cursoId = cursoId,
             asignacionId = asignacionId,
@@ -436,11 +425,7 @@ class AsignacionServiceImpl(
             reporteLinterRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
         }
 
-        return if (reporte != null) {
-            ReporteLinterResponseDTO.desdeModelo(reporte)
-        } else {
-            ReporteLinterResponseDTO.sinReporte(repo.nombre)
-        }
+        return Pair(repo, reporte)
     }
 
     private fun resolverAsignacionYRepositorio(

@@ -1,5 +1,8 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.service.LinterCIService
+import com.ar.edu.unq.unqlassroom.service.impl.LinterCIServiceImpl
+
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
@@ -31,7 +34,7 @@ class LinterCIServiceTest {
 
     @BeforeEach
     fun setUp() {
-        service = LinterCIService(
+        service = LinterCIServiceImpl(
             reporteLinterRepository = reporteLinterRepository,
             grupoAsignacionRepository = grupoAsignacionRepository,
             usuarioRepository = usuarioRepository,

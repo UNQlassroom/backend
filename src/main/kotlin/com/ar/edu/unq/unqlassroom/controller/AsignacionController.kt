@@ -116,13 +116,13 @@ class AsignacionController(
         @RequestParam(name = "grupo", required = false) grupo: Long?,
         authentication: Authentication,
     ): ResponseEntity<DiagnosticoCIResponseDTO> {
-        val response = asignacionService.obtenerDiagnosticoCI(
+        val repo = asignacionService.obtenerDiagnosticoCI(
             cursoId = cursoId,
             asignacionId = asignacionId,
             solicitanteUsername = authentication.name,
             grupoId = grupo,
         )
-        return ResponseEntity.ok(response)
+        return ResponseEntity.ok(DiagnosticoCIResponseDTO.desdeModelo(repo))
     }
 
     @GetMapping("/{asignacionId}/metricas")
@@ -132,12 +132,17 @@ class AsignacionController(
         @RequestParam(name = "grupo", required = false) grupo: Long?,
         authentication: Authentication,
     ): ResponseEntity<MetricasCIResponseDTO> {
-        val response = asignacionService.obtenerMetricasCI(
+        val (repo, metrica) = asignacionService.obtenerMetricasCI(
             cursoId = cursoId,
             asignacionId = asignacionId,
             solicitanteUsername = authentication.name,
             grupoId = grupo,
         )
+        val response = if (metrica != null) {
+            MetricasCIResponseDTO.desdeModelo(metrica)
+        } else {
+            MetricasCIResponseDTO.sinMetricas(repo.nombre)
+        }
         return ResponseEntity.ok(response)
     }
 
@@ -148,12 +153,17 @@ class AsignacionController(
         @RequestParam(name = "grupo", required = false) grupo: Long?,
         authentication: Authentication,
     ): ResponseEntity<ReporteLinterResponseDTO> {
-        val response = asignacionService.obtenerReporteLinter(
+        val (repo, reporte) = asignacionService.obtenerReporteLinter(
             cursoId = cursoId,
             asignacionId = asignacionId,
             solicitanteUsername = authentication.name,
             grupoId = grupo,
         )
+        val response = if (reporte != null) {
+            ReporteLinterResponseDTO.desdeModelo(reporte)
+        } else {
+            ReporteLinterResponseDTO.sinReporte(repo.nombre)
+        }
         return ResponseEntity.ok(response)
     }
 
@@ -164,6 +174,6 @@ class AsignacionController(
         authentication: Authentication,
     ): ResponseEntity<Void> {
         asignacionService.eliminarAsignacion(cursoId, asignacionId, authentication.name)
-        return ResponseEntity.accepted().build()
+        return ResponseEntity.noContent().build()
     }
 }

@@ -1,5 +1,8 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.service.MetricasCIService
+import com.ar.edu.unq.unqlassroom.service.impl.MetricasCIServiceImpl
+
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
@@ -31,7 +34,7 @@ class MetricasCIServiceTest {
 
     @BeforeEach
     fun setUp() {
-        metricasCIService = MetricasCIService(
+        metricasCIService = MetricasCIServiceImpl(
             metricaCIRepository = metricaCIRepository,
             grupoAsignacionRepository = grupoAsignacionRepository,
             usuarioRepository = usuarioRepository,

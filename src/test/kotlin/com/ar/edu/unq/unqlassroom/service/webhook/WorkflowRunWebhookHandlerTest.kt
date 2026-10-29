@@ -1,5 +1,8 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.service.LinterCIService
+import com.ar.edu.unq.unqlassroom.service.MetricasCIService
+
 import com.ar.edu.unq.unqlassroom.integration.github.service.DiagnosticoCIInfo
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Repositorio

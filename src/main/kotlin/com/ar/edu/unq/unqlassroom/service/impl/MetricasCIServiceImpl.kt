@@ -1,9 +1,10 @@
-package com.ar.edu.unq.unqlassroom.service.webhook
+package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.fasterxml.jackson.databind.JsonNode
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -11,13 +12,13 @@ import org.springframework.stereotype.Service
 import kotlin.math.round
 
 @Service
-class MetricasCIService(
+class MetricasCIServiceImpl(
     private val metricaCIRepository: MetricaCIRepository,
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val usuarioRepository: UsuarioRepository,
     @Value("\${ci.metrics.min-coverage:80.0}")
     private val umbralCoberturaDefault: Double = 80.0,
-) {
+) : MetricasCIService {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     companion object {
@@ -38,7 +39,7 @@ class MetricasCIService(
         private val XML_ATTR_SKIPPED_REGEX = Regex("""\bskipped\s*=\s*["'](\d+)["']""", RegexOption.IGNORE_CASE)
     }
 
-    fun contieneDatosMetricas(rootNode: JsonNode): Boolean {
+    override fun contieneDatosMetricas(rootNode: JsonNode): Boolean {
         val candidateNodes = obtenerNodosCandidatos(rootNode)
         val metricFieldNames = listOf(
             "cobertura_lineas", "coberturaLineas", "line_coverage", "lineCoverage",
@@ -65,7 +66,7 @@ class MetricasCIService(
         }
     }
 
-    fun procesarMetricasDeEvento(repositorio: Repositorio, rootNode: JsonNode): MetricaCI? {
+    override fun procesarMetricasDeEvento(repositorio: Repositorio, rootNode: JsonNode): MetricaCI? {
         if (!contieneDatosMetricas(rootNode)) {
             return null
         }
@@ -165,7 +166,6 @@ class MetricasCIService(
         val matches = JACOCO_LINE_COUNTER_REGEX.findAll(xml).toList()
         if (matches.isEmpty()) return null
 
-        // El último <counter type="LINE" .../> en el reporte JaCoCo corresponde al resumen global del <report>
         val reportCounterTag = matches.last().value
         val missed = XML_ATTR_MISSED_REGEX.find(reportCounterTag)?.groupValues?.get(1)?.toIntOrNull() ?: return null
         val covered = XML_ATTR_COVERED_REGEX.find(reportCounterTag)?.groupValues?.get(1)?.toIntOrNull() ?: return null
@@ -481,4 +481,3 @@ class MetricasCIService(
         val salteados: Int,
     )
 }
-

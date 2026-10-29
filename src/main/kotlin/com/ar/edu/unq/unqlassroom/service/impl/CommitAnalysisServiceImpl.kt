@@ -1,16 +1,17 @@
-package com.ar.edu.unq.unqlassroom.service.webhook
+package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.fasterxml.jackson.databind.JsonNode
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
-class CommitAnalysisService(
+class CommitAnalysisServiceImpl(
     private val advertenciaGitRepository: AdvertenciaGitRepository,
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val usuarioRepository: UsuarioRepository,
@@ -18,7 +19,7 @@ class CommitAnalysisService(
     private val maxFiles: Int = 15,
     @Value("\${git.analysis.max-lines:500}")
     private val maxLines: Int = 500,
-) {
+) : CommitAnalysisService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -39,7 +40,7 @@ class CommitAnalysisService(
         )
     }
 
-    fun analizarCommitsDePush(repositorio: Repositorio, rootNode: JsonNode): List<AdvertenciaGit> {
+    override fun analizarCommitsDePush(repositorio: Repositorio, rootNode: JsonNode): List<AdvertenciaGit> {
         val advertenciasPersistidas = mutableListOf<AdvertenciaGit>()
 
         try {
@@ -84,7 +85,7 @@ class CommitAnalysisService(
         return advertenciasPersistidas
     }
 
-    fun esCommitInitOMerge(mensaje: String, commitNode: JsonNode? = null): Boolean {
+    override fun esCommitInitOMerge(mensaje: String, commitNode: JsonNode?): Boolean {
         if (commitNode != null) {
             if (commitNode.path("merge").asBoolean(false)) return true
             val parents = commitNode.path("parents")
@@ -95,7 +96,7 @@ class CommitAnalysisService(
         return INIT_OR_MERGE_REGEX.matches(primeraLinea)
     }
 
-    fun esMensajeInadecuado(mensaje: String): Boolean {
+    override fun esMensajeInadecuado(mensaje: String): Boolean {
         val primeraLinea = mensaje.lineSequence().firstOrNull()?.trim() ?: ""
         if (primeraLinea.length < 5) return true
         if (VAGUE_MESSAGE_REGEX.matches(primeraLinea)) return true
@@ -434,4 +435,3 @@ class CommitAnalysisService(
         val nodo: JsonNode,
     )
 }
-

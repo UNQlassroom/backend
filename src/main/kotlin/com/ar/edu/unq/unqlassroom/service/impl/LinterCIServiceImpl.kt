@@ -1,19 +1,20 @@
-package com.ar.edu.unq.unqlassroom.service.webhook
+package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.LinterCIService
 import com.fasterxml.jackson.databind.JsonNode
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
 @Service
-class LinterCIService(
+class LinterCIServiceImpl(
     private val reporteLinterRepository: ReporteLinterRepository,
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val usuarioRepository: UsuarioRepository,
-) {
+) : LinterCIService {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     companion object {
@@ -35,7 +36,7 @@ class LinterCIService(
         private val RUNNER_PREFIX_REGEX = Regex("""^(?:/github/workspace/|/home/runner/work/[^/]+/[^/]+/|/workspace/|[A-Za-z]:[\\/]+[^\\/]+[\\/]+work[\\/]+[^\\/]+[\\/]+[^\\/]+[\\/]+)""")
     }
 
-    fun contieneDatosLinter(rootNode: JsonNode): Boolean {
+    override fun contieneDatosLinter(rootNode: JsonNode): Boolean {
         val candidateNodes = obtenerNodosCandidatos(rootNode)
         val directFields = listOf(
             "incidencias", "incidencias_linter", "incidenciasLinter",
@@ -62,7 +63,7 @@ class LinterCIService(
         }
     }
 
-    fun procesarReporteDeEvento(repositorio: Repositorio, rootNode: JsonNode): ReporteLinter? {
+    override fun procesarReporteDeEvento(repositorio: Repositorio, rootNode: JsonNode): ReporteLinter? {
         if (!contieneDatosLinter(rootNode)) {
             return null
         }
@@ -621,4 +622,3 @@ class LinterCIService(
         val incidencias: List<IncidenciaLinter>,
     )
 }
-

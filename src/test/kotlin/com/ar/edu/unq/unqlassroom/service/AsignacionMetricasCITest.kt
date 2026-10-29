@@ -120,10 +120,11 @@ class AsignacionMetricasCITest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(metricaCIRepository.findFirstByRepositorioIdOrderByFechaActualizacionDesc(100L)).thenReturn(metrica)
 
-        val dto = asignacionService.obtenerMetricasCI(10L, 50L, "alumno1", null)
+        val (repoResult, dto) = asignacionService.obtenerMetricasCI(10L, 50L, "alumno1", null)
+        assertNotNull(dto)
 
-        assertEquals(300L, dto.id)
-        assertEquals("repo-alumno1", dto.repoNombre)
+        assertEquals(300L, dto!!.id)
+        assertEquals("repo-alumno1", repoResult.nombre)
         assertEquals("sha-123", dto.commitSha)
         assertEquals(84.5, dto.coberturaLineas)
         assertEquals(169, dto.lineasCubiertas)
@@ -162,14 +163,10 @@ class AsignacionMetricasCITest {
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
         `when`(metricaCIRepository.findFirstByRepositorioIdOrderByFechaActualizacionDesc(100L)).thenReturn(null)
 
-        val dto = asignacionService.obtenerMetricasCI(10L, 50L, "profe", 200L)
+        val (repoResult, dto) = asignacionService.obtenerMetricasCI(10L, 50L, "profe", 200L)
 
-        assertNull(dto.id)
-        assertEquals("repo-alumno1", dto.repoNombre)
-        assertEquals(0.0, dto.coberturaLineas)
-        assertEquals(80.0, dto.umbralCobertura)
-        assertFalse(dto.cumpleUmbralCobertura)
-        assertEquals(0, dto.testsEjecutados)
+        assertNull(dto)
+        assertEquals("repo-alumno1", repoResult.nombre)
     }
 
     @Test
