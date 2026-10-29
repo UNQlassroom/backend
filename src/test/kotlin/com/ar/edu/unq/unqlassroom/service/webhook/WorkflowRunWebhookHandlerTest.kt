@@ -29,6 +29,9 @@ class WorkflowRunWebhookHandlerTest {
     @Mock
     private lateinit var metricasCIService: MetricasCIService
 
+    @Mock
+    private lateinit var linterCIService: LinterCIService
+
     private val objectMapper = ObjectMapper()
     private lateinit var handler: WorkflowRunWebhookHandler
 
@@ -45,15 +48,18 @@ class WorkflowRunWebhookHandlerTest {
             objectMapper = objectMapper,
             gitHubRepoService = gitHubRepoService,
             metricasCIService = metricasCIService,
+            linterCIService = linterCIService,
         )
     }
 
     @Test
-    fun `canHandle retorna true para eventos workflow_run y ci_metrics case-insensitive`() {
+    fun `canHandle retorna true para eventos workflow_run ci_metrics y linter_report case-insensitive`() {
         val eventLower = WebhookEvent(eventType = "workflow_run", payload = "{}")
         val eventUpper = WebhookEvent(eventType = "WORKFLOW_RUN", payload = "{}")
         val eventMetrics = WebhookEvent(eventType = "ci_metrics", payload = "{}")
         val eventCoverage = WebhookEvent(eventType = "coverage_report", payload = "{}")
+        val eventLinter = WebhookEvent(eventType = "linter_report", payload = "{}")
+        val eventStatic = WebhookEvent(eventType = "STATIC_ANALYSIS", payload = "{}")
         val eventPush = WebhookEvent(eventType = "push", payload = "{}")
         val eventRelease = WebhookEvent(eventType = "release", payload = "{}")
 
@@ -61,6 +67,8 @@ class WorkflowRunWebhookHandlerTest {
         assertTrue(handler.canHandle(eventUpper))
         assertTrue(handler.canHandle(eventMetrics))
         assertTrue(handler.canHandle(eventCoverage))
+        assertTrue(handler.canHandle(eventLinter))
+        assertTrue(handler.canHandle(eventStatic))
         assertFalse(handler.canHandle(eventPush))
         assertFalse(handler.canHandle(eventRelease))
     }
@@ -220,6 +228,49 @@ class WorkflowRunWebhookHandlerTest {
     }
 
     @Test
+    fun `handle procesa reporte de linter enviado directamente por el CI mediante evento linter_report`() {
+        val payload = """
+        {
+          "repo_name": "tp1-intro-juan",
+          "commit_sha": "sha-1234",
+          "linter": {
+            "incidencias": [
+              {
+                "archivo": "src/App.kt",
+                "linea": 10,
+                "severidad": "WARNING",
+                "regla": "unused import"
+              }
+            ]
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "linter_report",
+            payload = payload
+        )
+
+        val repoExistente = Repositorio(
+            id = 1L,
+            nombre = "tp1-intro-juan",
+            htmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan",
+            estadoCI = "success"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+
+        handler.handle(evento)
+
+        verify(repositorioRepository, never()).save(any())
+        verify(linterCIService).procesarReporteDeEvento(
+            eq(repoExistente) ?: repoExistente,
+            anyObject(JsonNode::class.java)
+        )
+    }
+
+    @Test
     fun `handle no realiza acciones cuando el repositorio no existe en BD`() {
         val payload = """
         {
@@ -240,6 +291,7 @@ class WorkflowRunWebhookHandlerTest {
 
         verify(repositorioRepository, never()).save(any())
         verifyNoInteractions(metricasCIService)
+        verifyNoInteractions(linterCIService)
     }
 
     @Test
@@ -259,6 +311,7 @@ class WorkflowRunWebhookHandlerTest {
 
         verifyNoInteractions(repositorioRepository)
         verifyNoInteractions(metricasCIService)
+        verifyNoInteractions(linterCIService)
     }
 
     @Test

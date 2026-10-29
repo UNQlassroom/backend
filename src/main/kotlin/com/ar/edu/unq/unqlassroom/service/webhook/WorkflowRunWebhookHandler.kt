@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Handler de eventos de Webhook para 'workflow_run' y métricas de CI ('ci_metrics') de GitHub Actions.
+ * Handler de eventos de Webhook para 'workflow_run', métricas de CI ('ci_metrics') y reportes de linter ('linter_report') de GitHub Actions.
  *
  * Escucha los eventos de ejecución de workflows de CI/CD:
  * - Si el estado es 'in_progress' (o encolado): actualiza el estado de CI a 'pending'.
@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional
  * - Cuando resulta en 'failure', consulta la API de GitHub Actions para extraer el step
  *   fallido y el extracto acotado del log del error, y los persiste en el repositorio.
  * - Si el payload contiene métricas de cobertura (JaCoCo) y/o tests (JUnit), las procesa y persiste.
+ * - Si el payload contiene un reporte de análisis estático del linter, lo procesa y persiste.
  */
 @Component
 class WorkflowRunWebhookHandler(
@@ -25,6 +26,7 @@ class WorkflowRunWebhookHandler(
     private val objectMapper: ObjectMapper,
     private val gitHubRepoService: GitHubRepoService? = null,
     private val metricasCIService: MetricasCIService? = null,
+    private val linterCIService: LinterCIService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -35,6 +37,14 @@ class WorkflowRunWebhookHandler(
             "ci_metrics",
             "coverage_report",
             "test_report",
+            "linter_report",
+            "linter",
+            "static_analysis",
+            "checkstyle_report",
+            "ktlint_report",
+            "detekt_report",
+            "eslint_report",
+            "sarif_report",
         )
     }
 
@@ -83,6 +93,16 @@ class WorkflowRunWebhookHandler(
         } catch (e: Exception) {
             logger.error(
                 "Fallo secundario al procesar o persistir métricas de CI para el repositorio '{}': {}",
+                repoName,
+                e.message
+            )
+        }
+
+        try {
+            linterCIService?.procesarReporteDeEvento(repositorioActualizado, rootNode)
+        } catch (e: Exception) {
+            logger.error(
+                "Fallo secundario al procesar o persistir reporte de linter para el repositorio '{}': {}",
                 repoName,
                 e.message
             )

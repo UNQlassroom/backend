@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.service.impl
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.DiagnosticoCIResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.MetricasCIResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.ReporteLinterResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
@@ -13,6 +14,7 @@ import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
+import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
@@ -35,6 +37,7 @@ class AsignacionServiceImpl(
     private val asyncService: AsyncService,
     private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
     private val metricaCIRepository: MetricaCIRepository? = null,
+    private val reporteLinterRepository: ReporteLinterRepository? = null,
 ) : AsignacionService {
 
     @Value("\${ci.metrics.min-coverage:80.0}")
@@ -415,6 +418,31 @@ class AsignacionServiceImpl(
         }
     }
 
+    override fun obtenerReporteLinter(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): ReporteLinterResponseDTO {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el reporte de linter",
+        )
+
+        val reporte = repo.id?.let { repoId ->
+            reporteLinterRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return if (reporte != null) {
+            ReporteLinterResponseDTO.desdeModelo(reporte)
+        } else {
+            ReporteLinterResponseDTO.sinReporte(repo.nombre)
+        }
+    }
+
     private fun resolverAsignacionYRepositorio(
         cursoId: Long,
         asignacionId: Long,
@@ -481,6 +509,7 @@ class AsignacionServiceImpl(
             issueRepository.deleteAllByRepositorioIdIn(repoIds)
             advertenciaGitRepository?.deleteAllByRepositorioIdIn(repoIds)
             metricaCIRepository?.deleteAllByRepositorioIdIn(repoIds)
+            reporteLinterRepository?.deleteAllByRepositorioIdIn(repoIds)
         }
 
         curso.asignaciones.remove(asignacion)
