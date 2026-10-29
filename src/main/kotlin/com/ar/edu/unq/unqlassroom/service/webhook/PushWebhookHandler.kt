@@ -46,11 +46,16 @@ class PushWebhookHandler(
 
         val commitMessage = extraerCommitMessage(rootNode)
         val commitDate = extraerCommitDate(rootNode)
+        val commitSha = extraerCommitSha(rootNode)
 
         repositorio.actualizarUltimoCommit(
             ultimoCommit = commitMessage ?: repositorio.ultimoCommit,
             fechaUltimoCommit = commitDate ?: repositorio.fechaUltimoCommit,
         )
+
+        if (repositorio.esTemplate) {
+            repositorio.invalidarAprobacionTemplate(commitSha ?: repositorio.ultimoCommitSha)
+        }
 
         val repositorioGuardado = repositorioRepository.save(repositorio)
         logger.info(
@@ -110,6 +115,31 @@ class PushWebhookHandler(
 
         val directDate = rootNode.path("fecha").asText(null)
         if (!directDate.isNullOrBlank()) return directDate
+
+        return null
+    }
+
+    private fun extraerCommitSha(rootNode: JsonNode): String? {
+        val after = rootNode.path("after").asText(null)
+        if (!after.isNullOrBlank() && after != "0000000000000000000000000000000000000000") {
+            return after
+        }
+
+        val headId = rootNode.path("head_commit").path("id").asText(null)
+            ?: rootNode.path("head_commit").path("sha").asText(null)
+        if (!headId.isNullOrBlank()) return headId
+
+        val commits = rootNode.path("commits")
+        if (commits.isArray && commits.size() > 0) {
+            val lastCommit = commits.get(commits.size() - 1)
+            val lastId = lastCommit.path("id").asText(null)
+                ?: lastCommit.path("sha").asText(null)
+            if (!lastId.isNullOrBlank()) return lastId
+        }
+
+        val directSha = rootNode.path("sha").asText(null)
+            ?: rootNode.path("commit_sha").asText(null)
+        if (!directSha.isNullOrBlank()) return directSha
 
         return null
     }

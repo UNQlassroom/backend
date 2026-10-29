@@ -39,6 +39,12 @@ class Repositorio(
     @Column(nullable = false)
     var esTemplate: Boolean = false,
 
+    @Column(name = "ultimo_commit_sha", nullable = true)
+    var ultimoCommitSha: String? = null,
+
+    @Column(name = "template_aprobado", nullable = false)
+    var templateAprobado: Boolean = false,
+
     @Column(nullable = true, length = 1000)
     var descripcion: String? = null,
 
@@ -85,6 +91,25 @@ class Repositorio(
         this.esTemplate = true
         this.descripcion = descripcion
         this.eliminado = false
+    }
+
+    fun estaTemplateAprobadoConCommit(commitSha: String?): Boolean {
+        return this.esTemplate &&
+            this.templateAprobado &&
+            !commitSha.isNullOrBlank() &&
+            this.ultimoCommitSha == commitSha
+    }
+
+    fun aprobarTemplate(commitSha: String) {
+        this.esTemplate = true
+        this.ultimoCommitSha = commitSha
+        this.templateAprobado = true
+        this.eliminado = false
+    }
+
+    fun invalidarAprobacionTemplate(nuevoCommitSha: String? = this.ultimoCommitSha) {
+        this.ultimoCommitSha = nuevoCommitSha
+        this.templateAprobado = false
     }
 
     fun marcarComoEliminado() {

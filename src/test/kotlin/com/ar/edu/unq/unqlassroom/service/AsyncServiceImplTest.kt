@@ -29,6 +29,9 @@ class AsyncServiceImplTest {
     @Mock
     private lateinit var asignacionRepository: AsignacionRepository
 
+    @Mock
+    private lateinit var templateStandardizationService: TemplateStandardizationService
+
     private lateinit var asyncService: AsyncService
 
     @BeforeEach
@@ -37,6 +40,7 @@ class AsyncServiceImplTest {
             gitHubRepoService = gitHubRepoService,
             gitHubCollaboratorService = gitHubCollaboratorService,
             asignacionRepository = asignacionRepository,
+            templateStandardizationService = templateStandardizationService,
         )
     }
 
@@ -113,6 +117,7 @@ class AsyncServiceImplTest {
         assertEquals(repoName2, grupo2.repositorio?.nombre)
         assertEquals("pending", grupo2.repositorio?.estadoCI)
 
+        verify(templateStandardizationService).asegurarTemplateEstandarizado("template-tp1")
         verify(gitHubRepoService).createRepositoryFromTemplate(
             templateRepoName = "template-tp1",
             newRepoName = repoName1,
@@ -184,6 +189,7 @@ class AsyncServiceImplTest {
         assertNotNull(grupo.repositorio)
         assertEquals(repoName, grupo.repositorio?.nombre)
 
+        verify(templateStandardizationService).asegurarTemplateEstandarizado("template-tp2")
         verify(gitHubRepoService).createRepositoryFromTemplate(
             templateRepoName = "template-tp2",
             newRepoName = repoName,
@@ -277,6 +283,7 @@ class AsyncServiceImplTest {
 
         verifyNoInteractions(gitHubRepoService)
         verifyNoInteractions(gitHubCollaboratorService)
+        verifyNoInteractions(templateStandardizationService)
         verify(asignacionRepository, never()).save(any(Asignacion::class.java))
     }
 

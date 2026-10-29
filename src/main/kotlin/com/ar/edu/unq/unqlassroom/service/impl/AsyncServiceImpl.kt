@@ -7,6 +7,7 @@ import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.service.AsyncService
+import com.ar.edu.unq.unqlassroom.service.TemplateStandardizationService
 import jakarta.transaction.Transactional
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
@@ -17,6 +18,7 @@ class AsyncServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val asignacionRepository: AsignacionRepository,
+    private val templateStandardizationService: TemplateStandardizationService? = null,
 ) : AsyncService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -35,6 +37,8 @@ class AsyncServiceImpl(
         val reposCreadosEnEjecucion = mutableListOf<String>()
 
         try {
+            templateStandardizationService?.asegurarTemplateEstandarizado(asignacion.templateRepoName)
+
             for (grupo in asignacion.grupos) {
                 val sufijo = if (asignacion.tipo == TipoAsignacion.INDIVIDUAL) {
                     grupo.integrantes.first().username
