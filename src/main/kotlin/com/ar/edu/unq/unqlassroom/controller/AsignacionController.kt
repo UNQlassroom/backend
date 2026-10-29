@@ -125,6 +125,22 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @GetMapping("/{asignacionId}/metricas")
+    fun obtenerMetricasCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<MetricasCIResponseDTO> {
+        val response = asignacionService.obtenerMetricasCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        return ResponseEntity.ok(response)
+    }
+
     @DeleteMapping("/{asignacionId}")
     fun eliminarAsignacion(
         @PathVariable cursoId: Long,
