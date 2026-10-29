@@ -28,6 +28,16 @@ class PushWebhookHandlerTest {
     private val objectMapper = ObjectMapper()
     private lateinit var handler: PushWebhookHandler
 
+    private fun anyRepo(defaultRepo: Repositorio): Repositorio {
+        any(Repositorio::class.java)
+        return defaultRepo
+    }
+
+    private fun anyNode(): com.fasterxml.jackson.databind.JsonNode {
+        any(com.fasterxml.jackson.databind.JsonNode::class.java)
+        return objectMapper.createObjectNode()
+    }
+
     @BeforeEach
     fun setUp() {
         handler = PushWebhookHandler(repositorioRepository, objectMapper, commitAnalysisService)
@@ -166,7 +176,7 @@ class PushWebhookHandlerTest {
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp1-resiliente")).thenReturn(repoExistente)
         `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
-        `when`(commitAnalysisService.analizarCommitsDePush(eq(repoExistente), any())).thenThrow(
+        `when`(commitAnalysisService.analizarCommitsDePush(anyRepo(repoExistente), anyNode())).thenThrow(
             RuntimeException("Error inesperado en base de datos de alertas")
         )
 

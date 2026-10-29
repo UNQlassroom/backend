@@ -174,6 +174,6 @@ class AsignacionController(
         authentication: Authentication,
     ): ResponseEntity<Void> {
         asignacionService.eliminarAsignacion(cursoId, asignacionId, authentication.name)
-        return ResponseEntity.noContent().build()
+        return ResponseEntity.accepted().build()
     }
 }

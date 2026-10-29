@@ -78,14 +78,14 @@ class WorkflowRunWebhookHandler(
                 "success" -> repositorio.limpiarFallaCI()
             }
 
-            val guardado = repositorioRepository.save(repositorio)
+            repositorioRepository.save(repositorio)
             logger.info(
                 "Repositorio '{}' actualizado por {}. Nuevo estado de CI: '{}'",
                 repoName,
                 event.eventType,
                 nuevoEstadoCI
             )
-            guardado ?: repositorio
+            repositorio
         } else {
             repositorio
         }

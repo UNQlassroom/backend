@@ -17,11 +17,15 @@ import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
+import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
+import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.service.impl.AsignacionServiceImpl
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
@@ -57,8 +61,32 @@ class AsignacionServiceImplTest {
     @Mock
     private lateinit var asyncService: AsyncService
 
-    @InjectMocks
+    @Mock
+    private lateinit var advertenciaGitRepository: AdvertenciaGitRepository
+
+    @Mock
+    private lateinit var metricaCIRepository: MetricaCIRepository
+
+    @Mock
+    private lateinit var reporteLinterRepository: ReporteLinterRepository
+
     private lateinit var asignacionService: AsignacionServiceImpl
+
+    @BeforeEach
+    fun setUp() {
+        asignacionService = AsignacionServiceImpl(
+            asignacionRepository = asignacionRepository,
+            cursoRepository = cursoRepository,
+            inscripcionRepository = inscripcionRepository,
+            usuarioService = usuarioService,
+            gitHubRepoService = gitHubRepoService,
+            issueRepository = issueRepository,
+            asyncService = asyncService,
+            advertenciaGitRepository = advertenciaGitRepository,
+            metricaCIRepository = metricaCIRepository,
+            reporteLinterRepository = reporteLinterRepository,
+        )
+    }
 
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
