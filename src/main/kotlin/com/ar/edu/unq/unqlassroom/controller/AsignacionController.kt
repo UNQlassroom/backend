@@ -109,6 +109,64 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @GetMapping("/{asignacionId}/diagnostico-ci")
+    fun obtenerDiagnosticoCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<DiagnosticoCIResponseDTO> {
+        val repo = asignacionService.obtenerDiagnosticoCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        return ResponseEntity.ok(DiagnosticoCIResponseDTO.desdeModelo(repo))
+    }
+
+    @GetMapping("/{asignacionId}/metricas")
+    fun obtenerMetricasCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<MetricasCIResponseDTO> {
+        val (repo, metrica) = asignacionService.obtenerMetricasCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        val response = if (metrica != null) {
+            MetricasCIResponseDTO.desdeModelo(metrica)
+        } else {
+            MetricasCIResponseDTO.sinMetricas(repo.nombre)
+        }
+        return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/{asignacionId}/linter")
+    fun obtenerReporteLinter(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<ReporteLinterResponseDTO> {
+        val (repo, reporte) = asignacionService.obtenerReporteLinter(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        val response = if (reporte != null) {
+            ReporteLinterResponseDTO.desdeModelo(reporte)
+        } else {
+            ReporteLinterResponseDTO.sinReporte(repo.nombre)
+        }
+        return ResponseEntity.ok(response)
+    }
+
     @DeleteMapping("/{asignacionId}")
     fun eliminarAsignacion(
         @PathVariable cursoId: Long,

@@ -6,10 +6,10 @@ import com.ar.edu.unq.unqlassroom.repository.WebhookEventRepository
 import com.ar.edu.unq.unqlassroom.util.WebhookSignatureValidator
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 
-@Service
+@Component
 class WebhookIngestionService(
     private val webhookEventRepository: WebhookEventRepository,
     private val webhookSignatureValidator: WebhookSignatureValidator,
@@ -17,9 +17,19 @@ class WebhookIngestionService(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    companion object {
+        private val EVENTOS_CI_DIRECTOS = setOf(
+            "linter_report",
+            "coverage_report",
+        )
+    }
+
     @Transactional
     fun registrarEvento(payload: String, signature: String?, eventType: String, deliveryId: String? = null) {
-        webhookSignatureValidator.validate(payload, signature)
+        val esEventoDirecto = eventType.lowercase() in EVENTOS_CI_DIRECTOS
+        if (!esEventoDirecto || !signature.isNullOrBlank()) {
+            webhookSignatureValidator.validate(payload, signature)
+        }
 
         if (esDuplicado(deliveryId)) {
             logger.warn("Webhook duplicado ignorado. Delivery ID: {}", deliveryId)

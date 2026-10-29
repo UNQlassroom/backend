@@ -5,10 +5,13 @@ import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
+import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
+import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
@@ -20,7 +23,7 @@ import java.time.LocalDateTime
 
 @Service
 @Transactional
-class AsignacionServiceImpl(
+class AsignacionServiceImpl (
     private val asignacionRepository: AsignacionRepository,
     private val cursoRepository: CursoRepository,
     private val inscripcionRepository: InscripcionRepository,
@@ -28,6 +31,9 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val issueRepository: IssueRepository,
     private val asyncService: AsyncService,
+    private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
+    private val metricaCIRepository: MetricaCIRepository? = null,
+    private val reporteLinterRepository: ReporteLinterRepository? = null,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -171,6 +177,17 @@ class AsignacionServiceImpl(
                 try {
                     val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
                     repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
+                    if (repo.estadoCI == "failure" && repo.ciEtapaFallida.isNullOrBlank()) {
+                        val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                        if (diagnostico != null) {
+                            repo.registrarFallaCI(
+                                etapaFallida = diagnostico.etapaFallida,
+                                logError = diagnostico.logError,
+                                runUrl = diagnostico.runUrl,
+                                runId = diagnostico.runId,
+                            )
+                        }
+                    }
                 } catch (_: Exception) {
                     // Si falla consulta puntual a github, mantener el estado persistido
                 }
@@ -335,6 +352,123 @@ class AsignacionServiceImpl(
         }
     }
 
+    override fun obtenerDiagnosticoCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Repositorio {
+        val (asignacion, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el diagnóstico de CI",
+        )
+
+        if (repo.estadoCI == "failure" && (repo.ciEtapaFallida.isNullOrBlank() || repo.ciLogError.isNullOrBlank())) {
+            try {
+                val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                if (diagnostico != null) {
+                    repo.registrarFallaCI(
+                        etapaFallida = diagnostico.etapaFallida,
+                        logError = diagnostico.logError,
+                        runUrl = diagnostico.runUrl,
+                        runId = diagnostico.runId,
+                    )
+                    asignacionRepository.save(asignacion)
+                }
+            } catch (_: Exception) {
+                // Si falla la consulta a GitHub, devolver el estado persistido
+            }
+        }
+
+        return repo
+    }
+
+    override fun obtenerMetricasCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Pair<Repositorio, MetricaCI?> {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "las métricas de CI",
+        )
+
+        val metrica = repo.id?.let { repoId ->
+            metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return Pair(repo, metrica)
+    }
+
+    override fun obtenerReporteLinter(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Pair<Repositorio, ReporteLinter?> {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el reporte de linter",
+        )
+
+        val reporte = repo.id?.let { repoId ->
+            reporteLinterRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return Pair(repo, reporte)
+    }
+
+    private fun resolverAsignacionYRepositorio(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+        recursoDescripcion: String,
+    ): Pair<Asignacion, Repositorio> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val grupo = if (esOwner) {
+            if (grupoId != null) {
+                asignacion.buscarGrupo(grupoId)
+            } else {
+                throw GrupoIdRequeridoParaDocenteException()
+            }
+        } else {
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
+            if (grupoId != null && grupoDelAlumno.id != grupoId) {
+                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de otro grupo")
+            }
+            grupoDelAlumno
+        }
+
+        val repo = grupo.repositorio
+            ?: throw ResourceNotFoundException("El grupo no posee un repositorio asociado", "REPOSITORIO_NOT_FOUND")
+
+        return Pair(asignacion, repo)
+    }
+
     override fun eliminarAsignacion(
         cursoId: Long,
         asignacionId: Long,
@@ -358,6 +492,9 @@ class AsignacionServiceImpl(
 
         if (repoIds.isNotEmpty()) {
             issueRepository.deleteAllByRepositorioIdIn(repoIds)
+            advertenciaGitRepository?.deleteAllByRepositorioIdIn(repoIds)
+            metricaCIRepository?.deleteAllByRepositorioIdIn(repoIds)
+            reporteLinterRepository?.deleteAllByRepositorioIdIn(repoIds)
         }
 
         curso.asignaciones.remove(asignacion)

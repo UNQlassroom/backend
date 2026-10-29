@@ -17,11 +17,15 @@ import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
+import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
+import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.service.impl.AsignacionServiceImpl
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
@@ -57,8 +61,32 @@ class AsignacionServiceImplTest {
     @Mock
     private lateinit var asyncService: AsyncService
 
-    @InjectMocks
+    @Mock
+    private lateinit var advertenciaGitRepository: AdvertenciaGitRepository
+
+    @Mock
+    private lateinit var metricaCIRepository: MetricaCIRepository
+
+    @Mock
+    private lateinit var reporteLinterRepository: ReporteLinterRepository
+
     private lateinit var asignacionService: AsignacionServiceImpl
+
+    @BeforeEach
+    fun setUp() {
+        asignacionService = AsignacionServiceImpl(
+            asignacionRepository = asignacionRepository,
+            cursoRepository = cursoRepository,
+            inscripcionRepository = inscripcionRepository,
+            usuarioService = usuarioService,
+            gitHubRepoService = gitHubRepoService,
+            issueRepository = issueRepository,
+            asyncService = asyncService,
+            advertenciaGitRepository = advertenciaGitRepository,
+            metricaCIRepository = metricaCIRepository,
+            reporteLinterRepository = reporteLinterRepository,
+        )
+    }
 
     private fun anyAsignacion(): Asignacion {
         any(Asignacion::class.java)
@@ -1813,5 +1841,99 @@ class AsignacionServiceImplTest {
         }
         assertEquals("FECHA_LIMITE_INVALIDA", ex.errorCode)
         verify(asignacionRepository, never()).save(any(Asignacion::class.java))
+    }
+
+    @Test
+    fun `obtenerDiagnosticoCI returns persisted CI failure details for enrolled student`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA
+        )
+        val repo = Repositorio(
+            id = 50L,
+            nombre = "2026s1_c1_so_tp1_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1",
+            estadoCI = "failure",
+            ciRunId = 123456L,
+            ciEtapaFallida = "mvn compile",
+            ciLogError = "[ERROR] Compilation failure",
+            ciRunUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456"
+        )
+        val grupo = GrupoAsignacion(
+            id = 100L,
+            asignacion = asignacion,
+            integrantes = mutableListOf(alumno),
+            repositorio = repo
+        )
+        asignacion.grupos.add(grupo)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "alumno1"))
+            .thenReturn(Inscripcion(id = 1L, curso = curso, usuario = alumno))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+
+        val result = asignacionService.obtenerDiagnosticoCI(10L, 1L, "alumno1")
+
+        assertEquals("2026s1_c1_so_tp1_alumno1", result.nombre)
+        assertEquals("failure", result.estadoCI)
+        assertEquals("mvn compile", result.ciEtapaFallida)
+        assertEquals("[ERROR] Compilation failure", result.ciLogError)
+        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456", result.ciRunUrl)
+        assertEquals(123456L, result.ciRunId)
+    }
+
+    @Test
+    fun `obtenerDiagnosticoCI fetches from GitHub on demand when estadoCI is failure and details are missing`() {
+        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val asignacion = Asignacion(
+            id = 1L,
+            curso = curso,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            estado = EstadoAsignacion.LISTA
+        )
+        val repo = Repositorio(
+            id = 50L,
+            nombre = "2026s1_c1_so_tp1_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1",
+            estadoCI = "failure"
+        )
+        val grupo = GrupoAsignacion(
+            id = 100L,
+            asignacion = asignacion,
+            integrantes = mutableListOf(alumno),
+            repositorio = repo
+        )
+        asignacion.grupos.add(grupo)
+
+        `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
+        `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(asignacion)
+        `when`(gitHubRepoService.obtenerUltimoDiagnosticoCIFallido("2026s1_c1_so_tp1_alumno1"))
+            .thenReturn(
+                com.ar.edu.unq.unqlassroom.integration.github.service.DiagnosticoCIInfo(
+                    runId = 789L,
+                    jobName = "build",
+                    etapaFallida = "mvn test",
+                    logError = "[ERROR] Tests run: 1, Failures: 1",
+                    runUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/789"
+                )
+            )
+
+        val result = asignacionService.obtenerDiagnosticoCI(10L, 1L, "profe", grupoId = 100L)
+
+        assertEquals("mvn test", result.ciEtapaFallida)
+        assertEquals("[ERROR] Tests run: 1, Failures: 1", result.ciLogError)
+        assertEquals("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/789", result.ciRunUrl)
+        verify(asignacionRepository).save(asignacion)
     }
 }

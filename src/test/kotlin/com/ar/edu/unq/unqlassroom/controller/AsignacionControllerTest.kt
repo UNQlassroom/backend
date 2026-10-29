@@ -507,4 +507,33 @@ class AsignacionControllerTest {
             .andExpect(jsonPath("$.status").value(404))
             .andExpect(jsonPath("$.errorCode").value("ASIGNACION_NOT_FOUND"))
     }
+
+    @Test
+    fun `obtenerDiagnosticoCI returns 200 OK with CI failure diagnosis`() {
+        val auth = UsernamePasswordAuthenticationToken("alumno1", null)
+        val repo = Repositorio(
+            nombre = "2026s1_c1_so_tp1_alumno1",
+            htmlUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1",
+            estadoCI = "failure",
+            ciEtapaFallida = "mvn compile",
+            ciLogError = "[ERROR] Compilation failure",
+            ciRunUrl = "https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456",
+            ciRunId = 123456L
+        )
+
+        `when`(asignacionService.obtenerDiagnosticoCI(10L, 1L, "alumno1", null))
+            .thenReturn(repo)
+
+        mockMvc.perform(
+            get("/cursos/10/asignaciones/1/diagnostico-ci")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.repoNombre").value("2026s1_c1_so_tp1_alumno1"))
+            .andExpect(jsonPath("$.estadoCI").value("failure"))
+            .andExpect(jsonPath("$.etapaFallida").value("mvn compile"))
+            .andExpect(jsonPath("$.logError").value("[ERROR] Compilation failure"))
+            .andExpect(jsonPath("$.runUrl").value("https://github.com/UNQlassroom/2026s1_c1_so_tp1_alumno1/actions/runs/123456"))
+            .andExpect(jsonPath("$.runId").value(123456))
+    }
 }

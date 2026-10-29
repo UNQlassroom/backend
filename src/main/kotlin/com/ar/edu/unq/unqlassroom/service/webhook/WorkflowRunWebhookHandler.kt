@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
+import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.fasterxml.jackson.databind.JsonNode
@@ -9,16 +11,20 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Handler de eventos de Webhook para 'workflow_run' de GitHub Actions.
+ * Handler de eventos de Webhook para 'workflow_run' nativos de GitHub Actions.
  *
  * Escucha los eventos de ejecución de workflows de CI/CD:
  * - Si el estado es 'in_progress' (o encolado): actualiza el estado de CI a 'pending'.
  * - Si el estado es 'completed': evalúa la 'conclusion' para asignar 'success' o 'failure'.
+ * - Cuando resulta en 'failure', consulta la API de GitHub Actions para extraer el step
+ *   fallido y el extracto acotado del log del error, y los persiste en el repositorio.
+ * - Cuando resulta en 'success', limpia cualquier falla previa de CI.
  */
 @Component
 class WorkflowRunWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
+    private val gitHubRepoService: GitHubRepoService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -32,7 +38,7 @@ class WorkflowRunWebhookHandler(
         val rootNode = objectMapper.readTree(event.payload)
         val repoName = extraerRepoName(rootNode)
         if (repoName.isNullOrBlank()) {
-            logger.warn("No se pudo extraer el nombre del repositorio en el evento workflow_run {}", event.id)
+            logger.warn("No se pudo extraer el nombre del repositorio en el evento {} {}", event.eventType, event.id)
             return
         }
 
@@ -45,13 +51,64 @@ class WorkflowRunWebhookHandler(
         val nuevoEstadoCI = determinarEstadoCI(rootNode)
         if (nuevoEstadoCI != null) {
             repositorio.estadoCI = nuevoEstadoCI
+
+            when (nuevoEstadoCI) {
+                "failure" -> procesarDiagnosticoFalla(rootNode, repoName, repositorio)
+                "success" -> repositorio.limpiarFallaCI()
+            }
+
             repositorioRepository.save(repositorio)
             logger.info(
-                "Repositorio '{}' actualizado por workflow_run. Nuevo estado de CI: '{}'",
+                "Repositorio '{}' actualizado por {}. Nuevo estado de CI: '{}'",
                 repoName,
+                event.eventType,
                 nuevoEstadoCI
             )
         }
+    }
+
+    private fun procesarDiagnosticoFalla(
+        rootNode: JsonNode,
+        repoName: String,
+        repositorio: Repositorio,
+    ) {
+        val workflowNode = rootNode.path("workflow_run")
+        val runId = workflowNode.path("id").asLong(0L).takeIf { it > 0L }
+        val runHtmlUrl = workflowNode.path("html_url").asText(null)?.takeIf { it.isNotBlank() }
+        val fallbackEtapa = workflowNode.path("name").asText(null)?.takeIf { it.isNotBlank() }
+            ?: "Ejecución de workflow"
+        val fallbackUrl = runHtmlUrl ?: "${repositorio.htmlUrl}/actions"
+
+        if (runId != null && gitHubRepoService != null) {
+            try {
+                val diagnostico = gitHubRepoService.obtenerDiagnosticoCorridaFallida(
+                    repoName = repoName,
+                    runId = runId,
+                    runHtmlUrl = runHtmlUrl,
+                )
+                repositorio.registrarFallaCI(
+                    etapaFallida = diagnostico.etapaFallida,
+                    logError = diagnostico.logError,
+                    runUrl = diagnostico.runUrl,
+                    runId = diagnostico.runId,
+                )
+                return
+            } catch (e: Exception) {
+                logger.warn(
+                    "No se pudo consultar el diagnóstico detallado de GitHub Actions para repo '{}' (runId {}): {}",
+                    repoName,
+                    runId,
+                    e.message
+                )
+            }
+        }
+
+        repositorio.registrarFallaCI(
+            etapaFallida = fallbackEtapa,
+            logError = "La corrida de CI/CD finalizó con errores. Revisá el detalle completo en GitHub Actions.",
+            runUrl = fallbackUrl,
+            runId = runId,
+        )
     }
 
     private fun extraerRepoName(rootNode: JsonNode): String? {
@@ -61,6 +118,8 @@ class WorkflowRunWebhookHandler(
         if (!wfRepoName.isNullOrBlank()) return wfRepoName
         val repoName = rootNode.path("repo_name").asText(null)
         if (!repoName.isNullOrBlank()) return repoName
+        val repoNombre = rootNode.path("repoNombre").asText(null)
+        if (!repoNombre.isNullOrBlank()) return repoNombre
         return null
     }
 

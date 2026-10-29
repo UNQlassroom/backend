@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -12,12 +13,14 @@ import org.springframework.transaction.annotation.Transactional
  * Handler de eventos de Webhook para 'push' de GitHub.
  *
  * Se encarga de procesar los eventos de tipo PUSH, extraer del payload la información
- * del commit (mensaje y fecha) para actualizar la entidad Repositorio.
+ * del commit (mensaje y fecha) para actualizar la entidad Repositorio, y ejecutar de forma
+ * secundaria el análisis de calidad de commits sin interrumpir el flujo principal.
  */
 @Component
 class PushWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
+    private val commitAnalysisService: CommitAnalysisService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -49,13 +52,23 @@ class PushWebhookHandler(
             fechaUltimoCommit = commitDate ?: repositorio.fechaUltimoCommit,
         )
 
-        repositorioRepository.save(repositorio)
+        val repositorioGuardado = repositorioRepository.save(repositorio)
         logger.info(
             "Repositorio '{}' actualizado por push. Ultimo commit: '{}', fecha: '{}'",
             repoName,
-            repositorio.ultimoCommit,
-            repositorio.fechaUltimoCommit,
+            repositorioGuardado.ultimoCommit,
+            repositorioGuardado.fechaUltimoCommit,
         )
+
+        try {
+            commitAnalysisService?.analizarCommitsDePush(repositorioGuardado, rootNode)
+        } catch (e: Exception) {
+            logger.error(
+                "Fallo secundario al analizar o persistir advertencias de Git para el repositorio '{}': {}",
+                repoName,
+                e.message
+            )
+        }
     }
 
     private fun extraerRepoName(rootNode: JsonNode): String? {

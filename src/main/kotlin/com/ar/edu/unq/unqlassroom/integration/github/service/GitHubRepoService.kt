@@ -279,6 +279,236 @@ class GitHubRepoService(
         )
     }
 
+    @JvmOverloads
+    fun getWorkflowRunJobs(
+        repoName: String,
+        runId: Long,
+        org: String? = null,
+    ): List<GitHubWorkflowJobItem> {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        return try {
+            val response = gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/actions/runs/$runId/jobs",
+                responseType = GitHubWorkflowJobsResponse::class.java,
+            )
+            response.jobs
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    @JvmOverloads
+    fun getJobLogs(
+        repoName: String,
+        jobId: Long,
+        org: String? = null,
+    ): String? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        return try {
+            gitHubAppClient.downloadTextResource("/repos/$targetOrg/$repoName/actions/jobs/$jobId/logs")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
+    fun obtenerDiagnosticoCorridaFallida(
+        repoName: String,
+        runId: Long,
+        runHtmlUrl: String? = null,
+        org: String? = null,
+    ): DiagnosticoCIInfo {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val defaultRunUrl = runHtmlUrl?.takeIf { it.isNotBlank() }
+            ?: "https://github.com/$targetOrg/$repoName/actions/runs/$runId"
+
+        val failureConclusions = setOf("failure", "timed_out", "cancelled", "action_required")
+        val jobs = getWorkflowRunJobs(repoName, runId, targetOrg)
+
+        val failedJob = jobs.firstOrNull { job ->
+            job.conclusion?.lowercase() in failureConclusions ||
+                job.steps.any { step -> step.conclusion?.lowercase() in failureConclusions }
+        } ?: jobs.firstOrNull()
+
+        if (failedJob == null) {
+            return DiagnosticoCIInfo(
+                runId = runId,
+                jobName = null,
+                etapaFallida = "Ejecución de workflow",
+                logError = "La corrida de CI/CD finalizó con errores. Revisá el detalle completo en GitHub Actions.",
+                runUrl = defaultRunUrl,
+            )
+        }
+
+        val failedStep = failedJob.steps.firstOrNull { it.conclusion?.lowercase() in failureConclusions }
+        val etapaFallida = failedStep?.name?.takeIf { it.isNotBlank() }
+            ?: failedJob.name.takeIf { it.isNotBlank() }
+            ?: "Ejecución de workflow"
+
+        val rawLog = if (failedJob.id > 0) {
+            getJobLogs(repoName, failedJob.id, targetOrg)
+        } else {
+            null
+        }
+
+        val logError = extraerResumenLogError(
+            rawLog = rawLog,
+            etapaFallida = etapaFallida,
+            jobName = failedJob.name.takeIf { it.isNotBlank() },
+        )
+
+        val finalRunUrl = runHtmlUrl?.takeIf { it.isNotBlank() }
+            ?: failedJob.htmlUrl?.takeIf { it.isNotBlank() }
+            ?: defaultRunUrl
+
+        return DiagnosticoCIInfo(
+            runId = runId,
+            jobName = failedJob.name.takeIf { it.isNotBlank() },
+            etapaFallida = etapaFallida,
+            logError = logError,
+            runUrl = finalRunUrl,
+        )
+    }
+
+    @JvmOverloads
+    fun obtenerUltimoDiagnosticoCIFallido(
+        repoName: String,
+        org: String? = null,
+    ): DiagnosticoCIInfo? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val failureConclusions = setOf("failure", "timed_out", "cancelled", "action_required")
+        return try {
+            val workflowRuns = gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/actions/runs?per_page=5",
+                responseType = GitHubWorkflowRunsResponse::class.java,
+            )
+            val latestRun = workflowRuns.workflowRuns.firstOrNull() ?: return null
+            if (latestRun.conclusion?.lowercase() in failureConclusions && latestRun.id > 0) {
+                obtenerDiagnosticoCorridaFallida(
+                    repoName = repoName,
+                    runId = latestRun.id,
+                    runHtmlUrl = latestRun.htmlUrl,
+                    org = targetOrg,
+                )
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun extraerResumenLogError(
+        rawLog: String?,
+        etapaFallida: String?,
+        jobName: String? = null,
+    ): String {
+        if (rawLog.isNullOrBlank()) {
+            return if (!etapaFallida.isNullOrBlank()) {
+                val sufijoJob = if (!jobName.isNullOrBlank() && !jobName.equals(etapaFallida, ignoreCase = true)) {
+                    " (job '$jobName')"
+                } else {
+                    ""
+                }
+                "Fallo en la etapa '$etapaFallida'$sufijoJob."
+            } else {
+                "La corrida de CI/CD finalizó con errores."
+            }
+        }
+
+        val timestampRegex = Regex("""^\uFEFF?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?""")
+        val ansiRegex = Regex("""\u001B\[[;\d]*[A-Za-z]""")
+
+        val cleanedLines = rawLog.lines()
+            .map { line ->
+                line.replace(timestampRegex, "")
+                    .replace(ansiRegex, "")
+                    .trimEnd()
+            }
+            .filter { it.isNotBlank() }
+
+        if (cleanedLines.isEmpty()) {
+            return if (!etapaFallida.isNullOrBlank()) {
+                "Fallo en la etapa '$etapaFallida'."
+            } else {
+                "La corrida de CI/CD finalizó con errores."
+            }
+        }
+
+        val stepGroupIndex = if (!etapaFallida.isNullOrBlank()) {
+            cleanedLines.indexOfLast { line ->
+                line.startsWith("##[group]", ignoreCase = true) &&
+                    line.contains(etapaFallida, ignoreCase = true)
+            }
+        } else {
+            -1
+        }
+
+        val lastErrorMarkerIndex = cleanedLines.indexOfLast { it.startsWith("##[error]", ignoreCase = true) }
+        val lastGroupBeforeErrorIndex = if (lastErrorMarkerIndex >= 0) {
+            cleanedLines.subList(0, lastErrorMarkerIndex + 1)
+                .indexOfLast { it.startsWith("##[group]", ignoreCase = true) }
+        } else {
+            cleanedLines.indexOfLast { it.startsWith("##[group]", ignoreCase = true) }
+        }
+
+        val sectionStartIndex = when {
+            stepGroupIndex >= 0 -> stepGroupIndex
+            lastGroupBeforeErrorIndex >= 0 -> lastGroupBeforeErrorIndex
+            else -> 0
+        }
+
+        val sectionLines = cleanedLines.subList(sectionStartIndex, cleanedLines.size)
+            .filterNot { it.equals("##[endgroup]", ignoreCase = true) }
+            .map { line ->
+                when {
+                    line.startsWith("##[group]", ignoreCase = true) ->
+                        "$ " + line.removePrefix("##[group]").removePrefix("##[GROUP]").trim()
+                    line.startsWith("##[error]", ignoreCase = true) ->
+                        "[ERROR] " + line.removePrefix("##[error]").removePrefix("##[ERROR]").trim()
+                    else -> line
+                }
+            }
+
+        val maxLines = 50
+        val maxChars = 4000
+
+        val relevantLines = if (sectionLines.size > maxLines) {
+            val errorKeywords = listOf(
+                "[ERROR]",
+                "FAILURE",
+                "Exception",
+                "Error:",
+                "error:",
+                "ERR!",
+                "FAIL ",
+                "COMPILATION ERROR",
+                "Tests run:",
+                "AssertionFailedError",
+            )
+            val firstErrorIdx = sectionLines.indexOfFirst { line ->
+                errorKeywords.any { kw -> line.contains(kw) }
+            }
+            if (firstErrorIdx >= 0) {
+                val startIdx = (firstErrorIdx - 3).coerceAtLeast(0)
+                sectionLines.subList(startIdx, sectionLines.size).takeLast(maxLines)
+            } else {
+                sectionLines.takeLast(maxLines)
+            }
+        } else {
+            sectionLines
+        }
+
+        val joined = relevantLines.joinToString("\n")
+        return if (joined.length > maxChars) {
+            "...\n" + joined.takeLast(maxChars).trimStart()
+        } else {
+            joined
+        }
+    }
+
     private fun requiredOrganization(): String = properties.organization?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -367,8 +597,42 @@ data class GitHubWorkflowRunsResponse(
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GitHubWorkflowRunItem(
+    @JsonProperty("id") val id: Long = 0,
     @JsonProperty("status") val status: String = "",
     @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("html_url") val htmlUrl: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowJobsResponse(
+    @JsonProperty("total_count") val totalCount: Int = 0,
+    @JsonProperty("jobs") val jobs: List<GitHubWorkflowJobItem> = emptyList(),
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowJobItem(
+    @JsonProperty("id") val id: Long = 0,
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("status") val status: String = "",
+    @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("html_url") val htmlUrl: String? = null,
+    @JsonProperty("steps") val steps: List<GitHubWorkflowStepItem> = emptyList(),
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowStepItem(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("status") val status: String = "",
+    @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("number") val number: Int = 0,
+)
+
+data class DiagnosticoCIInfo(
+    val runId: Long,
+    val jobName: String? = null,
+    val etapaFallida: String,
+    val logError: String,
+    val runUrl: String,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

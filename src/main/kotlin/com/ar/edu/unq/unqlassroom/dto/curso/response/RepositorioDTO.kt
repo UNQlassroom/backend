@@ -8,6 +8,9 @@ data class RepositorioDTO(
     val ultimoCommit: String? = null,
     val fechaUltimoCommit: String? = null,
     val estadoCI: String? = null,
+    val ciEtapaFallida: String? = null,
+    val ciLogError: String? = null,
+    val ciRunUrl: String? = null,
 ) {
     companion object {
         fun desdeModelo(modelo: Repositorio): RepositorioDTO {
@@ -17,6 +20,9 @@ data class RepositorioDTO(
                 ultimoCommit = modelo.ultimoCommit,
                 fechaUltimoCommit = modelo.fechaUltimoCommit,
                 estadoCI = modelo.estadoCI,
+                ciEtapaFallida = modelo.ciEtapaFallida,
+                ciLogError = modelo.ciLogError,
+                ciRunUrl = modelo.ciRunUrl,
             )
         }
     }
