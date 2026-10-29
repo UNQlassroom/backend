@@ -109,6 +109,22 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @GetMapping("/{asignacionId}/diagnostico-ci")
+    fun obtenerDiagnosticoCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<DiagnosticoCIResponseDTO> {
+        val response = asignacionService.obtenerDiagnosticoCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        return ResponseEntity.ok(response)
+    }
+
     @GetMapping("/{asignacionId}/metricas")
     fun obtenerMetricasCI(
         @PathVariable cursoId: Long,

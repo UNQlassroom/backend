@@ -1,11 +1,13 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.DiagnosticoCIResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.MetricasCIResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
@@ -31,6 +33,7 @@ class AsignacionServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val issueRepository: IssueRepository,
     private val asyncService: AsyncService,
+    private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
     private val metricaCIRepository: MetricaCIRepository? = null,
 ) : AsignacionService {
 
@@ -178,6 +181,17 @@ class AsignacionServiceImpl(
                 try {
                     val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
                     repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
+                    if (repo.estadoCI == "failure" && repo.ciEtapaFallida.isNullOrBlank()) {
+                        val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                        if (diagnostico != null) {
+                            repo.registrarFallaCI(
+                                etapaFallida = diagnostico.etapaFallida,
+                                logError = diagnostico.logError,
+                                runUrl = diagnostico.runUrl,
+                                runId = diagnostico.runId,
+                            )
+                        }
+                    }
                 } catch (_: Exception) {
                     // Si falla consulta puntual a github, mantener el estado persistido
                 }
@@ -342,12 +356,72 @@ class AsignacionServiceImpl(
         }
     }
 
+    override fun obtenerDiagnosticoCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): DiagnosticoCIResponseDTO {
+        val (asignacion, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el diagnóstico de CI",
+        )
+
+        if (repo.estadoCI == "failure" && (repo.ciEtapaFallida.isNullOrBlank() || repo.ciLogError.isNullOrBlank())) {
+            try {
+                val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                if (diagnostico != null) {
+                    repo.registrarFallaCI(
+                        etapaFallida = diagnostico.etapaFallida,
+                        logError = diagnostico.logError,
+                        runUrl = diagnostico.runUrl,
+                        runId = diagnostico.runId,
+                    )
+                    asignacionRepository.save(asignacion)
+                }
+            } catch (_: Exception) {
+                // Si falla la consulta a GitHub, devolver el estado persistido
+            }
+        }
+
+        return DiagnosticoCIResponseDTO.desdeModelo(repo)
+    }
+
     override fun obtenerMetricasCI(
         cursoId: Long,
         asignacionId: Long,
         solicitanteUsername: String,
         grupoId: Long?,
     ): MetricasCIResponseDTO {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "las métricas de CI",
+        )
+
+        val metrica = repo.id?.let { repoId ->
+            metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return if (metrica != null) {
+            MetricasCIResponseDTO.desdeModelo(metrica)
+        } else {
+            MetricasCIResponseDTO.sinMetricas(repo.nombre, umbralCoberturaDefault)
+        }
+    }
+
+    private fun resolverAsignacionYRepositorio(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+        recursoDescripcion: String,
+    ): Pair<Asignacion, Repositorio> {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
@@ -356,7 +430,7 @@ class AsignacionServiceImpl(
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las métricas de CI de esta asignación")
+            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -371,7 +445,7 @@ class AsignacionServiceImpl(
         } else {
             val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
             if (grupoId != null && grupoDelAlumno.id != grupoId) {
-                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las métricas de CI de otro grupo")
+                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de otro grupo")
             }
             grupoDelAlumno
         }
@@ -379,15 +453,7 @@ class AsignacionServiceImpl(
         val repo = grupo.repositorio
             ?: throw ResourceNotFoundException("El grupo no posee un repositorio asociado", "REPOSITORIO_NOT_FOUND")
 
-        val metrica = repo.id?.let { repoId ->
-            metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
-        }
-
-        return if (metrica != null) {
-            MetricasCIResponseDTO.desdeModelo(metrica)
-        } else {
-            MetricasCIResponseDTO.sinMetricas(repo.nombre, umbralCoberturaDefault)
-        }
+        return Pair(asignacion, repo)
     }
 
     override fun eliminarAsignacion(
@@ -413,6 +479,7 @@ class AsignacionServiceImpl(
 
         if (repoIds.isNotEmpty()) {
             issueRepository.deleteAllByRepositorioIdIn(repoIds)
+            advertenciaGitRepository?.deleteAllByRepositorioIdIn(repoIds)
             metricaCIRepository?.deleteAllByRepositorioIdIn(repoIds)
         }
 

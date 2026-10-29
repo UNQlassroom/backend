@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.integration.github.service.DiagnosticoCIInfo
+import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
@@ -22,6 +24,9 @@ class WorkflowRunWebhookHandlerTest {
     private lateinit var repositorioRepository: RepositorioRepository
 
     @Mock
+    private lateinit var gitHubRepoService: GitHubRepoService
+
+    @Mock
     private lateinit var metricasCIService: MetricasCIService
 
     private val objectMapper = ObjectMapper()
@@ -35,7 +40,12 @@ class WorkflowRunWebhookHandlerTest {
 
     @BeforeEach
     fun setUp() {
-        handler = WorkflowRunWebhookHandler(repositorioRepository, objectMapper, metricasCIService)
+        handler = WorkflowRunWebhookHandler(
+            repositorioRepository = repositorioRepository,
+            objectMapper = objectMapper,
+            gitHubRepoService = gitHubRepoService,
+            metricasCIService = metricasCIService,
+        )
     }
 
     @Test
@@ -249,5 +259,159 @@ class WorkflowRunWebhookHandlerTest {
 
         verifyNoInteractions(repositorioRepository)
         verifyNoInteractions(metricasCIService)
+    }
+
+    @Test
+    fun `handle con failure y runId consulta GitHubRepoService y persiste diagnostico detallado`() {
+        val payload = """
+        {
+          "action": "completed",
+          "repository": {
+            "name": "tp1-intro-juan"
+          },
+          "workflow_run": {
+            "id": 999111,
+            "name": "Java CI with Maven",
+            "status": "completed",
+            "conclusion": "failure",
+            "html_url": "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999111"
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "workflow_run",
+            payload = payload
+        )
+
+        val repoExistente = Repositorio(
+            id = 1L,
+            nombre = "tp1-intro-juan",
+            htmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan",
+            estadoCI = "pending"
+        )
+
+        val diagnosticoEsperado = DiagnosticoCIInfo(
+            runId = 999111L,
+            jobName = "build",
+            etapaFallida = "mvn compile",
+            logError = "[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin: Compilation failure",
+            runUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999111"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(
+            gitHubRepoService.obtenerDiagnosticoCorridaFallida(
+                repoName = "tp1-intro-juan",
+                runId = 999111L,
+                runHtmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999111"
+            )
+        ).thenReturn(diagnosticoEsperado)
+
+        handler.handle(evento)
+
+        val captor = ArgumentCaptor.forClass(Repositorio::class.java)
+        verify(repositorioRepository).save(captor.capture())
+
+        val guardado = captor.value
+        assertEquals("failure", guardado.estadoCI)
+        assertEquals(999111L, guardado.ciRunId)
+        assertEquals("mvn compile", guardado.ciEtapaFallida)
+        assertEquals(
+            "[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin: Compilation failure",
+            guardado.ciLogError
+        )
+        assertEquals("https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999111", guardado.ciRunUrl)
+    }
+
+    @Test
+    fun `handle con failure persiste fallback si GitHubRepoService lanza excepcion`() {
+        val payload = """
+        {
+          "action": "completed",
+          "repository": {
+            "name": "tp1-intro-juan"
+          },
+          "workflow_run": {
+            "id": 999222,
+            "name": "Build & Test",
+            "status": "completed",
+            "conclusion": "failure",
+            "html_url": "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999222"
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(eventType = "workflow_run", payload = payload)
+        val repoExistente = Repositorio(
+            id = 1L,
+            nombre = "tp1-intro-juan",
+            htmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan",
+            estadoCI = "pending"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(
+            gitHubRepoService.obtenerDiagnosticoCorridaFallida(
+                repoName = "tp1-intro-juan",
+                runId = 999222L,
+                runHtmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999222"
+            )
+        ).thenThrow(RuntimeException("API down"))
+
+        handler.handle(evento)
+
+        val captor = ArgumentCaptor.forClass(Repositorio::class.java)
+        verify(repositorioRepository).save(captor.capture())
+
+        val guardado = captor.value
+        assertEquals("failure", guardado.estadoCI)
+        assertEquals(999222L, guardado.ciRunId)
+        assertEquals("Build & Test", guardado.ciEtapaFallida)
+        assertEquals("https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999222", guardado.ciRunUrl)
+        assertNotNull(guardado.ciLogError)
+    }
+
+    @Test
+    fun `handle con success limpia datos de falla de CI previa`() {
+        val payload = """
+        {
+          "action": "completed",
+          "repository": {
+            "name": "tp1-intro-juan"
+          },
+          "workflow_run": {
+            "status": "completed",
+            "conclusion": "success"
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(eventType = "workflow_run", payload = payload)
+        val repoExistente = Repositorio(
+            id = 1L,
+            nombre = "tp1-intro-juan",
+            htmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan",
+            estadoCI = "failure",
+            ciRunId = 999111L,
+            ciEtapaFallida = "mvn test",
+            ciLogError = "Error log",
+            ciRunUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan/actions/runs/999111"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+
+        handler.handle(evento)
+
+        val captor = ArgumentCaptor.forClass(Repositorio::class.java)
+        verify(repositorioRepository).save(captor.capture())
+
+        val guardado = captor.value
+        assertEquals("success", guardado.estadoCI)
+        assertNull(guardado.ciRunId)
+        assertNull(guardado.ciEtapaFallida)
+        assertNull(guardado.ciLogError)
+        assertNull(guardado.ciRunUrl)
     }
 }

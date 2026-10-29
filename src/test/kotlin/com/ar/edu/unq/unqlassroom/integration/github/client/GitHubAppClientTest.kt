@@ -351,6 +351,45 @@ class GitHubAppClientTest {
     }
 
     @Test
+    fun `downloadTextResource returns body on 200, follows 302 redirect, and returns null on 404`() {
+        server.createContext("/app/installations/$installationId/access_tokens") { exchange ->
+            respondJson(exchange, 200, """{"token":"test-token","expires_at":"2099-01-01T00:00:00Z"}""")
+        }
+
+        server.createContext("/repos/org/repo/actions/jobs/1/logs") { exchange ->
+            val bytes = "Direct log content".toByteArray(StandardCharsets.UTF_8)
+            exchange.responseHeaders.set("Content-Type", "text/plain")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.write(bytes)
+            exchange.responseBody.close()
+        }
+
+        server.createContext("/repos/org/repo/actions/jobs/2/logs") { exchange ->
+            exchange.responseHeaders.set("Location", "http://localhost:$port/blob-storage/job-2-log.txt")
+            exchange.sendResponseHeaders(302, -1)
+            exchange.responseBody.close()
+        }
+
+        server.createContext("/blob-storage/job-2-log.txt") { exchange ->
+            // Verify Authorization header is not leaked to external redirect storage
+            assertNull(exchange.requestHeaders.getFirst("Authorization"))
+            val bytes = "Redirected log content from blob".toByteArray(StandardCharsets.UTF_8)
+            exchange.responseHeaders.set("Content-Type", "text/plain")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.write(bytes)
+            exchange.responseBody.close()
+        }
+
+        server.createContext("/repos/org/repo/actions/jobs/3/logs") { exchange ->
+            respondEmpty(exchange, 404)
+        }
+
+        assertEquals("Direct log content", client.downloadTextResource("/repos/org/repo/actions/jobs/1/logs"))
+        assertEquals("Redirected log content from blob", client.downloadTextResource("/repos/org/repo/actions/jobs/2/logs"))
+        assertNull(client.downloadTextResource("/repos/org/repo/actions/jobs/3/logs"))
+    }
+
+    @Test
     fun `loadPrivateKey works with PKCS8 key file`() {
         val kpg = KeyPairGenerator.getInstance("RSA")
         kpg.initialize(2048)
