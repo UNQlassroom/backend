@@ -109,6 +109,22 @@ class AsignacionController(
         return ResponseEntity.ok(response)
     }
 
+    @GetMapping("/{asignacionId}/linter")
+    fun obtenerReporteLinter(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<ReporteLinterResponseDTO> {
+        val response = asignacionService.obtenerReporteLinter(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        return ResponseEntity.ok(response)
+    }
+
     @DeleteMapping("/{asignacionId}")
     fun eliminarAsignacion(
         @PathVariable cursoId: Long,

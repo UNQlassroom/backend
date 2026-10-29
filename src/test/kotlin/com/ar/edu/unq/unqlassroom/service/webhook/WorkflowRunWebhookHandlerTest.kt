@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -20,23 +21,40 @@ class WorkflowRunWebhookHandlerTest {
     @Mock
     private lateinit var repositorioRepository: RepositorioRepository
 
+    @Mock
+    private lateinit var linterCIService: LinterCIService
+
     private val objectMapper = ObjectMapper()
     private lateinit var handler: WorkflowRunWebhookHandler
 
     @BeforeEach
     fun setUp() {
-        handler = WorkflowRunWebhookHandler(repositorioRepository, objectMapper)
+        handler = WorkflowRunWebhookHandler(repositorioRepository, objectMapper, linterCIService)
+    }
+
+    private fun anyJsonNode(): JsonNode {
+        any(JsonNode::class.java)
+        return objectMapper.createObjectNode()
+    }
+
+    private fun eqRepo(repo: Repositorio): Repositorio {
+        eq(repo)
+        return repo
     }
 
     @Test
-    fun `canHandle retorna true solo para eventos workflow_run case-insensitive`() {
+    fun `canHandle retorna true para eventos workflow_run y reportes de linter case-insensitive`() {
         val eventLower = WebhookEvent(eventType = "workflow_run", payload = "{}")
         val eventUpper = WebhookEvent(eventType = "WORKFLOW_RUN", payload = "{}")
+        val eventLinter = WebhookEvent(eventType = "linter_report", payload = "{}")
+        val eventStatic = WebhookEvent(eventType = "STATIC_ANALYSIS", payload = "{}")
         val eventPush = WebhookEvent(eventType = "push", payload = "{}")
         val eventRelease = WebhookEvent(eventType = "release", payload = "{}")
 
         assertTrue(handler.canHandle(eventLower))
         assertTrue(handler.canHandle(eventUpper))
+        assertTrue(handler.canHandle(eventLinter))
+        assertTrue(handler.canHandle(eventStatic))
         assertFalse(handler.canHandle(eventPush))
         assertFalse(handler.canHandle(eventRelease))
     }
@@ -70,6 +88,7 @@ class WorkflowRunWebhookHandlerTest {
         )
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
 
         handler.handle(evento)
 
@@ -108,6 +127,7 @@ class WorkflowRunWebhookHandlerTest {
         )
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
 
         handler.handle(evento)
 
@@ -146,6 +166,7 @@ class WorkflowRunWebhookHandlerTest {
         )
 
         `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+        `when`(repositorioRepository.save(repoExistente)).thenReturn(repoExistente)
 
         handler.handle(evento)
 
@@ -153,6 +174,46 @@ class WorkflowRunWebhookHandlerTest {
         verify(repositorioRepository).save(captor.capture())
 
         assertEquals("failure", captor.value.estadoCI)
+    }
+
+    @Test
+    fun `handle procesa reporte de linter enviado directamente por el CI mediante evento linter_report`() {
+        val payload = """
+        {
+          "repo_name": "tp1-intro-juan",
+          "commit_sha": "sha-1234",
+          "linter": {
+            "incidencias": [
+              {
+                "archivo": "src/App.kt",
+                "linea": 10,
+                "severidad": "WARNING",
+                "regla": "unused import"
+              }
+            ]
+          }
+        }
+        """.trimIndent()
+
+        val evento = WebhookEvent(
+            id = UUID.randomUUID(),
+            eventType = "linter_report",
+            payload = payload
+        )
+
+        val repoExistente = Repositorio(
+            id = 1L,
+            nombre = "tp1-intro-juan",
+            htmlUrl = "https://github.com/UNQlassroom-cursos/tp1-intro-juan",
+            estadoCI = "success"
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("tp1-intro-juan")).thenReturn(repoExistente)
+
+        handler.handle(evento)
+
+        verify(repositorioRepository, never()).save(any())
+        verify(linterCIService).procesarReporteDeEvento(eqRepo(repoExistente), anyJsonNode())
     }
 
     @Test
@@ -175,6 +236,7 @@ class WorkflowRunWebhookHandlerTest {
         handler.handle(evento)
 
         verify(repositorioRepository, never()).save(any())
+        verifyNoInteractions(linterCIService)
     }
 
     @Test
@@ -193,5 +255,6 @@ class WorkflowRunWebhookHandlerTest {
         handler.handle(evento)
 
         verifyNoInteractions(repositorioRepository)
+        verifyNoInteractions(linterCIService)
     }
 }
