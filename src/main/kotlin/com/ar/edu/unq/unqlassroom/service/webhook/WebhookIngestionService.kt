@@ -17,19 +17,9 @@ class WebhookIngestionService(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    companion object {
-        private val EVENTOS_CI_DIRECTOS = setOf(
-            "linter_report",
-            "coverage_report",
-        )
-    }
-
     @Transactional
     fun registrarEvento(payload: String, signature: String?, eventType: String, deliveryId: String? = null) {
-        val esEventoDirecto = eventType.lowercase() in EVENTOS_CI_DIRECTOS
-        if (!esEventoDirecto || !signature.isNullOrBlank()) {
-            webhookSignatureValidator.validate(payload, signature)
-        }
+        webhookSignatureValidator.validate(payload, signature)
 
         if (esDuplicado(deliveryId)) {
             logger.warn("Webhook duplicado ignorado. Delivery ID: {}", deliveryId)
