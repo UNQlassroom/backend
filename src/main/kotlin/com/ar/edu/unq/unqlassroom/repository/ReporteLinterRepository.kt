@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Transactional
 
 @Repository
 interface ReporteLinterRepository : JpaRepository<ReporteLinter, Long> {
@@ -17,7 +18,19 @@ interface ReporteLinterRepository : JpaRepository<ReporteLinter, Long> {
     fun findByAlumnoIdOrderByFechaActualizacionDesc(alumnoId: Long): List<ReporteLinter>
 
     @Modifying
-    @Query("DELETE FROM ReporteLinter r WHERE r.repositorio.id IN :repoIds")
-    fun deleteAllByRepositorioIdIn(@Param("repoIds") repoIds: Collection<Long>)
-}
+    @Query("DELETE FROM IncidenciaLinter i WHERE i.reporte.id IN (SELECT r.id FROM ReporteLinter r WHERE r.repositorio.id IN :repoIds)")
+    fun deleteIncidenciasByRepositorioIdIn(@Param("repoIds") repoIds: Collection<Long>)
 
+    @Modifying
+    @Query("DELETE FROM ReporteLinter r WHERE r.repositorio.id IN :repoIds")
+    fun deleteReportesByRepositorioIdIn(@Param("repoIds") repoIds: Collection<Long>)
+
+    @Modifying
+    @Transactional
+    fun deleteAllByRepositorioIdIn(repoIds: Collection<Long>) {
+        if (repoIds.isNotEmpty()) {
+            deleteIncidenciasByRepositorioIdIn(repoIds)
+            deleteReportesByRepositorioIdIn(repoIds)
+        }
+    }
+}

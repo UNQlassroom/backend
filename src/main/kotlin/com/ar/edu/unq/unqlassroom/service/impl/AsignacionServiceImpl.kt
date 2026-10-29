@@ -23,7 +23,7 @@ import java.time.LocalDateTime
 
 @Service
 @Transactional
-class AsignacionServiceImpl @JvmOverloads constructor(
+class AsignacionServiceImpl constructor(
     private val asignacionRepository: AsignacionRepository,
     private val cursoRepository: CursoRepository,
     private val inscripcionRepository: InscripcionRepository,

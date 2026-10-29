@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
+import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.LinterCIService
@@ -114,7 +115,7 @@ class WorkflowRunWebhookHandler(
     private fun procesarDiagnosticoFalla(
         rootNode: JsonNode,
         repoName: String,
-        repositorio: com.ar.edu.unq.unqlassroom.model.Repositorio,
+        repositorio: Repositorio,
     ) {
         val workflowNode = rootNode.path("workflow_run")
         val runId = workflowNode.path("id").asLong(0L).takeIf { it > 0L }

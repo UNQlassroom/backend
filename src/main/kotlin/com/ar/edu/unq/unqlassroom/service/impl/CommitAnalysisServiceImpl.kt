@@ -7,7 +7,6 @@ import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.fasterxml.jackson.databind.JsonNode
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
@@ -15,10 +14,8 @@ class CommitAnalysisServiceImpl(
     private val advertenciaGitRepository: AdvertenciaGitRepository,
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val usuarioRepository: UsuarioRepository,
-    @Value("\${git.analysis.max-files:15}")
+
     private val maxFiles: Int = 15,
-    @Value("\${git.analysis.max-lines:500}")
-    private val maxLines: Int = 500,
 ) : CommitAnalysisService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -120,8 +117,8 @@ class CommitAnalysisServiceImpl(
         val esInitOMerge = esCommitInitOMerge(metricas.mensaje, metricas.nodo)
 
         // 1. Validación de tamaño (omite commits de init o merge)
-        if (!esInitOMerge && (metricas.archivosModificados > maxFiles || metricas.lineasModificadas > maxLines)) {
-            val explicacion = "Detectamos un commit grande (+${metricas.lineasModificadas} líneas / ${metricas.archivosModificados} archivos). " +
+        if (!esInitOMerge && metricas.archivosModificados > maxFiles) {
+            val explicacion = "Detectamos un commit grande (${metricas.archivosModificados} archivos modificados). " +
                 "Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad."
 
             resultado.add(

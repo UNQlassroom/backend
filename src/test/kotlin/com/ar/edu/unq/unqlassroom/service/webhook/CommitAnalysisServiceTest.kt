@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.ArgumentCaptor
 import org.mockito.Mock
 import org.mockito.Mockito.*
 import org.mockito.junit.jupiter.MockitoExtension
@@ -39,7 +38,6 @@ class CommitAnalysisServiceTest {
             grupoAsignacionRepository = grupoAsignacionRepository,
             usuarioRepository = usuarioRepository,
             maxFiles = 15,
-            maxLines = 500,
         )
     }
 
@@ -111,13 +109,12 @@ class CommitAnalysisServiceTest {
         assertEquals(grupo, adv.grupoAsignacion)
         assertEquals(asignacion, adv.asignacion)
         assertEquals(repo, adv.repositorio)
-        assertTrue(adv.mensajeExplicativo.contains("Detectamos un commit grande (+130 líneas / 16 archivos)"))
+        assertTrue(adv.mensajeExplicativo.contains("Detectamos un commit grande (16 archivos modificados)"))
     }
 
     @Test
-    fun `analizarCommitsDePush genera COMMIT_NO_ATOMICO cuando supera umbral de 500 lineas modificadas`() {
+    fun `analizarCommitsDePush no genera COMMIT_NO_ATOMICO si no supera el umbral de 15 archivos modificados`() {
         val repo = Repositorio(id = 100L, nombre = "tp1-ana", htmlUrl = "https://github.com/org/tp1-ana")
-        `when`(advertenciaGitRepository.save(anyAdvertencia())).thenAnswer { it.getArgument(0) }
 
         val payload = """
         {
@@ -127,11 +124,7 @@ class CommitAnalysisServiceTest {
               "id": "sha999",
               "message": "feat: implementar logica completa del juego",
               "timestamp": "2026-10-21T12:00:00Z",
-              "modified": ["src/Game.kt", "src/Board.kt"],
-              "stats": {
-                "additions": 420,
-                "deletions": 110
-              }
+              "modified": ["src/Game.kt", "src/Board.kt"]
             }
           ]
         }
@@ -139,17 +132,7 @@ class CommitAnalysisServiceTest {
 
         val resultado = service.analizarCommitsDePush(repo, objectMapper.readTree(payload))
 
-        assertEquals(1, resultado.size)
-        val adv = resultado[0]
-        assertEquals(TipoAdvertenciaGit.COMMIT_NO_ATOMICO, adv.tipo)
-        assertEquals(2, adv.archivosModificados)
-        assertEquals(530, adv.lineasModificadas)
-        assertEquals(420, adv.lineasAgregadas)
-        assertEquals(110, adv.lineasEliminadas)
-        assertEquals(
-            "Detectamos un commit grande (+530 líneas / 2 archivos). Se recomienda partir los cambios en commits atómicos centrados en una sola responsabilidad.",
-            adv.mensajeExplicativo
-        )
+        assertEquals(0, resultado.size)
     }
 
     @Test
@@ -260,6 +243,7 @@ class CommitAnalysisServiceTest {
         val repo = Repositorio(id = 100L, nombre = "tp1-mixto", htmlUrl = "https://github.com/org/tp1-mixto")
         `when`(advertenciaGitRepository.save(anyAdvertencia())).thenAnswer { it.getArgument(0) }
 
+        val modifiedFilesJson = (1..16).joinToString(",") { "\"src/Mod$it.kt\"" }
         val payload = """
         {
           "repository": { "name": "tp1-mixto" },
@@ -267,9 +251,7 @@ class CommitAnalysisServiceTest {
             {
               "id": "c_ambos",
               "message": "wip",
-              "modified": ["a.kt", "b.kt"],
-              "lines_added": 400,
-              "lines_removed": 150
+              "modified": [$modifiedFilesJson]
             }
           ]
         }
@@ -306,4 +288,3 @@ class CommitAnalysisServiceTest {
         assertTrue(resultado.isEmpty())
     }
 }
-
