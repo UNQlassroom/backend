@@ -211,7 +211,7 @@ class TemplateStandardizationServiceImplTest {
             eqNonNull("template-nuevo"),
             eqNonNull(".github/workflows/ci.yml"),
             matchString { content ->
-                content.contains("fetch-depth: 0") &&
+                content.contains("name: CI Linter & Tests") &&
                     content.contains("X-GitHub-Event: linter_report") &&
                     content.contains("X-GitHub-Event: coverage_report") &&
                     content.contains("https://webhook.unqlassroom.edu.ar/events")

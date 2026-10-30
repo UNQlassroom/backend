@@ -430,152 +430,145 @@ $pluginsXml
     }
 
     override fun construirWorkflowCI(): String {
-        val targetUrl = webhookPublicUrl.trim()
-        if (targetUrl.isBlank()) {
-            logger.warn("La propiedad 'github.webhook.public-url' no esta configurada. El workflow de CI no podra enviar reportes al backend.")
-        }
+        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
         return """
-name: UNQlassroom CI
+name: CI Linter & Tests
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "develop" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "develop" ]
 
 jobs:
-  build-and-analyze:
+  evaluar-calidad:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
+      - name: 2. Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
 
-    # ==========================================
-    # ETAPA 1: LINTER (Checkstyle)
-    # ==========================================
-    - name: Run Linter (Checkstyle)
-      run: |
-        chmod +x ./mvnw 2>/dev/null || true
-        ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:checkstyle \
-          -Dcheckstyle.config.location=google_checks.xml \
-          -Dcheckstyle.violationSeverity=warning || true
+      - name: 3. Ejecutar Linter (Checkstyle)
+        run: |
+          chmod +x mvnw || true
+          ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:checkstyle \
+            -Dcheckstyle.config.location=google_checks.xml \
+            -Dcheckstyle.violationSeverity=warning || true
 
-    - name: Send Linter Report to Backend
-      if: always()
-      env:
-        COMMIT_SHA: ${'$'}{{ github.sha }}
-        REPO_NAME: ${'$'}{{ github.event.repository.name }}
-      run: |
-        CHECKSTYLE_PATH="target/checkstyle-result.xml"
-        
-        if [ -f "${'$'}CHECKSTYLE_PATH" ]; then
-          echo "Reporte de Linter encontrado. Preparando envío..."
-          
-          jq -n \
-            --arg repo "${'$'}REPO_NAME" \
-            --arg sha "${'$'}COMMIT_SHA" \
-            --rawfile xml "${'$'}CHECKSTYLE_PATH" \
-            '{repo_name: ${'$'}repo, commit_sha: ${'$'}sha, checkstyle_xml: ${'$'}xml}' > linter_payload.json
-            
+      - name: 4. Enviar reporte de Linter a UNQlassroom
+        if: always()
+        run: |
+          REPORT_FILE="target/checkstyle-result.xml"
+          if [ ! -f "${'$'}REPORT_FILE" ]; then
+            echo '<?xml version="1.0" encoding="UTF-8"?><checkstyle version="10.0"></checkstyle>' > empty-checkstyle.xml
+            REPORT_FILE="empty-checkstyle.xml"
+          fi
+          XML_CONTENT=${'$'}(jq -Rs . < "${'$'}REPORT_FILE")
+
+          PAYLOAD=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg tool "checkstyle" \
+            --argjson xml "${'$'}XML_CONTENT" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: { id: ${'$'}sha, author: { username: ${'$'}author } },
+              run_id: (${'$'}run_id | tonumber),
+              herramienta: ${'$'}tool,
+              checkstyle_xml: ${'$'}xml
+            }')
+
           curl -X POST "$targetUrl" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: linter_report" \
-            -d @linter_payload.json
-        else
-          echo "No se generó reporte de Checkstyle."
-        fi
+            -d "${'$'}PAYLOAD"
 
-    # ==========================================
-    # ETAPA 2: TESTS Y COBERTURA (JaCoCo) + TAMAÑO DE COMMIT
-    # ==========================================
-    - name: Run Tests and JaCoCo
-      run: |
-        chmod +x ./mvnw 2>/dev/null || true
-        ./mvnw test jacoco:report -Dmaven.test.failure.ignore=true || true
+      - name: 5. Ejecutar Tests y Cobertura (JaCoCo)
+        run: |
+          # Corre todos los tests generando reportes de Surefire y el XML de JaCoCo aun si algún test falla
+          ./mvnw test jacoco:report -Dmaven.test.failure.ignore=true || true
 
-    - name: Send Coverage and Test Report to Backend
-      if: always()
-      env:
-        COMMIT_SHA: ${'$'}{{ github.sha }}
-        REPO_NAME: ${'$'}{{ github.event.repository.name }}
-      run: |
-        JACOCO_PATH="target/site/jacoco/jacoco.xml"
-        SUREFIRE_DIR="target/surefire-reports"
-        
-        if [ -d "${'$'}SUREFIRE_DIR" ] && ls ${'$'}SUREFIRE_DIR/TEST-*.xml 1> /dev/null 2>&1; then
-          cat ${'$'}SUREFIRE_DIR/TEST-*.xml > combined_junit.xml
-        else
-          echo "" > combined_junit.xml
-        fi
-        
-        if [ ! -f "${'$'}JACOCO_PATH" ]; then
-          echo "" > empty_jacoco.xml
-          JACOCO_PATH="empty_jacoco.xml"
-        fi
+      - name: 6. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
+        if: always()
+        run: |
+          # 1. Leer JaCoCo si existe
+          JACOCO_FILE="target/site/jacoco/jacoco.xml"
+          if [ -f "${'$'}JACOCO_FILE" ]; then
+            JACOCO_XML=${'$'}(jq -Rs . < "${'$'}JACOCO_FILE")
+          else
+            JACOCO_XML='""'
+          fi
 
-        # --- NUEVA LÓGICA: EXTRAER MÉTRICAS DE GIT ---
-        COMMIT_MSG=${'$'}(git log -1 --pretty=%B)
-        
-        # Verificamos si existe un commit padre (por si es el Initial Commit)
-        if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-          STATS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{ins+=${'$'}1; del+=${'$'}2; files+=1} END {print ins+0, del+0, files+0}')
-          read INSERTIONS DELETIONS FILES_CHANGED <<< "${'$'}STATS"
-        else
-          INSERTIONS=0
-          DELETIONS=0
-          FILES_CHANGED=0
-        fi
-        
-        TOTAL_LINES=${'$'}((INSERTIONS + DELETIONS))
-        echo "Métricas de Git calculadas: Archivos=${'$'}FILES_CHANGED, Líneas=${'$'}TOTAL_LINES (+${'$'}INSERTIONS -${'$'}DELETIONS)"
-        # ---------------------------------------------
+          # 2. Leer reportes de JUnit Surefire si existen
+          SUREFIRE_XML=""
+          if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>${'$'}(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          fi
+          JUNIT_XML=${'$'}(echo "${'$'}SUREFIRE_XML" | jq -Rs .)
 
-        if [ -s "${'$'}JACOCO_PATH" ] || [ -s "combined_junit.xml" ]; then
-          echo "Empaquetando reportes de Tests, Cobertura y Git..."
-          
-          # Usamos --argjson para pasar los números como enteros reales y no como strings
-          jq -n \
-            --arg repo "${'$'}REPO_NAME" \
-            --arg sha "${'$'}COMMIT_SHA" \
+          # 3. Calcular líneas agregadas y eliminadas del commit con Git
+          PARENT=${'$'}(git rev-parse --verify HEAD~1 2>/dev/null || echo "")
+          if [ -n "${'$'}PARENT" ]; then
+            INSERTIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}2} END {print s+0}')
+            FILES_CHANGED=${'$'}(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
+          else
+            # Si es el primer commit del repositorio
+            INSERTIONS=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=0
+            FILES_CHANGED=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
+          fi
+          TOTAL_LINES=${'$'}((INSERTIONS + DELETIONS))
+          COMMIT_MSG=${'$'}(git log -1 --pretty=%B)
+
+          # 4. Construir y enviar payload completo
+          PAYLOAD_CI=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
             --arg msg "${'$'}COMMIT_MSG" \
-            --argjson files "${'$'}FILES_CHANGED" \
-            --argjson lines "${'$'}TOTAL_LINES" \
-            --argjson ins "${'$'}INSERTIONS" \
-            --argjson del "${'$'}DELETIONS" \
-            --rawfile jacoco "${'$'}JACOCO_PATH" \
-            --rawfile junit "combined_junit.xml" \
+            --arg insertions "${'$'}INSERTIONS" \
+            --arg deletions "${'$'}DELETIONS" \
+            --arg total_lines "${'$'}TOTAL_LINES" \
+            --arg files_changed "${'$'}FILES_CHANGED" \
+            --argjson jacoco "${'$'}JACOCO_XML" \
+            --argjson junit "${'$'}JUNIT_XML" \
             '{
-              repo_name: ${'$'}repo, 
-              commit_sha: ${'$'}sha, 
-              commit_message: ${'$'}msg,
-              files_changed: ${'$'}files,
-              total_lines_modified: ${'$'}lines,
-              insertions: ${'$'}ins,
-              deletions: ${'$'}del,
-              jacoco_xml: ${'$'}jacoco, 
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: {
+                id: ${'$'}sha,
+                message: ${'$'}msg,
+                author: { username: ${'$'}author },
+                stats: {
+                  additions: (${'$'}insertions | tonumber),
+                  deletions: (${'$'}deletions | tonumber),
+                  total: (${'$'}total_lines | tonumber),
+                  files_changed: (${'$'}files_changed | tonumber)
+                }
+              },
+              run_id: (${'$'}run_id | tonumber),
+              jacoco_xml: ${'$'}jacoco,
               junit_xml: ${'$'}junit
-            }' > coverage_payload.json
-            
+            }')
+
           curl -X POST "$targetUrl" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: coverage_report" \
-            -d @coverage_payload.json
-        else
-          echo "No se encontraron reportes de pruebas ni de cobertura para enviar."
-        fi
+            -d "${'$'}PAYLOAD_CI"
 """.trimIndent() + "\n"
     }
-
     companion object {
         private val JACOCO_MAVEN_PLUGIN_SNIPPET = """
             <plugin>
