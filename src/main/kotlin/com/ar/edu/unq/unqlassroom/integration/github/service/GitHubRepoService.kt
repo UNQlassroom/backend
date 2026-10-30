@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.integration.github.service
 
+import com.ar.edu.unq.unqlassroom.exception.GitHubApiException
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 
@@ -9,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 
 @Service
 class GitHubRepoService(
@@ -136,6 +139,89 @@ class GitHubRepoService(
                 responseType = Array<GitHubCommitResponse>::class.java,
             )
             commits.firstOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
+    fun getFileContent(
+        repoName: String,
+        path: String,
+        org: String? = null,
+    ): GitHubFileContentResponse? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val normalizedPath = path.trim().trimStart('/')
+        return try {
+            gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/contents/$normalizedPath",
+                responseType = GitHubFileContentResponse::class.java,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
+    fun createOrUpdateFile(
+        repoName: String,
+        path: String,
+        content: String,
+        message: String,
+        sha: String? = null,
+        branch: String? = null,
+        org: String? = null,
+    ): GitHubContentUpdateResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val normalizedPath = path.trim().trimStart('/')
+        val encodedContent = Base64.getEncoder().encodeToString(content.toByteArray(StandardCharsets.UTF_8))
+
+        fun executePut(targetSha: String?): GitHubContentUpdateResponse {
+            val requestBody = objectMapper.writeValueAsString(
+                CreateOrUpdateFileRequest(
+                    message = message,
+                    content = encodedContent,
+                    sha = targetSha?.takeIf { it.isNotBlank() },
+                    branch = branch?.takeIf { it.isNotBlank() },
+                )
+            )
+            return gitHubAppClient.executeInstallationRequest(
+                method = "PUT",
+                path = "/repos/$targetOrg/$repoName/contents/$normalizedPath",
+                responseType = GitHubContentUpdateResponse::class.java,
+                body = requestBody,
+            )
+        }
+
+        return try {
+            executePut(sha)
+        } catch (ex: GitHubApiException) {
+            if (sha.isNullOrBlank() && (ex.statusCode == 422 || ex.statusCode == 409)) {
+                val existingSha = getFileContent(repoName, normalizedPath, targetOrg)?.sha
+                if (!existingSha.isNullOrBlank()) {
+                    return executePut(existingSha)
+                }
+            }
+            throw ex
+        }
+    }
+
+    @JvmOverloads
+    fun getRepositoryTree(
+        repoName: String,
+        treeSha: String,
+        recursive: Boolean = true,
+        org: String? = null,
+    ): GitHubGitTreeResponse? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val query = if (recursive) "?recursive=1" else ""
+        return try {
+            gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/git/trees/$treeSha$query",
+                responseType = GitHubGitTreeResponse::class.java,
+            )
         } catch (_: Exception) {
             null
         }
@@ -653,4 +739,65 @@ data class GitHubReleaseResponse(
     @JsonProperty("name") val name: String? = null,
     @JsonProperty("html_url") val htmlUrl: String = "",
     @JsonProperty("created_at") val createdAt: String = "",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateOrUpdateFileRequest(
+    @JsonProperty("message") val message: String,
+    @JsonProperty("content") val content: String,
+    @JsonProperty("sha") val sha: String? = null,
+    @JsonProperty("branch") val branch: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubFileContentResponse(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("encoding") val encoding: String? = null,
+    @JsonProperty("content") val content: String? = null,
+) {
+    fun decodedContent(): String {
+        val raw = content?.takeIf { it.isNotBlank() } ?: return ""
+        return try {
+            String(Base64.getMimeDecoder().decode(raw), StandardCharsets.UTF_8)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubContentUpdateResponse(
+    @JsonProperty("content") val content: GitHubFileContentInfo? = null,
+    @JsonProperty("commit") val commit: GitHubContentCommitInfo? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubFileContentInfo(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("sha") val sha: String = "",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubContentCommitInfo(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("message") val message: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubGitTreeResponse(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("tree") val tree: List<GitHubTreeItem> = emptyList(),
+    @JsonProperty("truncated") val truncated: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubTreeItem(
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("mode") val mode: String = "",
+    @JsonProperty("type") val type: String = "",
+    @JsonProperty("sha") val sha: String = "",
 )
