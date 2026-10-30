@@ -44,7 +44,7 @@ class TemplateStandardizationServiceImplTest {
             gitHubRepoService = gitHubRepoService,
             repositorioRepository = repositorioRepository,
             gitHubAppProperties = gitHubAppProperties,
-            webhookPublicUrl = "https://smee.io/bP2Po2TmL7DMmaGd",
+            webhookPublicUrl = "https://webhook.unqlassroom.edu.ar/events",
         )
     }
 
@@ -214,7 +214,7 @@ class TemplateStandardizationServiceImplTest {
                 content.contains("fetch-depth: 0") &&
                     content.contains("X-GitHub-Event: linter_report") &&
                     content.contains("X-GitHub-Event: coverage_report") &&
-                    content.contains("https://smee.io/bP2Po2TmL7DMmaGd")
+                    content.contains("https://webhook.unqlassroom.edu.ar/events")
             },
             anyString(),
             eq("blob-ci-viejo"),

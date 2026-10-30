@@ -15,8 +15,8 @@ class TemplateStandardizationServiceImpl(
     private val gitHubRepoService: GitHubRepoService,
     private val repositorioRepository: RepositorioRepository,
     private val gitHubAppProperties: GitHubAppProperties,
-    @Value("\${github.webhook.public-url:https://smee.io/bP2Po2TmL7DMmaGd}")
-    private val webhookPublicUrl: String = "https://smee.io/bP2Po2TmL7DMmaGd",
+    @Value("\${github.webhook.public-url:}")
+    private val webhookPublicUrl: String = "",
 ) : TemplateStandardizationService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -431,6 +431,9 @@ $pluginsXml
 
     override fun construirWorkflowCI(): String {
         val targetUrl = webhookPublicUrl.trim()
+        if (targetUrl.isBlank()) {
+            logger.warn("La propiedad 'github.webhook.public-url' no esta configurada. El workflow de CI no podra enviar reportes al backend.")
+        }
         return """
 name: UNQlassroom CI
 
