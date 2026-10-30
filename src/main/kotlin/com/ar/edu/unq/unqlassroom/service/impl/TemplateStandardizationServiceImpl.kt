@@ -677,25 +677,32 @@ jobs:
 """.trimIndent() + "\n"
 
         val RESCUE_SANITY_JAVA = """
+/**
+ * Clase de sanidad por defecto para validacion de calidad.
+ */
 public class Sanity {
 
-    public boolean check() {
-        return true;
-    }
+  public boolean check() {
+    return true;
+  }
 }
 """.trimIndent() + "\n"
 
         val RESCUE_SANITY_TEST_JAVA = """
-import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.Test;
+
+/**
+ * Test de sanidad por defecto.
+ */
 class SanityTest {
 
-    @Test
-    void sanityTest() {
-        Sanity sanity = new Sanity();
-        assertTrue(sanity.check());
-    }
+  @Test
+  void sanityTest() {
+    Sanity sanity = new Sanity();
+    assertTrue(sanity.check());
+  }
 }
 """.trimIndent() + "\n"
 
