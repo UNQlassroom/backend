@@ -26,7 +26,7 @@ class TemplateStandardizationServiceImpl(
         val cleanName = templateRepoName.trim()
         require(cleanName.isNotEmpty()) { "El nombre del repositorio template no puede estar vacío" }
 
-        val org = gitHubAppProperties.organization?.trim()?.takeIf { it.isNotEmpty() } ?: "UNQlassroom"
+        val org = gitHubAppProperties.organization?.trim()?.takeIf { it.isNotEmpty() } ?: "UNQlassroom-cursos"
         val defaultHtmlUrl = "https://github.com/$org/$cleanName"
 
         val repositorio = repositorioRepository.findByNombreIgnoreCase(cleanName)?.apply {
