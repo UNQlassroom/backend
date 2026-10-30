@@ -195,11 +195,20 @@ class TemplateStandardizationServiceImplTest {
             isNull()
         )
 
-        // Verifica inyección de test de rescate porque no había archivos en src/test/
+        // Verifica inyección de clase y test de rescate porque no había archivos en src/test/
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-nuevo"),
+            eqNonNull("src/main/java/Sanity.java"),
+            matchString { it.contains("class Sanity") && it.contains("boolean check()") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
         verify(gitHubRepoService).createOrUpdateFile(
             eqNonNull("template-nuevo"),
             eqNonNull("src/test/java/SanityTest.java"),
-            matchString { it.contains("assertTrue(true)") },
+            matchString { it.contains("Sanity sanity = new Sanity()") && it.contains("assertTrue(sanity.check())") },
             anyString(),
             isNull(),
             isNull(),

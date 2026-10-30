@@ -216,7 +216,7 @@ class TemplateStandardizationServiceImpl(
             }
         }
 
-        // 3. Estructura mínima y test de rescate en src/test/java
+        // 3. Estructura mínima: clase base en src/main/java y test de rescate en src/test/java
         val tieneTestsEnArbol = if (tieneArbol) {
             archivosEnArbol.keys.any { path ->
                 path.startsWith("src/test/") && (path.endsWith(".java") || path.endsWith(".kt"))
@@ -226,6 +226,15 @@ class TemplateStandardizationServiceImpl(
         }
 
         if (!tieneTestsEnArbol) {
+            if (!existeArchivo("src/main/java/Sanity.java")) {
+                logger.info("El template '{}' no posee tests en src/test; inyectando clase de rescate Sanity.java", cleanName)
+                escribirArchivo(
+                    path = "src/main/java/Sanity.java",
+                    content = RESCUE_SANITY_JAVA,
+                    message = "feat(ci): agregar clase de rescate por defecto en src/main/java/Sanity.java",
+                )
+            }
+
             logger.info("El template '{}' no posee tests en src/test; inyectando test de rescate SanityTest.java", cleanName)
             escribirArchivo(
                 path = "src/test/java/SanityTest.java",
@@ -667,6 +676,15 @@ jobs:
 </project>
 """.trimIndent() + "\n"
 
+        val RESCUE_SANITY_JAVA = """
+public class Sanity {
+
+    public boolean check() {
+        return true;
+    }
+}
+""".trimIndent() + "\n"
+
         val RESCUE_SANITY_TEST_JAVA = """
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -675,7 +693,8 @@ class SanityTest {
 
     @Test
     void sanityTest() {
-        assertTrue(true);
+        Sanity sanity = new Sanity();
+        assertTrue(sanity.check());
     }
 }
 """.trimIndent() + "\n"
