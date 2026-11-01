@@ -1,8 +1,10 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -21,6 +23,7 @@ class PushWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
     private val commitAnalysisService: CommitAnalysisService? = null,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -73,6 +76,16 @@ class PushWebhookHandler(
                 repoName,
                 e.message
             )
+        }
+
+        // Notificar en tiempo real vía SSE
+        try {
+            sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.PUSH_RECIBIDO)
+            if (repositorio.esTemplate) {
+                sseNotificationService?.notificarTemplatesActualizados(repoName)
+            }
+        } catch (e: Exception) {
+            logger.warn("Error enviando notificación SSE para push en '{}': {}", repoName, e.message)
         }
     }
 

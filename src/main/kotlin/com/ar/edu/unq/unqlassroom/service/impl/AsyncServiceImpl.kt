@@ -7,19 +7,35 @@ import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.service.AsyncService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.TemplateStandardizationService
 import jakarta.transaction.Transactional
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 
 @Service
-class AsyncServiceImpl(
+class AsyncServiceImpl @Autowired constructor(
     private val gitHubRepoService: GitHubRepoService,
     private val gitHubCollaboratorService: GitHubCollaboratorService,
     private val asignacionRepository: AsignacionRepository,
     private val templateStandardizationService: TemplateStandardizationService? = null,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : AsyncService {
+
+    constructor(
+        gitHubRepoService: GitHubRepoService,
+        gitHubCollaboratorService: GitHubCollaboratorService,
+        asignacionRepository: AsignacionRepository,
+        templateStandardizationService: TemplateStandardizationService? = null,
+    ) : this(
+        gitHubRepoService = gitHubRepoService,
+        gitHubCollaboratorService = gitHubCollaboratorService,
+        asignacionRepository = asignacionRepository,
+        templateStandardizationService = templateStandardizationService,
+        sseNotificationService = null,
+    )
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -86,9 +102,14 @@ class AsyncServiceImpl(
             }
 
             asignacion.marcarComoLista()
-            asignacionRepository.save(asignacion)
+            val guardada = asignacionRepository.save(asignacion) ?: asignacion
 
             logger.info("Creación asincrónica de repositorios completada con éxito para asignación ID: {}", asignacionId)
+            try {
+                sseNotificationService?.notificarAsignacionActualizada(guardada)
+            } catch (e: Exception) {
+                logger.warn("Error enviando notificación SSE para asignacion lista ID {}: {}", asignacionId, e.message)
+            }
         } catch (e: Exception) {
             logger.error(
                 "Error crítico creando repositorios en GitHub para asignación ID: {}. Iniciando rollback de repositorios creados: {}",
@@ -99,7 +120,13 @@ class AsyncServiceImpl(
 
             asignacion.grupos.forEach { it.repositorio = null }
             asignacion.marcarComoError()
-            asignacionRepository.save(asignacion)
+            val fallida = asignacionRepository.save(asignacion) ?: asignacion
+
+            try {
+                sseNotificationService?.notificarAsignacionActualizada(fallida)
+            } catch (notifEx: Exception) {
+                logger.warn("Error enviando notificación SSE para asignacion fallida ID {}: {}", asignacionId, notifEx.message)
+            }
 
             eliminarRepositoriosAsincronicamente(reposCreadosEnEjecucion)
         }

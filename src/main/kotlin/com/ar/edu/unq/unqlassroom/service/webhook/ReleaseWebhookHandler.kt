@@ -1,7 +1,9 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional
 class ReleaseWebhookHandler(
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val objectMapper: ObjectMapper,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -58,6 +61,12 @@ class ReleaseWebhookHandler(
             grupo.cantidadEntregas,
             grupo.releaseUrl
         )
+
+        try {
+            sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.ENTREGA_REALIZADA)
+        } catch (e: Exception) {
+            logger.warn("Error enviando notificación SSE para ENTREGA_REALIZADA en '{}': {}", repoName, e.message)
+        }
     }
 
     private fun extraerActionDePayload(payload: String): String? {
