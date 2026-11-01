@@ -1,9 +1,11 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.Issue
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -21,6 +23,7 @@ class IssueWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val issueRepository: IssueRepository,
     private val objectMapper: ObjectMapper,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -70,6 +73,11 @@ class IssueWebhookHandler(
                 issueExistente.marcarComoEliminado()
                 issueRepository.save(issueExistente)
                 logger.info("Issue #{} del repositorio '{}' marcado como eliminado", numero, repoName)
+                try {
+                    sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.ISSUE_ACTUALIZADO)
+                } catch (e: Exception) {
+                    logger.warn("Error enviando notificación SSE para ISSUE_ACTUALIZADO en '{}': {}", repoName, e.message)
+                }
             }
             return
         }
@@ -117,6 +125,12 @@ class IssueWebhookHandler(
             cantComentarios,
             estadoGitHub
         )
+
+        try {
+            sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.ISSUE_ACTUALIZADO)
+        } catch (e: Exception) {
+            logger.warn("Error enviando notificación SSE para ISSUE_ACTUALIZADO en '{}': {}", repoName, e.message)
+        }
     }
 
     private fun extraerRepoName(rootNode: JsonNode): String? {

@@ -8,6 +8,7 @@ import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.CursoService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
@@ -20,6 +21,7 @@ class CursoServiceImpl (
     private val usuarioRepository: UsuarioRepository,
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubOrgService: GitHubOrgService,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : CursoService {
 
     override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
@@ -85,7 +87,7 @@ class CursoServiceImpl (
             throw UsuariosGitHubNoEncontradosException(usuariosInexistentes)
         }
 
-        return distinctUsernames.map { rawUsername ->
+        val inscripciones = distinctUsernames.map { rawUsername ->
             val username = usernamesCanonicos.getValue(rawUsername)!!
             val usuario = usuarioService.obtenerOCrearAlumno(username)
 
@@ -110,6 +112,19 @@ class CursoServiceImpl (
                 inscripcionRepository.save(nuevaInscripcion)
             }
         }
+
+        val alumnosUsernames = inscripciones.map { it.usuario.username }
+        try {
+            sseNotificationService?.notificarMiembroCursoActualizado(
+                cursoId = cursoId,
+                docenteUsername = curso.owner?.username,
+                alumnosUsernames = alumnosUsernames
+            )
+        } catch (_: Exception) {
+            // Ignorar fallo de notificación para no bloquear la operación
+        }
+
+        return inscripciones
     }
 
     override fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion> {
@@ -122,14 +137,30 @@ class CursoServiceImpl (
         }
 
         val inscripciones = inscripcionRepository.findByCursoId(cursoId)
+        val activados = mutableListOf<String>()
 
-        return inscripciones.map { inscripcion ->
+        val resultado = inscripciones.map { inscripcion ->
             val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
             if (membership != null && inscripcion.usuario.activarSiCorresponde(membership.state)) {
                 usuarioRepository.save(inscripcion.usuario)
+                activados.add(inscripcion.usuario.username)
             }
             inscripcion
         }
+
+        if (activados.isNotEmpty()) {
+            try {
+                sseNotificationService?.notificarMiembroCursoActualizado(
+                    cursoId = cursoId,
+                    docenteUsername = curso.owner?.username,
+                    alumnosUsernames = activados
+                )
+            } catch (_: Exception) {
+                // Ignorar fallo de notificación
+            }
+        }
+
+        return resultado
     }
 
     override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion> {

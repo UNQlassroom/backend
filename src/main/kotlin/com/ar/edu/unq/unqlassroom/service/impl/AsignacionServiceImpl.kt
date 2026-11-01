@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
@@ -14,6 +15,7 @@ import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
 import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import org.springframework.stereotype.Service
@@ -34,6 +36,7 @@ class AsignacionServiceImpl (
     private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
     private val metricaCIRepository: MetricaCIRepository? = null,
     private val reporteLinterRepository: ReporteLinterRepository? = null,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : AsignacionService {
 
     override fun crearAsignacion(
@@ -132,7 +135,13 @@ class AsignacionServiceImpl (
 
         asignacion.actualizar(descripcion, fechaLimite)
 
-        return asignacionRepository.save(asignacion)
+        val guardada = asignacionRepository.save(asignacion)
+
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(guardada)
+        }
+
+        return guardada
     }
 
     override fun obtenerAsignaciones(cursoId: Long, solicitanteUsername: String): List<Asignacion> {
@@ -262,6 +271,16 @@ class AsignacionServiceImpl (
         }
 
         val guardada = asignacionRepository.save(asignacion)
+
+        val repoNombre = grupo.repositorio?.nombre
+        ejecutarDespuesDeCommit {
+            if (repoNombre != null) {
+                sseNotificationService?.notificarEventoDeRepositorio(repoNombre, SseEventType.ENTREGA_REALIZADA)
+            } else {
+                sseNotificationService?.notificarAsignacionActualizada(guardada, grupo)
+            }
+        }
+
         return guardada.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
@@ -289,7 +308,13 @@ class AsignacionServiceImpl (
         val grupo = asignacion.buscarGrupo(grupoId)
         grupo.calificar(calificacion, observaciones)
 
-        return asignacionRepository.save(asignacion)
+        val guardada = asignacionRepository.save(asignacion)
+
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(guardada, grupo)
+        }
+
+        return guardada
     }
 
     override fun obtenerCorrecciones(
@@ -501,6 +526,7 @@ class AsignacionServiceImpl (
         asignacionRepository.delete(asignacion)
 
         ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(asignacion)
             asyncService.eliminarRepositoriosAsincronicamente(repoNames)
         }
     }

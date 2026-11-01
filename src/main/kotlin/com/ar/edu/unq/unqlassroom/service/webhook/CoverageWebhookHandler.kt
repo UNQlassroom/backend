@@ -1,9 +1,11 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.CommitAnalysisService
 import com.ar.edu.unq.unqlassroom.service.MetricasCIService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -20,6 +22,7 @@ class CoverageWebhookHandler(
     private val objectMapper: ObjectMapper,
     private val metricasCIService: MetricasCIService,
     private val commitAnalysisService: CommitAnalysisService? = null,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -54,6 +57,11 @@ class CoverageWebhookHandler(
                     metrica.coberturaLineas,
                     metrica.testsEjecutados
                 )
+                try {
+                    sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.METRICAS_CI_ACTUALIZADAS)
+                } catch (e: Exception) {
+                    logger.warn("Error enviando notificación SSE para METRICAS_CI_ACTUALIZADAS en '{}': {}", repoName, e.message)
+                }
             } else {
                 logger.warn("No se generaron métricas de CI para repositorio '{}' a partir del evento {}", repoName, event.eventType)
             }

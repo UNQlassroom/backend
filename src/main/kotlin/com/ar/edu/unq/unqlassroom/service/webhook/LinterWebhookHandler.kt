@@ -1,8 +1,10 @@
 package com.ar.edu.unq.unqlassroom.service.webhook
 
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.LinterCIService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -18,6 +20,7 @@ class LinterWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
     private val linterCIService: LinterCIService,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -52,6 +55,11 @@ class LinterWebhookHandler(
                     reporte.cantidadErrores,
                     reporte.cantidadAdvertencias
                 )
+                try {
+                    sseNotificationService?.notificarEventoDeRepositorio(repoName, SseEventType.LINTER_ACTUALIZADO)
+                } catch (e: Exception) {
+                    logger.warn("Error enviando notificación SSE para LINTER_ACTUALIZADO en '{}': {}", repoName, e.message)
+                }
             } else {
                 logger.warn("No se generó reporte de linter para repositorio '{}' a partir del evento {}", repoName, event.eventType)
             }

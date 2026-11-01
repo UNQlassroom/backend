@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional
 class RepositoryWebhookHandler(
     private val repositorioRepository: RepositorioRepository,
     private val objectMapper: ObjectMapper,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -54,6 +56,13 @@ class RepositoryWebhookHandler(
                 repoExistente.marcarComoEliminado()
                 repositorioRepository.save(repoExistente)
                 logger.info("Repositorio '{}' marcado como eliminado por evento repository (action 'deleted')", repoName)
+                if (repoExistente.esTemplate) {
+                    try {
+                        sseNotificationService?.notificarTemplatesActualizados(repoName)
+                    } catch (e: Exception) {
+                        logger.warn("Error enviando notificación SSE para TEMPLATES_ACTUALIZADOS en '{}': {}", repoName, e.message)
+                    }
+                }
             }
             return
         }
@@ -72,12 +81,22 @@ class RepositoryWebhookHandler(
 
             repositorioRepository.save(repositorio)
             logger.info("Repositorio template '{}' sincronizado exitosamente por webhook (action '{}')", repoName, action)
+            try {
+                sseNotificationService?.notificarTemplatesActualizados(repoName)
+            } catch (e: Exception) {
+                logger.warn("Error enviando notificación SSE para TEMPLATES_ACTUALIZADOS en '{}': {}", repoName, e.message)
+            }
         } else {
             val repoExistente = repositorioRepository.findByNombreIgnoreCase(repoName)
             if (repoExistente != null && repoExistente.esTemplate) {
                 repoExistente.esTemplate = false
                 repositorioRepository.save(repoExistente)
                 logger.info("Repositorio '{}' ya no es template en GitHub; esTemplate marcado en false", repoName)
+                try {
+                    sseNotificationService?.notificarTemplatesActualizados(repoName)
+                } catch (e: Exception) {
+                    logger.warn("Error enviando notificación SSE para TEMPLATES_ACTUALIZADOS en '{}': {}", repoName, e.message)
+                }
             }
         }
     }

@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional
 class MembershipWebhookHandler(
     private val usuarioRepository: UsuarioRepository,
     private val objectMapper: ObjectMapper,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : WebhookEventHandler {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -50,6 +52,11 @@ class MembershipWebhookHandler(
         if (usuario.activarSiCorresponde("active")) {
             usuarioRepository.save(usuario)
             logger.info("Nuevo usuario activo en la organización: '{}'", username)
+            try {
+                sseNotificationService?.notificarMiembroActivadoGlobal(usuario.username)
+            } catch (e: Exception) {
+                logger.warn("Error enviando notificación SSE para MIEMBRO_ACTIVADO en '{}': {}", username, e.message)
+            }
         } else {
             logger.info("El usuario '{}' ya se encontraba en estado activo en la organización", username)
         }
