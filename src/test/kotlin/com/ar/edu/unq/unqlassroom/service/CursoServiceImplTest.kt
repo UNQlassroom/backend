@@ -11,6 +11,7 @@ import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -45,11 +46,20 @@ class CursoServiceImplTest {
     @Mock
     private lateinit var gitHubOrgService: GitHubOrgService
 
-    @InjectMocks
+    @Mock
+    private lateinit var sseNotificationService: SseNotificationService
     private lateinit var cursoService: CursoServiceImpl
 
     @BeforeEach
     fun setUp() {
+        cursoService = CursoServiceImpl(
+            cursoRepository = cursoRepository,
+            usuarioService = usuarioService,
+            usuarioRepository = usuarioRepository,
+            inscripcionRepository = inscripcionRepository,
+            gitHubOrgService = gitHubOrgService,
+            sseNotificationService = sseNotificationService,
+        )
         Mockito.lenient().`when`(gitHubOrgService.obtenerUsernameCanonico(Mockito.anyString())).thenAnswer {
             it.getArgument<String>(0)
         }
