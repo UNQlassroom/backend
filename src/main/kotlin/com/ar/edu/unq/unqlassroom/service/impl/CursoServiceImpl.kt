@@ -11,11 +11,12 @@ import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 
 @Service
 @Transactional
-class CursoServiceImpl (
+class CursoServiceImpl @Autowired constructor(
     private val cursoRepository: CursoRepository,
     private val usuarioService: UsuarioService,
     private val usuarioRepository: UsuarioRepository,
@@ -23,6 +24,21 @@ class CursoServiceImpl (
     private val gitHubOrgService: GitHubOrgService,
     private val sseNotificationService: SseNotificationService? = null,
 ) : CursoService {
+
+    constructor(
+        cursoRepository: CursoRepository,
+        usuarioService: UsuarioService,
+        usuarioRepository: UsuarioRepository,
+        inscripcionRepository: InscripcionRepository,
+        gitHubOrgService: GitHubOrgService,
+    ) : this(
+        cursoRepository = cursoRepository,
+        usuarioService = usuarioService,
+        usuarioRepository = usuarioRepository,
+        inscripcionRepository = inscripcionRepository,
+        gitHubOrgService = gitHubOrgService,
+        sseNotificationService = null,
+    )
 
     override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
         val docente = usuarioService.obtenerDocente(ownerUsername)
