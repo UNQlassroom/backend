@@ -172,31 +172,7 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val asignacionVisible = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
-
-        asignacionVisible.grupos.forEach { grupo ->
-            grupo.repositorio?.let { repo ->
-                try {
-                    val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                    repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
-                    if (repo.estadoCI == "failure" && repo.ciEtapaFallida.isNullOrBlank()) {
-                        val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
-                        if (diagnostico != null) {
-                            repo.registrarFallaCI(
-                                etapaFallida = diagnostico.etapaFallida,
-                                logError = diagnostico.logError,
-                                runUrl = diagnostico.runUrl,
-                                runId = diagnostico.runId,
-                            )
-                        }
-                    }
-                } catch (_: Exception) {
-                    // Si falla consulta puntual a github, mantener el estado persistido
-                }
-            }
-        }
-
-        return asignacionVisible
+        return asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -252,12 +228,7 @@ class AsignacionServiceImpl(
                 // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
             }
 
-            try {
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
-            } catch (_: Exception) {
-                // Si falla github puntual, continuar
-            }
+
         }
 
         val guardada = asignacionRepository.save(asignacion)

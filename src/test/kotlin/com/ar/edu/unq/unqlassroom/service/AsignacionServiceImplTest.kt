@@ -463,7 +463,7 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `obtenerAsignacion returns updated CI and commit info for groups`() {
+    fun `obtenerAsignacion returns repository info from database without querying github`() {
         val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
         val alumno = Usuario(id = 2L, username = "alumno1")
@@ -488,22 +488,13 @@ class AsignacionServiceImplTest {
         asignacion.grupos.add(grupo)
 
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(
-            RepositorioInfo(
-                nombre = "repo1",
-                htmlUrl = "http://r1",
-                ultimoCommit = "Fresh commit",
-                fechaUltimoCommit = "2026-09-25T12:00:00Z",
-                estadoCI = "success"
-            )
-        )
 
         val result = asignacionService.obtenerAsignacion(10L, 50L, "profe_owner")
 
         val repoResult = result.grupos[0].repositorio
-        assertEquals("Fresh commit", repoResult?.ultimoCommit)
-        assertEquals("2026-09-25T12:00:00Z", repoResult?.fechaUltimoCommit)
-        assertEquals("success", repoResult?.estadoCI)
+        assertEquals("Old commit", repoResult?.ultimoCommit)
+        assertEquals("2026-09-01T00:00:00Z", repoResult?.fechaUltimoCommit)
+        assertEquals("sin_ci", repoResult?.estadoCI)
     }
 
     @Test
@@ -1051,7 +1042,7 @@ class AsignacionServiceImplTest {
         val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
-        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -1081,7 +1072,7 @@ class AsignacionServiceImplTest {
         val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
-        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -1110,14 +1101,7 @@ class AsignacionServiceImplTest {
             org = anyNullable(String::class.java)
         )).thenReturn(release)
 
-        val repoInfo = RepositorioInfo(
-            nombre = "repo1",
-            htmlUrl = "https://github.com/repo1",
-            ultimoCommit = "Commit entrega",
-            fechaUltimoCommit = "2026-10-02T18:00:00Z",
-            estadoCI = "success"
-        )
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(repoInfo)
+
         `when`(asignacionRepository.save(anyAsignacion())).thenReturn(asignacion)
 
         val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno1", 101L)
@@ -1131,11 +1115,11 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `marcarAsignacionComoEntregada succeeds even when createRelease and repoInfo throw exceptions`() {
+    fun `marcarAsignacionComoEntregada succeeds even when createRelease throws exception`() {
         val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
         val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
-        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
+        val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -1163,7 +1147,6 @@ class AsignacionServiceImplTest {
             org = anyNullable(String::class.java)
         )).thenThrow(RuntimeException("Release API unavailable"))
 
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Repo API unavailable"))
         `when`(asignacionRepository.save(anyAsignacion())).thenReturn(asignacion)
 
         val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "alumno1", null)
@@ -1198,7 +1181,6 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenReturn(RepositorioInfo(nombre = "repo1", htmlUrl = "https://github.com/repo1"))
         `when`(asignacionRepository.save(anyAsignacion())).thenReturn(asignacion)
 
         val res = asignacionService.marcarAsignacionComoEntregada(10L, 50L, "profe_owner", 101L)
@@ -1240,7 +1222,6 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(50L, 10L)).thenReturn(asignacion)
-        `when`(gitHubRepoService.obtenerInformacionRepositorio("repo1")).thenThrow(RuntimeException("Network error"))
 
         val res = asignacionService.obtenerAsignacion(10L, 50L, "profe_owner")
 
