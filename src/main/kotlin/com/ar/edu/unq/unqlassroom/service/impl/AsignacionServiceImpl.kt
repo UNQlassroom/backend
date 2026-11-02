@@ -18,15 +18,13 @@ import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
-import org.springframework.beans.factory.annotation.Autowired
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
 import org.springframework.stereotype.Service
-import org.springframework.transaction.support.TransactionSynchronization
-import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime
 
 @Service
 @Transactional
-class AsignacionServiceImpl @Autowired constructor(
+class AsignacionServiceImpl(
     private val asignacionRepository: AsignacionRepository,
     private val cursoRepository: CursoRepository,
     private val inscripcionRepository: InscripcionRepository,
@@ -39,31 +37,6 @@ class AsignacionServiceImpl @Autowired constructor(
     private val reporteLinterRepository: ReporteLinterRepository? = null,
     private val sseNotificationService: SseNotificationService? = null,
 ) : AsignacionService {
-
-    constructor(
-        asignacionRepository: AsignacionRepository,
-        cursoRepository: CursoRepository,
-        inscripcionRepository: InscripcionRepository,
-        usuarioService: UsuarioService,
-        gitHubRepoService: GitHubRepoService,
-        issueRepository: IssueRepository,
-        asyncService: AsyncService,
-        advertenciaGitRepository: AdvertenciaGitRepository? = null,
-        metricaCIRepository: MetricaCIRepository? = null,
-        reporteLinterRepository: ReporteLinterRepository? = null,
-    ) : this(
-        asignacionRepository = asignacionRepository,
-        cursoRepository = cursoRepository,
-        inscripcionRepository = inscripcionRepository,
-        usuarioService = usuarioService,
-        gitHubRepoService = gitHubRepoService,
-        issueRepository = issueRepository,
-        asyncService = asyncService,
-        advertenciaGitRepository = advertenciaGitRepository,
-        metricaCIRepository = metricaCIRepository,
-        reporteLinterRepository = reporteLinterRepository,
-        sseNotificationService = null,
-    )
 
     override fun crearAsignacion(
         cursoId: Long,
@@ -557,15 +530,4 @@ class AsignacionServiceImpl @Autowired constructor(
         }
     }
 
-    private fun ejecutarDespuesDeCommit(accion: () -> Unit) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
-                override fun afterCommit() {
-                    accion()
-                }
-            })
-        } else {
-            accion()
-        }
-    }
 }
