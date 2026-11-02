@@ -11,12 +11,12 @@ import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
-import org.springframework.beans.factory.annotation.Autowired
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
 import org.springframework.stereotype.Service
 
 @Service
 @Transactional
-class CursoServiceImpl @Autowired constructor(
+class CursoServiceImpl(
     private val cursoRepository: CursoRepository,
     private val usuarioService: UsuarioService,
     private val usuarioRepository: UsuarioRepository,
@@ -24,21 +24,6 @@ class CursoServiceImpl @Autowired constructor(
     private val gitHubOrgService: GitHubOrgService,
     private val sseNotificationService: SseNotificationService? = null,
 ) : CursoService {
-
-    constructor(
-        cursoRepository: CursoRepository,
-        usuarioService: UsuarioService,
-        usuarioRepository: UsuarioRepository,
-        inscripcionRepository: InscripcionRepository,
-        gitHubOrgService: GitHubOrgService,
-    ) : this(
-        cursoRepository = cursoRepository,
-        usuarioService = usuarioService,
-        usuarioRepository = usuarioRepository,
-        inscripcionRepository = inscripcionRepository,
-        gitHubOrgService = gitHubOrgService,
-        sseNotificationService = null,
-    )
 
     override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
         val docente = usuarioService.obtenerDocente(ownerUsername)
@@ -69,11 +54,8 @@ class CursoServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoCursoException()
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException()
         }
 
         return curso
@@ -130,14 +112,12 @@ class CursoServiceImpl @Autowired constructor(
         }
 
         val alumnosUsernames = inscripciones.map { it.usuario.username }
-        try {
+        ejecutarDespuesDeCommit {
             sseNotificationService?.notificarMiembroCursoActualizado(
                 cursoId = cursoId,
                 docenteUsername = curso.owner?.username,
                 alumnosUsernames = alumnosUsernames
             )
-        } catch (_: Exception) {
-            // Ignorar fallo de notificación para no bloquear la operación
         }
 
         return inscripciones
@@ -165,14 +145,12 @@ class CursoServiceImpl @Autowired constructor(
         }
 
         if (activados.isNotEmpty()) {
-            try {
+            ejecutarDespuesDeCommit {
                 sseNotificationService?.notificarMiembroCursoActualizado(
                     cursoId = cursoId,
                     docenteUsername = curso.owner?.username,
                     alumnosUsernames = activados
                 )
-            } catch (_: Exception) {
-                // Ignorar fallo de notificación
             }
         }
 
@@ -184,13 +162,24 @@ class CursoServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
+        }
+
+        return inscripcionRepository.findByCursoId(cursoId)
+    }
+    private fun verificarAccesoACurso(
+        curso: Curso,
+        solicitanteUsername: String,
+        excepcionSiFalla: () -> RuntimeException,
+    ): Boolean {
+        val cursoId = curso.id ?: throw CursoNotFoundException()
         val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
+            throw excepcionSiFalla()
         }
-
-        return inscripcionRepository.findByCursoId(cursoId)
+        return esOwner
     }
 }

@@ -18,15 +18,13 @@ import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
-import org.springframework.beans.factory.annotation.Autowired
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
 import org.springframework.stereotype.Service
-import org.springframework.transaction.support.TransactionSynchronization
-import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime
 
 @Service
 @Transactional
-class AsignacionServiceImpl @Autowired constructor(
+class AsignacionServiceImpl(
     private val asignacionRepository: AsignacionRepository,
     private val cursoRepository: CursoRepository,
     private val inscripcionRepository: InscripcionRepository,
@@ -39,31 +37,6 @@ class AsignacionServiceImpl @Autowired constructor(
     private val reporteLinterRepository: ReporteLinterRepository? = null,
     private val sseNotificationService: SseNotificationService? = null,
 ) : AsignacionService {
-
-    constructor(
-        asignacionRepository: AsignacionRepository,
-        cursoRepository: CursoRepository,
-        inscripcionRepository: InscripcionRepository,
-        usuarioService: UsuarioService,
-        gitHubRepoService: GitHubRepoService,
-        issueRepository: IssueRepository,
-        asyncService: AsyncService,
-        advertenciaGitRepository: AdvertenciaGitRepository? = null,
-        metricaCIRepository: MetricaCIRepository? = null,
-        reporteLinterRepository: ReporteLinterRepository? = null,
-    ) : this(
-        asignacionRepository = asignacionRepository,
-        cursoRepository = cursoRepository,
-        inscripcionRepository = inscripcionRepository,
-        usuarioService = usuarioService,
-        gitHubRepoService = gitHubRepoService,
-        issueRepository = issueRepository,
-        asyncService = asyncService,
-        advertenciaGitRepository = advertenciaGitRepository,
-        metricaCIRepository = metricaCIRepository,
-        reporteLinterRepository = reporteLinterRepository,
-        sseNotificationService = null,
-    )
 
     override fun crearAsignacion(
         cursoId: Long,
@@ -175,11 +148,8 @@ class AsignacionServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver las asignaciones de este curso")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver las asignaciones de este curso")
         }
 
         val asignaciones = asignacionRepository.findByCursoId(cursoId)
@@ -195,41 +165,14 @@ class AsignacionServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val asignacionVisible = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
-
-        asignacionVisible.grupos.forEach { grupo ->
-            grupo.repositorio?.let { repo ->
-                try {
-                    val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                    repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
-                    if (repo.estadoCI == "failure" && repo.ciEtapaFallida.isNullOrBlank()) {
-                        val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
-                        if (diagnostico != null) {
-                            repo.registrarFallaCI(
-                                etapaFallida = diagnostico.etapaFallida,
-                                logError = diagnostico.logError,
-                                runUrl = diagnostico.runUrl,
-                                runId = diagnostico.runId,
-                            )
-                        }
-                    }
-                } catch (_: Exception) {
-                    // Si falla consulta puntual a github, mantener el estado persistido
-                }
-            }
-        }
-
-        return asignacionVisible
+        return asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -248,11 +191,8 @@ class AsignacionServiceImpl @Autowired constructor(
         asignacion.validarEstadoLista()
         asignacion.validarVencimiento()
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
         }
 
         val grupo = if (esOwner) {
@@ -288,12 +228,7 @@ class AsignacionServiceImpl @Autowired constructor(
                 // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
             }
 
-            try {
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repo.nombre)
-                repo.actualizarInfo(info.ultimoCommit, info.fechaUltimoCommit, info.estadoCI)
-            } catch (_: Exception) {
-                // Si falla github puntual, continuar
-            }
+
         }
 
         val guardada = asignacionRepository.save(asignacion)
@@ -352,11 +287,8 @@ class AsignacionServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoCorreccionesException()
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCorreccionesException()
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -490,11 +422,8 @@ class AsignacionServiceImpl @Autowired constructor(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -557,15 +486,18 @@ class AsignacionServiceImpl @Autowired constructor(
         }
     }
 
-    private fun ejecutarDespuesDeCommit(accion: () -> Unit) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
-                override fun afterCommit() {
-                    accion()
-                }
-            })
-        } else {
-            accion()
+    private fun verificarAccesoACurso(
+        curso: Curso,
+        solicitanteUsername: String,
+        excepcionSiFalla: () -> RuntimeException,
+    ): Boolean {
+        val cursoId = curso.id ?: throw CursoNotFoundException()
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw excepcionSiFalla()
         }
+        return esOwner
     }
 }

@@ -9,10 +9,10 @@ import org.springframework.stereotype.Repository
 @Repository
 interface CursoRepository : JpaRepository<Curso, Long> {
 
-    @Query("SELECT c FROM Curso c WHERE c.owner.username = :username")
+    @Query("SELECT c FROM Curso c LEFT JOIN FETCH c.owner WHERE c.owner.username = :username")
     fun findCursosParaDocente(@Param("username") username: String): List<Curso>
 
-    @Query("SELECT c FROM Curso c JOIN c.inscripciones i WHERE i.usuario.username = :username AND (c.owner IS NULL OR c.owner.username <> :username)")
+    @Query("SELECT DISTINCT c FROM Curso c LEFT JOIN FETCH c.owner JOIN c.inscripciones i WHERE i.usuario.username = :username AND (c.owner IS NULL OR c.owner.username <> :username)")
     fun findCursosParaAlumno(@Param("username") username: String): List<Curso>
 
     fun existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(

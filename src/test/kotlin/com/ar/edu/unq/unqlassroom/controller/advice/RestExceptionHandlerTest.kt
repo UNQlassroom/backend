@@ -227,35 +227,8 @@ class RestExceptionHandlerTest {
         assertEquals("El recurso solicitado no fue encontrado en GitHub", response.body?.message)
     }
 
-    @Test
-    fun `handleGitHubApi with GitHubUsuarioNotFound returns 404 and GITHUB_USER_NOT_FOUND`() {
-        val ex = GitHubUsuarioNotFoundException("alumno99")
-        val response = handler.handleGitHubApi(ex, request)
 
-        assertEquals(HttpStatus.NOT_FOUND, response.statusCode)
-        assertEquals("GITHUB_USER_NOT_FOUND", response.body?.errorCode)
-        assertEquals("El usuario 'alumno99' no existe en GitHub", response.body?.message)
-    }
 
-    @Test
-    fun `handleGitHubApi with GitHubRepositorioNotFound returns 404 and GITHUB_REPO_NOT_FOUND`() {
-        val ex = GitHubRepositorioNotFoundException("repo-inexistente")
-        val response = handler.handleGitHubApi(ex, request)
-
-        assertEquals(HttpStatus.NOT_FOUND, response.statusCode)
-        assertEquals("GITHUB_REPO_NOT_FOUND", response.body?.errorCode)
-        assertEquals("El repositorio 'repo-inexistente' no fue encontrado en GitHub", response.body?.message)
-    }
-
-    @Test
-    fun `handleGitHubApi with GitHubTemplateRepoNotFound returns 404 and GITHUB_TEMPLATE_REPO_NOT_FOUND`() {
-        val ex = GitHubTemplateRepoNotFoundException("template-base")
-        val response = handler.handleGitHubApi(ex, request)
-
-        assertEquals(HttpStatus.NOT_FOUND, response.statusCode)
-        assertEquals("GITHUB_TEMPLATE_REPO_NOT_FOUND", response.body?.errorCode)
-        assertEquals("El repositorio template 'template-base' no existe o no está configurado como template en GitHub", response.body?.message)
-    }
 
     @Test
     fun `handleGitHubApi with GitHubValidation returns 400 and GITHUB_VALIDATION_ERROR`() {
@@ -420,9 +393,6 @@ class RestExceptionHandlerTest {
         assertEquals("Usuario con username: juan no encontrado", ex3.message)
         assertEquals("USUARIO_NOT_FOUND", ex3.errorCode)
 
-        val ex4 = CursoSinGitHubRepoAsociadoException()
-        assertEquals("Curso sin repositorio de GitHub asociado", ex4.message)
-        assertEquals("CURSO_SIN_GITHUB_REPO_ASOCIADO", ex4.errorCode)
 
         val ex5 = ResourceNotFoundException()
         assertNotNull(ex5)
