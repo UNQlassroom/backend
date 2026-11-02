@@ -54,11 +54,8 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoCursoException()
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException()
         }
 
         return curso
@@ -165,13 +162,24 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
+        }
+
+        return inscripcionRepository.findByCursoId(cursoId)
+    }
+    private fun verificarAccesoACurso(
+        curso: Curso,
+        solicitanteUsername: String,
+        excepcionSiFalla: () -> RuntimeException,
+    ): Boolean {
+        val cursoId = curso.id ?: throw CursoNotFoundException()
         val esOwner = curso.esOwner(solicitanteUsername)
         val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
-            throw SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
+            throw excepcionSiFalla()
         }
-
-        return inscripcionRepository.findByCursoId(cursoId)
+        return esOwner
     }
 }
