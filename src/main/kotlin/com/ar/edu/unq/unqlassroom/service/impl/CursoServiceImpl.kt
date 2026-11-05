@@ -79,6 +79,17 @@ class CursoServiceImpl(
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase() }
 
+        val inscripcionesExistentes = inscripcionRepository.findByCursoId(cursoId)
+        val inscriptosPorLowercase = inscripcionesExistentes.associateBy { it.usuario.username.lowercase() }
+
+        val alumnosDuplicados = distinctUsernames.mapNotNull { rawUsername ->
+            inscriptosPorLowercase[rawUsername.lowercase()]?.usuario?.username
+        }.distinct()
+
+        if (alumnosDuplicados.isNotEmpty()) {
+            throw AlumnoDuplicadoException(alumnosDuplicados)
+        }
+
         val usernamesCanonicos = distinctUsernames.associateWith { gitHubOrgService.obtenerUsernameCanonico(it) }
         val usuariosInexistentes = usernamesCanonicos.filterValues { it == null }.keys.toList()
         if (usuariosInexistentes.isNotEmpty()) {
@@ -89,26 +100,21 @@ class CursoServiceImpl(
             val username = usernamesCanonicos.getValue(rawUsername)!!
             val usuario = usuarioService.obtenerOCrearAlumno(username)
 
-            val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
-            if (inscripcionExistente != null) {
-                inscripcionExistente
+            val role = if (usuario.githubState == "active") {
+                "member"
             } else {
-                val role = if (usuario.githubState == "active") {
-                    "member"
-                } else {
-                    val membership = gitHubOrgService.invitarMiembro(username)
-                    usuario.githubState = membership.state
-                    usuarioRepository.save(usuario)
-                    membership.role
-                }
-
-                val nuevaInscripcion = Inscripcion(
-                    curso = curso,
-                    usuario = usuario,
-                    githubRole = role,
-                )
-                inscripcionRepository.save(nuevaInscripcion)
+                val membership = gitHubOrgService.invitarMiembro(username)
+                usuario.githubState = membership.state
+                usuarioRepository.save(usuario)
+                membership.role
             }
+
+            val nuevaInscripcion = Inscripcion(
+                curso = curso,
+                usuario = usuario,
+                githubRole = role,
+            )
+            inscripcionRepository.save(nuevaInscripcion)
         }
 
         val alumnosUsernames = inscripciones.map { it.usuario.username }
