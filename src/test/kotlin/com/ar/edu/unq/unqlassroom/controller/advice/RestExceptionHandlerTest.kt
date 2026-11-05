@@ -48,6 +48,7 @@ class RestExceptionHandlerTest {
         assertEquals(400, response.body?.status)
         assertEquals("Bad Request", response.body?.error)
         assertEquals("Solicitud inválida", response.body?.message)
+        assertEquals("/api/test", response.body?.path)
     }
 
     @Test
@@ -377,6 +378,12 @@ class RestExceptionHandlerTest {
         val res6 = handler.handleDuplicateResource(ex6, request)
         assertEquals(HttpStatus.CONFLICT, res6.statusCode)
         assertEquals("CURSO_DUPLICADO", res6.body?.errorCode)
+
+        val ex7 = AlumnoDuplicadoException(listOf("alumno1", "alumno2"))
+        val res7 = handler.handleDuplicateResource(ex7, request)
+        assertEquals(HttpStatus.CONFLICT, res7.statusCode)
+        assertEquals("ALUMNO_DUPLICADO", res7.body?.errorCode)
+        assertEquals("Los siguientes alumnos ya están inscriptos en el curso: alumno1, alumno2", res7.body?.message)
     }
 
     @Test

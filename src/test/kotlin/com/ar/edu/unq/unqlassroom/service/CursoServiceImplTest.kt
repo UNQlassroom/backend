@@ -11,8 +11,6 @@ import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
-import com.ar.edu.unq.unqlassroom.service.SseNotificationService
-import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -20,7 +18,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.Mockito.`when`
@@ -87,7 +84,6 @@ class CursoServiceImplTest {
             val u = invocation.getArgument<String>(0)
             Usuario(id = 1L, username = u, esDocente = false, githubState = "pending")
         }
-        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(Mockito.anyLong(), Mockito.anyString())).thenReturn(null)
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
 
         `when`(gitHubOrgService.invitarMiembro("alumno1")).thenReturn(
@@ -133,7 +129,6 @@ class CursoServiceImplTest {
         `when`(usuarioService.obtenerOCrearAlumno("thiagoDePrueba")).thenReturn(
             Usuario(id = 1L, username = "thiagoDePrueba", esDocente = false, githubState = "pending")
         )
-        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "thiagoDePrueba")).thenReturn(null)
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
         `when`(gitHubOrgService.invitarMiembro("thiagoDePrueba")).thenReturn(
             GitHubOrgMembershipResponse(state = "pending", role = "member")
@@ -145,6 +140,61 @@ class CursoServiceImplTest {
         assertEquals("thiagoDePrueba", response[0].usuario.username)
         verify(usuarioService).obtenerOCrearAlumno("thiagoDePrueba")
         verify(gitHubOrgService).invitarMiembro("thiagoDePrueba")
+    }
+
+    @Test
+    fun `agregarAlumnos throws AlumnoDuplicadoException without calling GitHub when student is already enrolled`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        val alumnoExistente = Usuario(id = 2L, username = "alumno1", esDocente = false, githubState = "active")
+        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcionExistente))
+
+        val exception = assertThrows<AlumnoDuplicadoException> {
+            cursoService.agregarAlumnos(1L, listOf("ALUMNO1"), "profe_test")
+        }
+
+        assertEquals("Los siguientes alumnos ya están inscriptos en el curso: alumno1", exception.message)
+        assertEquals("ALUMNO_DUPLICADO", exception.errorCode)
+        verify(gitHubOrgService, Mockito.never()).obtenerUsernameCanonico(Mockito.anyString())
+        verify(gitHubOrgService, Mockito.never()).invitarMiembro(Mockito.anyString(), Mockito.anyString(), Mockito.nullable(String::class.java))
+    }
+
+    @Test
+    fun `agregarAlumnos fails atomically and throws AlumnoDuplicadoException when any student in batch is already enrolled`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            owner = owner
+        )
+        val alumnoExistente = Usuario(id = 2L, username = "alumno_viejo", esDocente = false, githubState = "active")
+        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcionExistente))
+
+        val exception = assertThrows<AlumnoDuplicadoException> {
+            cursoService.agregarAlumnos(1L, listOf("alumno_nuevo", "ALUMNO_VIEJO"), "profe_test")
+        }
+
+        assertEquals("Los siguientes alumnos ya están inscriptos en el curso: alumno_viejo", exception.message)
+        assertEquals("ALUMNO_DUPLICADO", exception.errorCode)
+        verify(gitHubOrgService, Mockito.never()).obtenerUsernameCanonico(Mockito.anyString())
+        verify(gitHubOrgService, Mockito.never()).invitarMiembro(Mockito.anyString(), Mockito.anyString(), Mockito.nullable(String::class.java))
+        verify(inscripcionRepository, Mockito.never()).save(Mockito.any(Inscripcion::class.java))
     }
 
     @Test
