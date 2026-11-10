@@ -13,7 +13,6 @@ import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.IssueRepository
 import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
 import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
-import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
@@ -37,7 +36,6 @@ class AsignacionServiceImpl(
     private val metricaCIRepository: MetricaCIRepository? = null,
     private val reporteLinterRepository: ReporteLinterRepository? = null,
     private val sseNotificationService: SseNotificationService? = null,
-    private val repositorioRepository: RepositorioRepository? = null,
 ) : AsignacionService {
 
     override fun crearAsignacion(
