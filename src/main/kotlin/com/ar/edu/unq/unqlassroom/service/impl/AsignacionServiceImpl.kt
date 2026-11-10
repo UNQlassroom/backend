@@ -50,6 +50,7 @@ class AsignacionServiceImpl(
         if (!curso.esOwner(solicitanteUsername)) {
             throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede crear asignaciones")
         }
+        curso.validarNoArchivado()
 
         if (asignacionRepository.findByCursoIdAndTituloIgnoreCase(cursoId, asignacion.titulo.trim()) != null) {
             throw AsignacionDuplicadaException(asignacion.titulo)
@@ -128,6 +129,7 @@ class AsignacionServiceImpl(
         if (!curso.esOwner(solicitanteUsername)) {
             throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede modificar asignaciones")
         }
+        curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
@@ -194,6 +196,7 @@ class AsignacionServiceImpl(
         val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
         }
+        curso.validarNoArchivado()
 
         val grupo = if (esOwner) {
             if (grupoId != null) {
@@ -260,6 +263,7 @@ class AsignacionServiceImpl(
         if (!curso.esOwner(solicitanteUsername)) {
             throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede calificar asignaciones")
         }
+        curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
@@ -461,6 +465,7 @@ class AsignacionServiceImpl(
         if (!curso.esOwner(solicitanteUsername)) {
             throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede eliminar asignaciones")
         }
+        curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
@@ -493,7 +498,7 @@ class AsignacionServiceImpl(
     ): Boolean {
         val cursoId = curso.id ?: throw CursoNotFoundException()
         val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+        val estaInscripto = !curso.archivado && inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
             throw excepcionSiFalla()
