@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.exception.GitHubApiException
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.ar.edu.unq.unqlassroom.integration.github.service.*
+import com.ar.edu.unq.unqlassroom.model.LenguajeProyecto
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
@@ -429,5 +430,159 @@ class TemplateStandardizationServiceImplTest {
         assertEquals(2, calledBodies.size)
         assertFalse(calledBodies[0].contains("existing-blob-sha-777"))
         assertTrue(calledBodies[1].contains("existing-blob-sha-777"))
+    }
+
+    @Test
+    fun `detectarLenguaje detecta correctamente stacks comunes y no comunes`() {
+        assertEquals(LenguajeProyecto.JAVA_MAVEN, service.detectarLenguaje(listOf("pom.xml", "src/Main.java")))
+        assertEquals(LenguajeProyecto.JAVA_GRADLE, service.detectarLenguaje(listOf("build.gradle.kts", "src/Main.kt")))
+        assertEquals(LenguajeProyecto.PYTHON, service.detectarLenguaje(listOf("pyproject.toml", "main.py")))
+        assertEquals(LenguajeProyecto.PYTHON, service.detectarLenguaje(listOf("requirements.txt", "app.py")))
+        assertEquals(LenguajeProyecto.NODE_JS, service.detectarLenguaje(listOf("package.json", "index.js")))
+        assertEquals(LenguajeProyecto.NODE_JS, service.detectarLenguaje(listOf("src/App.tsx", "src/index.ts")))
+        assertEquals(LenguajeProyecto.DOTNET, service.detectarLenguaje(listOf("MiProyecto.csproj", "Program.cs")))
+        assertEquals(LenguajeProyecto.JAVA_MAVEN, service.detectarLenguaje(listOf("README.md")))
+        assertEquals(LenguajeProyecto.GENERICO, service.detectarLenguaje(listOf("main.c", "Makefile")))
+    }
+
+    @Test
+    fun `asegurarTemplateEstandarizado con proyecto Python inyecta CI de Python y Ruff y no inyecta Maven ni pom xml`() {
+        val repoTemplate = Repositorio(
+            id = 10L,
+            nombre = "template-python",
+            htmlUrl = "https://github.com/UNQlassroom/template-python",
+            esTemplate = true,
+            ultimoCommitSha = "sha-old",
+            templateAprobado = false,
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("template-python")).thenReturn(repoTemplate)
+        `when`(gitHubRepoService.getUltimoCommit("template-python")).thenReturn(
+            GitHubCommitResponse(sha = "sha-py-1")
+        )
+        `when`(gitHubRepoService.getRepositoryTree("template-python", "sha-py-1", true)).thenReturn(
+            GitHubGitTreeResponse(
+                sha = "sha-py-1",
+                tree = listOf(
+                    GitHubTreeItem(path = "requirements.txt", type = "blob", sha = "blob-req"),
+                    GitHubTreeItem(path = "app.py", type = "blob", sha = "blob-app"),
+                )
+            )
+        )
+        `when`(
+            gitHubRepoService.createOrUpdateFile(anyString(), anyString(), anyString(), anyString(), any(), any(), any())
+        ).thenAnswer { invocation ->
+            GitHubContentUpdateResponse(commit = GitHubContentCommitInfo(sha = "sha-py-updated"))
+        }
+        `when`(repositorioRepository.save(anyRepositorio())).thenAnswer { it.getArgument(0) }
+
+        val resultado = service.asegurarTemplateEstandarizado("template-python")
+
+        assertTrue(resultado.templateAprobado)
+        // Inyecta tests/test_sanity.py porque no había tests
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-python"),
+            eqNonNull("tests/test_sanity.py"),
+            matchString { it.contains("def test_sanity():") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
+        // Inyecta CI de Python (Ruff + Pytest)
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-python"),
+            eqNonNull(".github/workflows/ci.yml"),
+            matchString { it.contains("Ruff") && it.contains("pytest") && it.contains("CI Linter & Tests (Python)") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
+        // NO debe inyectar nada de Maven o Java
+        verify(gitHubRepoService, never()).createOrUpdateFile(
+            eqNonNull("template-python"),
+            eqNonNull("pom.xml"),
+            anyString(),
+            anyString(),
+            any(),
+            any(),
+            any()
+        )
+        verify(gitHubRepoService, never()).createOrUpdateFile(
+            eqNonNull("template-python"),
+            eqNonNull("mvnw"),
+            anyString(),
+            anyString(),
+            any(),
+            any(),
+            any()
+        )
+    }
+
+    @Test
+    fun `asegurarTemplateEstandarizado con proyecto Node js inyecta CI de Node y ESLint y no inyecta Maven ni pom xml`() {
+        val repoTemplate = Repositorio(
+            id = 11L,
+            nombre = "template-node",
+            htmlUrl = "https://github.com/UNQlassroom/template-node",
+            esTemplate = true,
+            ultimoCommitSha = "sha-old",
+            templateAprobado = false,
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("template-node")).thenReturn(repoTemplate)
+        `when`(gitHubRepoService.getUltimoCommit("template-node")).thenReturn(
+            GitHubCommitResponse(sha = "sha-node-1")
+        )
+        `when`(gitHubRepoService.getRepositoryTree("template-node", "sha-node-1", true)).thenReturn(
+            GitHubGitTreeResponse(
+                sha = "sha-node-1",
+                tree = listOf(
+                    GitHubTreeItem(path = "package.json", type = "blob", sha = "blob-pkg"),
+                    GitHubTreeItem(path = "index.js", type = "blob", sha = "blob-js"),
+                )
+            )
+        )
+        `when`(
+            gitHubRepoService.createOrUpdateFile(anyString(), anyString(), anyString(), anyString(), any(), any(), any())
+        ).thenAnswer { invocation ->
+            GitHubContentUpdateResponse(commit = GitHubContentCommitInfo(sha = "sha-node-updated"))
+        }
+        `when`(repositorioRepository.save(anyRepositorio())).thenAnswer { it.getArgument(0) }
+
+        val resultado = service.asegurarTemplateEstandarizado("template-node")
+
+        assertTrue(resultado.templateAprobado)
+        // Inyecta test/sanity.test.js
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-node"),
+            eqNonNull("test/sanity.test.js"),
+            matchString { it.contains("Sanity test") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
+        // Inyecta CI de Node (ESLint & npm test)
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-node"),
+            eqNonNull(".github/workflows/ci.yml"),
+            matchString { it.contains("CI Linter & Tests (Node.js)") && it.contains("ESLint") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
+        // NO debe inyectar nada de Maven o Java
+        verify(gitHubRepoService, never()).createOrUpdateFile(
+            eqNonNull("template-node"),
+            eqNonNull("pom.xml"),
+            anyString(),
+            anyString(),
+            any(),
+            any(),
+            any()
+        )
     }
 }

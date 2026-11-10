@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service.impl
 
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
+import com.ar.edu.unq.unqlassroom.model.LenguajeProyecto
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.TemplateStandardizationService
@@ -102,159 +103,249 @@ class TemplateStandardizationServiceImpl(
             }
         }
 
-        // 1. Inspección y parcheo quirúrgico del gestor de dependencias (pom.xml / build.gradle / build.gradle.kts)
-        val pomFile = obtenerArchivo("pom.xml")
-        val gradleKtsFile = if (pomFile == null) obtenerArchivo("build.gradle.kts") else null
-        val gradleGroovyFile = if (pomFile == null && gradleKtsFile == null) obtenerArchivo("build.gradle") else null
+        // 1. Detección inteligente del lenguaje del template
+        val lenguaje = detectarLenguaje(archivosEnArbol.keys)
+        logger.info("Lenguaje detectado para el template '{}': {} ({})", cleanName, lenguaje.nombreLegible, lenguaje.name)
 
-        val esProyectoGradle = gradleKtsFile != null || gradleGroovyFile != null
+        when (lenguaje) {
+            LenguajeProyecto.JAVA_MAVEN, LenguajeProyecto.JAVA_GRADLE -> {
+                // Inspección y parcheo del gestor de dependencias (pom.xml / build.gradle / build.gradle.kts)
+                val pomFile = obtenerArchivo("pom.xml")
+                val gradleKtsFile = if (pomFile == null) obtenerArchivo("build.gradle.kts") else null
+                val gradleGroovyFile = if (pomFile == null && gradleKtsFile == null) obtenerArchivo("build.gradle") else null
 
-        when {
-            pomFile != null -> {
-                val pomContent = pomFile.decodedContent()
-                val pomParcheado = analizarYParchearPom(pomContent)
-                if (pomParcheado != null) {
-                    logger.info("Parcheando pom.xml en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
+                val esProyectoGradle = gradleKtsFile != null || gradleGroovyFile != null
+
+                when {
+                    pomFile != null -> {
+                        val pomContent = pomFile.decodedContent()
+                        val pomParcheado = analizarYParchearPom(pomContent)
+                        if (pomParcheado != null) {
+                            logger.info("Parcheando pom.xml en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
+                            escribirArchivo(
+                                path = "pom.xml",
+                                content = pomParcheado,
+                                message = "chore(ci): asegurar dependencias y plugins de JaCoCo y Checkstyle en pom.xml",
+                                knownSha = pomFile.sha,
+                            )
+                        }
+                    }
+                    gradleKtsFile != null -> {
+                        val gradleContent = gradleKtsFile.decodedContent()
+                        val gradleParcheado = analizarYParchearGradle(gradleContent, esKotlinDsl = true)
+                        if (gradleParcheado != null) {
+                            logger.info("Parcheando build.gradle.kts en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
+                            escribirArchivo(
+                                path = "build.gradle.kts",
+                                content = gradleParcheado,
+                                message = "chore(ci): asegurar configuración de JaCoCo y Checkstyle en build.gradle.kts",
+                                knownSha = gradleKtsFile.sha,
+                            )
+                        }
+                    }
+                    gradleGroovyFile != null -> {
+                        val gradleContent = gradleGroovyFile.decodedContent()
+                        val gradleParcheado = analizarYParchearGradle(gradleContent, esKotlinDsl = false)
+                        if (gradleParcheado != null) {
+                            logger.info("Parcheando build.gradle en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
+                            escribirArchivo(
+                                path = "build.gradle",
+                                content = gradleParcheado,
+                                message = "chore(ci): asegurar configuración de JaCoCo y Checkstyle en build.gradle",
+                                knownSha = gradleGroovyFile.sha,
+                            )
+                        }
+                    }
+                    else -> {
+                        logger.info("El template '{}' no posee pom.xml ni build.gradle; inyectando pom.xml base", cleanName)
+                        escribirArchivo(
+                            path = "pom.xml",
+                            content = DEFAULT_POM_XML,
+                            message = "chore(ci): agregar pom.xml base con JaCoCo, Checkstyle y JUnit 5",
+                        )
+                    }
+                }
+
+                // Asegurar Wrapper (Maven Wrapper o Gradle Wrapper)
+                val tieneMavenWrapperCompleto = existeArchivo("mvnw") &&
+                    existeArchivo("mvnw.cmd") &&
+                    existeArchivo(".mvn/wrapper/maven-wrapper.properties")
+
+                val tieneGradleWrapperCompleto = existeArchivo("gradlew") &&
+                    existeArchivo("gradlew.bat") &&
+                    existeArchivo("gradle/wrapper/gradle-wrapper.properties")
+
+                if (!tieneMavenWrapperCompleto && !tieneGradleWrapperCompleto) {
+                    if (esProyectoGradle) {
+                        if (!existeArchivo("gradle/wrapper/gradle-wrapper.properties")) {
+                            escribirArchivo(
+                                path = "gradle/wrapper/gradle-wrapper.properties",
+                                content = GRADLE_WRAPPER_PROPERTIES,
+                                message = "chore(ci): agregar gradle-wrapper.properties",
+                            )
+                        }
+                        if (!existeArchivo("gradlew")) {
+                            escribirArchivo(
+                                path = "gradlew",
+                                content = GRADLEW_UNIX_SCRIPT,
+                                message = "chore(ci): agregar script gradlew",
+                            )
+                        }
+                        if (!existeArchivo("gradlew.bat")) {
+                            escribirArchivo(
+                                path = "gradlew.bat",
+                                content = GRADLEW_WINDOWS_SCRIPT,
+                                message = "chore(ci): agregar script gradlew.bat",
+                            )
+                        }
+                    } else {
+                        if (!existeArchivo(".mvn/wrapper/maven-wrapper.properties")) {
+                            escribirArchivo(
+                                path = ".mvn/wrapper/maven-wrapper.properties",
+                                content = MAVEN_WRAPPER_PROPERTIES,
+                                message = "chore(ci): agregar maven-wrapper.properties",
+                            )
+                        }
+                        if (!existeArchivo("mvnw")) {
+                            escribirArchivo(
+                                path = "mvnw",
+                                content = MVNW_UNIX_SCRIPT,
+                                message = "chore(ci): agregar script mvnw",
+                            )
+                        }
+                        if (!existeArchivo("mvnw.cmd")) {
+                            escribirArchivo(
+                                path = "mvnw.cmd",
+                                content = MVNW_WINDOWS_SCRIPT,
+                                message = "chore(ci): agregar script mvnw.cmd",
+                            )
+                        }
+                    }
+                }
+
+                // Estructura mínima: clase base en src/main/java y test de rescate en src/test/java
+                val tieneTestsEnArbol = if (tieneArbol) {
+                    archivosEnArbol.keys.any { path ->
+                        path.startsWith("src/test/") && (path.endsWith(".java") || path.endsWith(".kt"))
+                    }
+                } else {
+                    existeArchivo("src/test/java/SanityTest.java")
+                }
+
+                if (!tieneTestsEnArbol) {
+                    if (!existeArchivo("src/main/java/Sanity.java")) {
+                        logger.info("El template '{}' no posee tests en src/test; inyectando clase de rescate Sanity.java", cleanName)
+                        escribirArchivo(
+                            path = "src/main/java/Sanity.java",
+                            content = RESCUE_SANITY_JAVA,
+                            message = "feat(ci): agregar clase de rescate por defecto en src/main/java/Sanity.java",
+                        )
+                    }
+
+                    logger.info("El template '{}' no posee tests en src/test; inyectando test de rescate SanityTest.java", cleanName)
                     escribirArchivo(
-                        path = "pom.xml",
-                        content = pomParcheado,
-                        message = "chore(ci): asegurar dependencias y plugins de JaCoCo y Checkstyle en pom.xml",
-                        knownSha = pomFile.sha,
+                        path = "src/test/java/SanityTest.java",
+                        content = RESCUE_SANITY_TEST_JAVA,
+                        message = "test(ci): agregar test de rescate por defecto en src/test/java/SanityTest.java",
                     )
                 }
-            }
-            gradleKtsFile != null -> {
-                val gradleContent = gradleKtsFile.decodedContent()
-                val gradleParcheado = analizarYParchearGradle(gradleContent, esKotlinDsl = true)
-                if (gradleParcheado != null) {
-                    logger.info("Parcheando build.gradle.kts en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
-                    escribirArchivo(
-                        path = "build.gradle.kts",
-                        content = gradleParcheado,
-                        message = "chore(ci): asegurar configuración de JaCoCo y Checkstyle en build.gradle.kts",
-                        knownSha = gradleKtsFile.sha,
-                    )
-                }
-            }
-            gradleGroovyFile != null -> {
-                val gradleContent = gradleGroovyFile.decodedContent()
-                val gradleParcheado = analizarYParchearGradle(gradleContent, esKotlinDsl = false)
-                if (gradleParcheado != null) {
-                    logger.info("Parcheando build.gradle en template '{}' para asegurar JaCoCo y Checkstyle", cleanName)
-                    escribirArchivo(
-                        path = "build.gradle",
-                        content = gradleParcheado,
-                        message = "chore(ci): asegurar configuración de JaCoCo y Checkstyle en build.gradle",
-                        knownSha = gradleGroovyFile.sha,
-                    )
-                }
-            }
-            else -> {
-                logger.info("El template '{}' no posee pom.xml ni build.gradle; inyectando pom.xml base", cleanName)
+
+                // Inyección del workflow de CI para Java
+                val ciWorkflowPath = ".github/workflows/ci.yml"
+                val existingCiSha = archivosEnArbol[ciWorkflowPath]
+                    ?: if (!tieneArbol) gitHubRepoService.getFileContent(cleanName, ciWorkflowPath)?.sha else null
+
+                logger.info("Inyectando/pisando obligatoriamente {} en el template '{}' ({})", ciWorkflowPath, cleanName, lenguaje.nombreLegible)
                 escribirArchivo(
-                    path = "pom.xml",
-                    content = DEFAULT_POM_XML,
-                    message = "chore(ci): agregar pom.xml base con JaCoCo, Checkstyle y JUnit 5",
+                    path = ciWorkflowPath,
+                    content = construirWorkflowCI(lenguaje),
+                    message = "ci: inyectar workflow estandarizado de calidad UNQlassroom para Java",
+                    knownSha = existingCiSha,
                 )
             }
-        }
+            LenguajeProyecto.PYTHON -> {
+                val tieneTests = if (tieneArbol) {
+                    archivosEnArbol.keys.any { path ->
+                        val p = path.lowercase()
+                        (p.startsWith("test/") || p.startsWith("tests/") || p.contains("/test/") || p.contains("/tests/")) ||
+                            p.substringAfterLast('/').let { it.startsWith("test_") || it.endsWith("_test.py") }
+                    }
+                } else {
+                    existeArchivo("tests/test_sanity.py")
+                }
 
-        // 2. Asegurar Wrapper (Maven Wrapper o Gradle Wrapper, cualquiera de los dos)
-        val tieneMavenWrapperCompleto = existeArchivo("mvnw") &&
-            existeArchivo("mvnw.cmd") &&
-            existeArchivo(".mvn/wrapper/maven-wrapper.properties")
+                if (!tieneTests && !existeArchivo("tests/test_sanity.py")) {
+                    logger.info("El template '{}' (Python) no posee tests; inyectando tests/test_sanity.py", cleanName)
+                    escribirArchivo(
+                        path = "tests/test_sanity.py",
+                        content = RESCUE_SANITY_PYTHON,
+                        message = "test(ci): agregar test de rescate por defecto en tests/test_sanity.py",
+                    )
+                }
 
-        val tieneGradleWrapperCompleto = existeArchivo("gradlew") &&
-            existeArchivo("gradlew.bat") &&
-            existeArchivo("gradle/wrapper/gradle-wrapper.properties")
+                val ciWorkflowPath = ".github/workflows/ci.yml"
+                val existingCiSha = archivosEnArbol[ciWorkflowPath]
+                    ?: if (!tieneArbol) gitHubRepoService.getFileContent(cleanName, ciWorkflowPath)?.sha else null
 
-        if (!tieneMavenWrapperCompleto && !tieneGradleWrapperCompleto) {
-            if (esProyectoGradle) {
-                if (!existeArchivo("gradle/wrapper/gradle-wrapper.properties")) {
-                    escribirArchivo(
-                        path = "gradle/wrapper/gradle-wrapper.properties",
-                        content = GRADLE_WRAPPER_PROPERTIES,
-                        message = "chore(ci): agregar gradle-wrapper.properties",
-                    )
-                }
-                if (!existeArchivo("gradlew")) {
-                    escribirArchivo(
-                        path = "gradlew",
-                        content = GRADLEW_UNIX_SCRIPT,
-                        message = "chore(ci): agregar script gradlew",
-                    )
-                }
-                if (!existeArchivo("gradlew.bat")) {
-                    escribirArchivo(
-                        path = "gradlew.bat",
-                        content = GRADLEW_WINDOWS_SCRIPT,
-                        message = "chore(ci): agregar script gradlew.bat",
-                    )
-                }
-            } else {
-                if (!existeArchivo(".mvn/wrapper/maven-wrapper.properties")) {
-                    escribirArchivo(
-                        path = ".mvn/wrapper/maven-wrapper.properties",
-                        content = MAVEN_WRAPPER_PROPERTIES,
-                        message = "chore(ci): agregar maven-wrapper.properties",
-                    )
-                }
-                if (!existeArchivo("mvnw")) {
-                    escribirArchivo(
-                        path = "mvnw",
-                        content = MVNW_UNIX_SCRIPT,
-                        message = "chore(ci): agregar script mvnw",
-                    )
-                }
-                if (!existeArchivo("mvnw.cmd")) {
-                    escribirArchivo(
-                        path = "mvnw.cmd",
-                        content = MVNW_WINDOWS_SCRIPT,
-                        message = "chore(ci): agregar script mvnw.cmd",
-                    )
-                }
-            }
-        }
-
-        // 3. Estructura mínima: clase base en src/main/java y test de rescate en src/test/java
-        val tieneTestsEnArbol = if (tieneArbol) {
-            archivosEnArbol.keys.any { path ->
-                path.startsWith("src/test/") && (path.endsWith(".java") || path.endsWith(".kt"))
-            }
-        } else {
-            existeArchivo("src/test/java/SanityTest.java")
-        }
-
-        if (!tieneTestsEnArbol) {
-            if (!existeArchivo("src/main/java/Sanity.java")) {
-                logger.info("El template '{}' no posee tests en src/test; inyectando clase de rescate Sanity.java", cleanName)
+                logger.info("Inyectando/pisando obligatoriamente {} en el template '{}' (Python)", ciWorkflowPath, cleanName)
                 escribirArchivo(
-                    path = "src/main/java/Sanity.java",
-                    content = RESCUE_SANITY_JAVA,
-                    message = "feat(ci): agregar clase de rescate por defecto en src/main/java/Sanity.java",
+                    path = ciWorkflowPath,
+                    content = construirWorkflowCI(LenguajeProyecto.PYTHON),
+                    message = "ci: inyectar workflow estandarizado de calidad UNQlassroom para Python (Ruff & Pytest)",
+                    knownSha = existingCiSha,
                 )
             }
+            LenguajeProyecto.NODE_JS -> {
+                val tieneTests = if (tieneArbol) {
+                    archivosEnArbol.keys.any { path ->
+                        val p = path.lowercase()
+                        p.endsWith(".test.js") || p.endsWith(".spec.js") ||
+                            p.endsWith(".test.ts") || p.endsWith(".spec.ts") ||
+                            p.endsWith(".test.jsx") || p.endsWith(".test.tsx") ||
+                            p.startsWith("test/") || p.startsWith("tests/") || p.startsWith("__tests__/")
+                    }
+                } else {
+                    existeArchivo("test/sanity.test.js")
+                }
 
-            logger.info("El template '{}' no posee tests en src/test; inyectando test de rescate SanityTest.java", cleanName)
-            escribirArchivo(
-                path = "src/test/java/SanityTest.java",
-                content = RESCUE_SANITY_TEST_JAVA,
-                message = "test(ci): agregar test de rescate por defecto en src/test/java/SanityTest.java",
-            )
+                if (!tieneTests && !existeArchivo("test/sanity.test.js")) {
+                    logger.info("El template '{}' (Node.js) no posee tests; inyectando test/sanity.test.js", cleanName)
+                    escribirArchivo(
+                        path = "test/sanity.test.js",
+                        content = RESCUE_SANITY_NODE,
+                        message = "test(ci): agregar test de rescate por defecto en test/sanity.test.js",
+                    )
+                }
+
+                val ciWorkflowPath = ".github/workflows/ci.yml"
+                val existingCiSha = archivosEnArbol[ciWorkflowPath]
+                    ?: if (!tieneArbol) gitHubRepoService.getFileContent(cleanName, ciWorkflowPath)?.sha else null
+
+                logger.info("Inyectando/pisando obligatoriamente {} en el template '{}' (Node.js)", ciWorkflowPath, cleanName)
+                escribirArchivo(
+                    path = ciWorkflowPath,
+                    content = construirWorkflowCI(LenguajeProyecto.NODE_JS),
+                    message = "ci: inyectar workflow estandarizado de calidad UNQlassroom para Node.js (ESLint & Tests)",
+                    knownSha = existingCiSha,
+                )
+            }
+            LenguajeProyecto.DOTNET -> {
+                val ciWorkflowPath = ".github/workflows/ci.yml"
+                val existingCiSha = archivosEnArbol[ciWorkflowPath]
+                    ?: if (!tieneArbol) gitHubRepoService.getFileContent(cleanName, ciWorkflowPath)?.sha else null
+
+                logger.info("Inyectando/pisando obligatoriamente {} en el template '{}' (.NET)", ciWorkflowPath, cleanName)
+                escribirArchivo(
+                    path = ciWorkflowPath,
+                    content = construirWorkflowCI(LenguajeProyecto.DOTNET),
+                    message = "ci: inyectar workflow estandarizado de calidad UNQlassroom para .NET (Roslyn & Coverlet)",
+                    knownSha = existingCiSha,
+                )
+            }
+            LenguajeProyecto.GENERICO -> {
+                logger.info("El template '{}' contiene archivos pero no corresponde a los stacks soportados. Se omite inyección forzada de dependencias.", cleanName)
+            }
         }
-
-        // 4. Inyección forzosa del workflow de CI (.github/workflows/ci.yml)
-        val ciWorkflowPath = ".github/workflows/ci.yml"
-        val existingCiSha = archivosEnArbol[ciWorkflowPath]
-            ?: if (!tieneArbol) gitHubRepoService.getFileContent(cleanName, ciWorkflowPath)?.sha else null
-
-        logger.info("Inyectando/pisando obligatoriamente {} en el template '{}'", ciWorkflowPath, cleanName)
-        escribirArchivo(
-            path = ciWorkflowPath,
-            content = construirWorkflowCI(),
-            message = "ci: inyectar workflow estandarizado de calidad UNQlassroom",
-            knownSha = existingCiSha,
-        )
 
         // 5. Actualizar caché en BD con el último commit SHA resultante y marcar templateAprobado = true
         val shaFinal = ultimoShaGenerado?.takeIf { it.isNotBlank() }
@@ -438,10 +529,94 @@ $pluginsXml
         return gradleContent + separador + "// --- UNQlassroom Quality Tools ---\n" + bloques.joinToString("\n\n") + "\n"
     }
 
-    override fun construirWorkflowCI(): String {
+    override fun detectarLenguaje(archivos: Collection<String>): LenguajeProyecto {
+        val lowerPaths = archivos.map { it.lowercase().trim().trimStart('/') }
+        return when {
+            lowerPaths.any { it == "pom.xml" || it.endsWith("/pom.xml") } ->
+                LenguajeProyecto.JAVA_MAVEN
+
+            lowerPaths.any {
+                it == "build.gradle" || it == "build.gradle.kts" ||
+                    it.endsWith("/build.gradle") || it.endsWith("/build.gradle.kts") ||
+                    it == "settings.gradle" || it == "settings.gradle.kts"
+            } ->
+                LenguajeProyecto.JAVA_GRADLE
+
+            lowerPaths.any {
+                it == "pyproject.toml" || it == "requirements.txt" || it == "pipfile" ||
+                    it == "setup.py" || it == "setup.cfg" || it == "tox.ini" ||
+                    it.endsWith(".py")
+            } ->
+                LenguajeProyecto.PYTHON
+
+            lowerPaths.any {
+                it == "package.json" || it.endsWith("/package.json") ||
+                    it.endsWith(".ts") || it.endsWith(".tsx") || it.endsWith(".js") || it.endsWith(".jsx")
+            } ->
+                LenguajeProyecto.NODE_JS
+
+            lowerPaths.any {
+                it.endsWith(".csproj") || it.endsWith(".sln") || it.endsWith(".fsproj") || it.endsWith(".cs")
+            } ->
+                LenguajeProyecto.DOTNET
+
+            else -> {
+                val esVacioOBoilerplate = lowerPaths.isEmpty() || lowerPaths.all { path ->
+                    val filename = path.substringAfterLast('/')
+                    filename in listOf("readme.md", ".gitignore", "license", "license.md", "license.txt")
+                }
+                if (esVacioOBoilerplate) LenguajeProyecto.JAVA_MAVEN else LenguajeProyecto.GENERICO
+            }
+        }
+    }
+
+    override fun construirWorkflowCI(): String = construirWorkflowCI(LenguajeProyecto.JAVA_MAVEN)
+
+    override fun construirWorkflowCI(lenguaje: LenguajeProyecto): String {
+        return when (lenguaje) {
+            LenguajeProyecto.JAVA_MAVEN, LenguajeProyecto.JAVA_GRADLE ->
+                construirWorkflowCIJava(esGradle = (lenguaje == LenguajeProyecto.JAVA_GRADLE))
+            LenguajeProyecto.PYTHON ->
+                construirWorkflowCIPython()
+            LenguajeProyecto.NODE_JS ->
+                construirWorkflowCINode()
+            LenguajeProyecto.DOTNET ->
+                construirWorkflowCIDotnet()
+            LenguajeProyecto.GENERICO ->
+                construirWorkflowCIJava(esGradle = false)
+        }
+    }
+
+    private fun construirWorkflowCIJava(esGradle: Boolean = false): String {
         val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        val linterRun = if (esGradle) {
+            """
+          chmod +x gradlew || true
+          ./gradlew checkstyleMain checkstyleTest || true
+            """.trimIndent()
+        } else {
+            """
+          chmod +x mvnw || true
+          ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:checkstyle \
+            -Dcheckstyle.config.location=google_checks.xml \
+            -Dcheckstyle.violationSeverity=warning || true
+            """.trimIndent()
+        }
+
+        val testRun = if (esGradle) {
+            """
+          # Corre todos los tests generando reportes y JaCoCo aun si algún test falla
+          ./gradlew test jacocoTestReport --continue || true
+            """.trimIndent()
+        } else {
+            """
+          # Corre todos los tests generando reportes de Surefire y el XML de JaCoCo aun si algún test falla
+          ./mvnw test jacoco:report -Dmaven.test.failure.ignore=true || true
+            """.trimIndent()
+        }
+
         return """
-name: CI Linter & Tests
+name: CI Linter & Tests (Java)
 
 on:
   push:
@@ -462,22 +637,23 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'maven'
+          cache: '${if (esGradle) "gradle" else "maven"}'
 
       - name: 3. Ejecutar Linter (Checkstyle)
         run: |
-          chmod +x mvnw || true
-          ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:checkstyle \
-            -Dcheckstyle.config.location=google_checks.xml \
-            -Dcheckstyle.violationSeverity=warning || true
+$linterRun
 
       - name: 4. Enviar reporte de Linter a UNQlassroom
         if: always()
         run: |
           REPORT_FILE="target/checkstyle-result.xml"
           if [ ! -f "${'$'}REPORT_FILE" ]; then
-            echo '<?xml version="1.0" encoding="UTF-8"?><checkstyle version="10.0"></checkstyle>' > empty-checkstyle.xml
-            REPORT_FILE="empty-checkstyle.xml"
+            if [ -f "build/reports/checkstyle/main.xml" ]; then
+              REPORT_FILE="build/reports/checkstyle/main.xml"
+            else
+              echo '<?xml version="1.0" encoding="UTF-8"?><checkstyle version="10.0"></checkstyle>' > empty-checkstyle.xml
+              REPORT_FILE="empty-checkstyle.xml"
+            fi
           fi
           XML_CONTENT=${'$'}(jq -Rs . < "${'$'}REPORT_FILE")
 
@@ -504,24 +680,28 @@ jobs:
 
       - name: 5. Ejecutar Tests y Cobertura (JaCoCo)
         run: |
-          # Corre todos los tests generando reportes de Surefire y el XML de JaCoCo aun si algún test falla
-          ./mvnw test jacoco:report -Dmaven.test.failure.ignore=true || true
+$testRun
 
       - name: 6. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
         if: always()
         run: |
           # 1. Leer JaCoCo si existe
           JACOCO_FILE="target/site/jacoco/jacoco.xml"
+          if [ ! -f "${'$'}JACOCO_FILE" ] && [ -f "build/reports/jacoco/test/jacocoTestReport.xml" ]; then
+            JACOCO_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
+          fi
           if [ -f "${'$'}JACOCO_FILE" ]; then
             JACOCO_XML=${'$'}(jq -Rs . < "${'$'}JACOCO_FILE")
           else
             JACOCO_XML='""'
           fi
 
-          # 2. Leer reportes de JUnit Surefire si existen
+          # 2. Leer reportes de JUnit Surefire / Gradle si existen
           SUREFIRE_XML=""
           if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
             SUREFIRE_XML="<testsuites>${'$'}(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          elif compgen -G "build/test-results/test/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>${'$'}(cat build/test-results/test/TEST-*.xml)</testsuites>"
           fi
           JUNIT_XML=${'$'}(echo "${'$'}SUREFIRE_XML" | jq -Rs .)
 
@@ -532,7 +712,6 @@ jobs:
             DELETIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}2} END {print s+0}')
             FILES_CHANGED=${'$'}(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
           else
-            # Si es el primer commit del repositorio
             INSERTIONS=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=${'$'}1} END {print s+0}')
             DELETIONS=0
             FILES_CHANGED=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
@@ -569,6 +748,399 @@ jobs:
               },
               run_id: (${'$'}run_id | tonumber),
               jacoco_xml: ${'$'}jacoco,
+              junit_xml: ${'$'}junit
+            }')
+
+          curl -X POST "$targetUrl" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: coverage_report" \
+            -d "${'$'}PAYLOAD_CI"
+""".trimIndent() + "\n"
+    }
+
+    private fun construirWorkflowCIPython(): String {
+        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        return """
+name: CI Linter & Tests (Python)
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  evaluar-calidad:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 3. Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pytest-cov
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: 4. Ejecutar Linter (Ruff)
+        run: |
+          mkdir -p target
+          ruff check . --output-format=sarif > target/ruff-report.sarif || true
+
+      - name: 5. Enviar reporte de Linter a UNQlassroom
+        if: always()
+        run: |
+          REPORT_FILE="target/ruff-report.sarif"
+          if [ ! -f "${'$'}REPORT_FILE" ] || [ ! -s "${'$'}REPORT_FILE" ]; then
+            echo '{"version":"2.1.0","runs":[]}' > empty-sarif.json
+            REPORT_FILE="empty-sarif.json"
+          fi
+          SARIF_CONTENT=${'$'}(jq -Rs . < "${'$'}REPORT_FILE")
+
+          PAYLOAD=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg tool "ruff" \
+            --argjson sarif "${'$'}SARIF_CONTENT" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: { id: ${'$'}sha, author: { username: ${'$'}author } },
+              run_id: (${'$'}run_id | tonumber),
+              herramienta: ${'$'}tool,
+              sarif: (${'$'}sarif | fromjson)
+            }')
+
+          curl -X POST "$targetUrl" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: linter_report" \
+            -d "${'$'}PAYLOAD"
+
+      - name: 6. Ejecutar Tests y Cobertura (Pytest)
+        run: |
+          mkdir -p target/surefire-reports
+          pytest --junitxml=target/surefire-reports/TEST-pytest.xml --cov=. --cov-report=xml:target/coverage.xml || true
+
+      - name: 7. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
+        if: always()
+        run: |
+          # 1. Leer reportes de JUnit si existen
+          SUREFIRE_XML=""
+          if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>${'$'}(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          fi
+          JUNIT_XML=${'$'}(echo "${'$'}SUREFIRE_XML" | jq -Rs .)
+
+          # 2. Extraer cobertura si existe
+          COV_PERCENT="0"
+          if [ -f "target/coverage.xml" ]; then
+            COV_PERCENT=${'$'}(python3 -c "import xml.etree.ElementTree as ET; tree=ET.parse('target/coverage.xml'); root=tree.getroot(); print(round(float(root.attrib.get('line-rate', 0))*100, 2))" 2>/dev/null || echo "0")
+          fi
+
+          # 3. Calcular líneas agregadas y eliminadas del commit con Git
+          PARENT=${'$'}(git rev-parse --verify HEAD~1 2>/dev/null || echo "")
+          if [ -n "${'$'}PARENT" ]; then
+            INSERTIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}2} END {print s+0}')
+            FILES_CHANGED=${'$'}(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
+          else
+            INSERTIONS=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=0
+            FILES_CHANGED=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
+          fi
+          TOTAL_LINES=${'$'}((INSERTIONS + DELETIONS))
+          COMMIT_MSG=${'$'}(git log -1 --pretty=%B)
+
+          # 4. Construir y enviar payload
+          PAYLOAD_CI=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg msg "${'$'}COMMIT_MSG" \
+            --arg insertions "${'$'}INSERTIONS" \
+            --arg deletions "${'$'}DELETIONS" \
+            --arg total_lines "${'$'}TOTAL_LINES" \
+            --arg files_changed "${'$'}FILES_CHANGED" \
+            --arg cov_percent "${'$'}COV_PERCENT" \
+            --argjson junit "${'$'}JUNIT_XML" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: {
+                id: ${'$'}sha,
+                message: ${'$'}msg,
+                author: { username: ${'$'}author },
+                stats: {
+                  additions: (${'$'}insertions | tonumber),
+                  deletions: (${'$'}deletions | tonumber),
+                  total: (${'$'}total_lines | tonumber),
+                  files_changed: (${'$'}files_changed | tonumber)
+                }
+              },
+              run_id: (${'$'}run_id | tonumber),
+              cobertura_lineas: (${'$'}cov_percent | tonumber),
+              junit_xml: ${'$'}junit
+            }')
+
+          curl -X POST "$targetUrl" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: coverage_report" \
+            -d "${'$'}PAYLOAD_CI"
+""".trimIndent() + "\n"
+    }
+
+    private fun construirWorkflowCINode(): String {
+        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        return """
+name: CI Linter & Tests (Node.js)
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  evaluar-calidad:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 3. Instalar dependencias
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install || true
+          else
+            npm install || true
+          fi
+
+      - name: 4. Ejecutar Linter (ESLint)
+        run: |
+          mkdir -p target
+          npx eslint . -f checkstyle -o target/checkstyle-result.xml || true
+
+      - name: 5. Enviar reporte de Linter a UNQlassroom
+        if: always()
+        run: |
+          REPORT_FILE="target/checkstyle-result.xml"
+          if [ ! -f "${'$'}REPORT_FILE" ]; then
+            echo '<?xml version="1.0" encoding="UTF-8"?><checkstyle version="10.0"></checkstyle>' > empty-checkstyle.xml
+            REPORT_FILE="empty-checkstyle.xml"
+          fi
+          XML_CONTENT=${'$'}(jq -Rs . < "${'$'}REPORT_FILE")
+
+          PAYLOAD=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg tool "eslint" \
+            --argjson xml "${'$'}XML_CONTENT" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: { id: ${'$'}sha, author: { username: ${'$'}author } },
+              run_id: (${'$'}run_id | tonumber),
+              herramienta: ${'$'}tool,
+              checkstyle_xml: ${'$'}xml
+            }')
+
+          curl -X POST "$targetUrl" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: linter_report" \
+            -d "${'$'}PAYLOAD"
+
+      - name: 6. Ejecutar Tests y Cobertura
+        run: |
+          mkdir -p target/surefire-reports
+          if npm run | grep -q "test"; then
+            npm test -- --coverage --ci --testResultsProcessor=jest-junit || npm test || true
+          fi
+          if [ -f junit.xml ]; then
+            mv junit.xml target/surefire-reports/TEST-jest.xml
+          fi
+
+      - name: 7. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
+        if: always()
+        run: |
+          # 1. Leer reportes de JUnit si existen
+          SUREFIRE_XML=""
+          if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>${'$'}(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          fi
+          JUNIT_XML=${'$'}(echo "${'$'}SUREFIRE_XML" | jq -Rs .)
+
+          # 2. Extraer cobertura de coverage/coverage-summary.json si existe
+          COV_PERCENT="0"
+          if [ -f "coverage/coverage-summary.json" ]; then
+            COV_PERCENT=${'$'}(jq -r '.total.lines.pct // 0' coverage/coverage-summary.json 2>/dev/null || echo "0")
+          fi
+
+          # 3. Calcular líneas agregadas y eliminadas del commit con Git
+          PARENT=${'$'}(git rev-parse --verify HEAD~1 2>/dev/null || echo "")
+          if [ -n "${'$'}PARENT" ]; then
+            INSERTIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}2} END {print s+0}')
+            FILES_CHANGED=${'$'}(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
+          else
+            INSERTIONS=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=0
+            FILES_CHANGED=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
+          fi
+          TOTAL_LINES=${'$'}((INSERTIONS + DELETIONS))
+          COMMIT_MSG=${'$'}(git log -1 --pretty=%B)
+
+          # 4. Construir y enviar payload
+          PAYLOAD_CI=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg msg "${'$'}COMMIT_MSG" \
+            --arg insertions "${'$'}INSERTIONS" \
+            --arg deletions "${'$'}DELETIONS" \
+            --arg total_lines "${'$'}TOTAL_LINES" \
+            --arg files_changed "${'$'}FILES_CHANGED" \
+            --arg cov_percent "${'$'}COV_PERCENT" \
+            --argjson junit "${'$'}JUNIT_XML" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: {
+                id: ${'$'}sha,
+                message: ${'$'}msg,
+                author: { username: ${'$'}author },
+                stats: {
+                  additions: (${'$'}insertions | tonumber),
+                  deletions: (${'$'}deletions | tonumber),
+                  total: (${'$'}total_lines | tonumber),
+                  files_changed: (${'$'}files_changed | tonumber)
+                }
+              },
+              run_id: (${'$'}run_id | tonumber),
+              cobertura_lineas: (${'$'}cov_percent | tonumber),
+              junit_xml: ${'$'}junit
+            }')
+
+          curl -X POST "$targetUrl" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: coverage_report" \
+            -d "${'$'}PAYLOAD_CI"
+""".trimIndent() + "\n"
+    }
+
+    private fun construirWorkflowCIDotnet(): String {
+        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        return """
+name: CI Linter & Tests (.NET)
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  evaluar-calidad:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 3. Restaurar dependencias
+        run: dotnet restore || true
+
+      - name: 4. Ejecutar Linter / Formato
+        run: |
+          mkdir -p target
+          dotnet format --verify-no-changes --report ./target/format-report.json || true
+
+      - name: 5. Ejecutar Tests y Cobertura (Coverlet)
+        run: |
+          mkdir -p target/surefire-reports
+          dotnet test --logger "junit;LogFilePath=target/surefire-reports/TEST-dotnet.xml" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./target/coverage.cobertura.xml || true
+
+      - name: 6. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
+        if: always()
+        run: |
+          # 1. Leer reportes de JUnit si existen
+          SUREFIRE_XML=""
+          if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>${'$'}(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          fi
+          JUNIT_XML=${'$'}(echo "${'$'}SUREFIRE_XML" | jq -Rs .)
+
+          # 2. Extraer cobertura si existe
+          COV_PERCENT="0"
+          if [ -f "target/coverage.cobertura.xml" ]; then
+            COV_PERCENT=${'$'}(python3 -c "import xml.etree.ElementTree as ET; tree=ET.parse('target/coverage.cobertura.xml'); root=tree.getroot(); print(round(float(root.attrib.get('line-rate', 0))*100, 2))" 2>/dev/null || echo "0")
+          fi
+
+          # 3. Calcular líneas agregadas y eliminadas del commit con Git
+          PARENT=${'$'}(git rev-parse --verify HEAD~1 2>/dev/null || echo "")
+          if [ -n "${'$'}PARENT" ]; then
+            INSERTIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=${'$'}(git diff --numstat HEAD~1 HEAD | awk '{s+=${'$'}2} END {print s+0}')
+            FILES_CHANGED=${'$'}(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
+          else
+            INSERTIONS=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=${'$'}1} END {print s+0}')
+            DELETIONS=0
+            FILES_CHANGED=${'$'}(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
+          fi
+          TOTAL_LINES=${'$'}((INSERTIONS + DELETIONS))
+          COMMIT_MSG=${'$'}(git log -1 --pretty=%B)
+
+          # 4. Construir y enviar payload
+          PAYLOAD_CI=${'$'}(jq -n \
+            --arg repo "${'$'}{{ github.event.repository.name }}" \
+            --arg sha "${'$'}{{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${'$'}{{ github.actor }}" \
+            --arg run_id "${'$'}{{ github.run_id }}" \
+            --arg msg "${'$'}COMMIT_MSG" \
+            --arg insertions "${'$'}INSERTIONS" \
+            --arg deletions "${'$'}DELETIONS" \
+            --arg total_lines "${'$'}TOTAL_LINES" \
+            --arg files_changed "${'$'}FILES_CHANGED" \
+            --arg cov_percent "${'$'}COV_PERCENT" \
+            --argjson junit "${'$'}JUNIT_XML" \
+            '{
+              repository: { name: ${'$'}repo },
+              sha: ${'$'}sha,
+              head_commit: {
+                id: ${'$'}sha,
+                message: ${'$'}msg,
+                author: { username: ${'$'}author },
+                stats: {
+                  additions: (${'$'}insertions | tonumber),
+                  deletions: (${'$'}deletions | tonumber),
+                  total: (${'$'}total_lines | tonumber),
+                  files_changed: (${'$'}files_changed | tonumber)
+                }
+              },
+              run_id: (${'$'}run_id | tonumber),
+              cobertura_lineas: (${'$'}cov_percent | tonumber),
               junit_xml: ${'$'}junit
             }')
 
@@ -704,6 +1276,21 @@ class SanityTest {
     assertTrue(sanity.check());
   }
 }
+""".trimIndent() + "\n"
+
+        val RESCUE_SANITY_PYTHON = """
+def test_sanity():
+    \"\"\"Test de sanidad por defecto para validacion en CI de UNQlassroom.\"\"\"
+    assert True
+""".trimIndent() + "\n"
+
+        val RESCUE_SANITY_NODE = """
+// Test de sanidad por defecto para validacion en CI de UNQlassroom
+describe('Sanity test', () => {
+  it('debe pasar la verificacion inicial', () => {
+    expect(true).toBe(true);
+  });
+});
 """.trimIndent() + "\n"
 
         val MAVEN_WRAPPER_PROPERTIES = """

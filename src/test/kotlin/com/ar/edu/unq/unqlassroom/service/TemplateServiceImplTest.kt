@@ -30,6 +30,9 @@ class TemplateServiceImplTest {
     @Mock
     private lateinit var repositorioRepository: RepositorioRepository
 
+    @Mock
+    private lateinit var templateStandardizationService: TemplateStandardizationService
+
     @InjectMocks
     private lateinit var templateService: TemplateServiceImpl
 
@@ -39,8 +42,9 @@ class TemplateServiceImplTest {
     }
 
     @Test
-    fun `crearTemplateRepository delegates to gitHubRepoService and saves to DB`() {
+    fun `crearTemplateRepository delegates to gitHubRepoService and saves to DB when repoAImportar is null`() {
         val repoResponse = GitHubRepoResponse(
+            id = 55L,
             name = "template-base-kotlin",
             fullName = "unqlassroom/template-base-kotlin",
             htmlUrl = "https://github.com/unqlassroom/template-base-kotlin",
@@ -52,14 +56,19 @@ class TemplateServiceImplTest {
             nombre = "template-base-kotlin",
             htmlUrl = "https://github.com/unqlassroom/template-base-kotlin",
             esTemplate = true,
-            descripcion = "Template base para ejercicios Kotlin"
+            descripcion = "Template base para ejercicios Kotlin",
+            githubRepoId = 55L,
         )
 
         `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test", esDocente = true))
         `when`(gitHubRepoService.createTemplateRepository("template-base-kotlin", "Template base para ejercicios Kotlin")).thenReturn(repoResponse)
         `when`(repositorioRepository.save(anyRepositorio())).thenReturn(savedRepo)
 
-        val result = templateService.crearTemplateRepository("template-base-kotlin", "Template base para ejercicios Kotlin", "profe_test")
+        val result = templateService.crearTemplateRepository(
+            name = "template-base-kotlin",
+            description = "Template base para ejercicios Kotlin",
+            solicitanteUsername = "profe_test",
+        )
 
         assertEquals("template-base-kotlin", result.nombre)
         assertEquals("https://github.com/unqlassroom/template-base-kotlin", result.htmlUrl)
@@ -74,7 +83,76 @@ class TemplateServiceImplTest {
         assertEquals("template-base-kotlin", repoGuardado.nombre)
         assertEquals("https://github.com/unqlassroom/template-base-kotlin", repoGuardado.htmlUrl)
         assertTrue(repoGuardado.esTemplate)
-        assertEquals("Template base para ejercicios Kotlin", repoGuardado.descripcion)
+        assertEquals(55L, repoGuardado.githubRepoId)
+    }
+
+    @Test
+    fun `crearTemplateRepository with repoAImportar imports, sets template, standardizes and saves`() {
+        val createdRepoResponse = GitHubRepoResponse(
+            id = 999L,
+            name = "template-importado",
+            fullName = "unqlassroom/template-importado",
+            htmlUrl = "https://github.com/unqlassroom/template-importado",
+            description = "Importado de repo personal",
+            isTemplate = false,
+        )
+        val standardizedRepo = Repositorio(
+            id = 10L,
+            nombre = "template-importado",
+            htmlUrl = "https://github.com/unqlassroom/template-importado",
+            esTemplate = true,
+            descripcion = "Importado de repo personal",
+            ultimoCommitSha = "sha999",
+            templateAprobado = true,
+        )
+
+        val docente = Usuario(username = "profe_test", esDocente = true)
+
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
+        `when`(gitHubRepoService.createOrgRepository(
+            name = "template-importado",
+            description = "Importado de repo personal",
+            private = true,
+            autoInit = true,
+            isTemplate = false,
+        )).thenReturn(createdRepoResponse)
+        `when`(gitHubRepoService.importRepository(
+            targetRepoName = "template-importado",
+            sourceRepoUrlOrSlug = "profe/tp1-publico",
+            fallbackOwner = "profe_test",
+        )).thenReturn(5)
+        `when`(gitHubRepoService.setTemplateStatus("template-importado", true)).thenReturn(createdRepoResponse.copy(isTemplate = true))
+        `when`(templateStandardizationService.asegurarTemplateEstandarizado("template-importado")).thenReturn(standardizedRepo)
+        `when`(repositorioRepository.save(standardizedRepo)).thenReturn(standardizedRepo)
+
+        val result = templateService.crearTemplateRepository(
+            name = "template-importado",
+            description = "Importado de repo personal",
+            solicitanteUsername = "profe_test",
+            repoAImportar = "profe/tp1-publico",
+        )
+
+        assertEquals("template-importado", result.nombre)
+        assertEquals(999L, result.githubRepoId)
+        assertTrue(result.templateAprobado)
+        assertTrue(result.esTemplate)
+        assertEquals("sha999", result.ultimoCommitSha)
+
+        verify(gitHubRepoService).createOrgRepository(
+            name = "template-importado",
+            description = "Importado de repo personal",
+            private = true,
+            autoInit = true,
+            isTemplate = false,
+        )
+        verify(gitHubRepoService).importRepository(
+            targetRepoName = "template-importado",
+            sourceRepoUrlOrSlug = "profe/tp1-publico",
+            fallbackOwner = "profe_test",
+        )
+        verify(gitHubRepoService).setTemplateStatus("template-importado", true)
+        verify(templateStandardizationService).asegurarTemplateEstandarizado("template-importado")
+        verify(repositorioRepository).save(standardizedRepo)
     }
 
     @Test

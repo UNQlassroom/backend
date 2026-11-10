@@ -24,9 +24,18 @@ class TemplateController(
             name = request.name,
             description = request.description,
             solicitanteUsername = authentication.name,
+            repoAImportar = request.repoAImportar,
         )
         val response = TemplateResponseDTO.desdeModelo(repo)
         return ResponseEntity.created(URI.create("/templates/${response.name}")).body(response)
+    }
+
+    @PostMapping("/import")
+    fun importarTemplate(
+        @RequestBody @Valid request: CrearTemplateRequestDTO,
+        authentication: Authentication,
+    ): ResponseEntity<TemplateResponseDTO> {
+        return crearTemplate(request, authentication)
     }
 
     @GetMapping

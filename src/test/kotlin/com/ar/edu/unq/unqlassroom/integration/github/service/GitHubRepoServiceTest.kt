@@ -6,6 +6,7 @@ import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -784,5 +785,38 @@ class GitHubRepoServiceTest {
         assertNotNull(result)
         assertEquals("npm run build", result!!.etapaFallida)
         assertEquals("Fallo en la etapa 'npm run build' (job 'build').", result.logError)
+    }
+
+    @Test
+    fun `parsearOwnerYRepo parsea urls y slugs correctamente`() {
+        assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("octocat/Hello-World"))
+        assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("https://github.com/octocat/Hello-World"))
+        assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("https://github.com/octocat/Hello-World.git"))
+        assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("git@github.com:octocat/Hello-World.git"))
+        assertEquals(Pair("profe", "repo-simple"), gitHubRepoService.parsearOwnerYRepo("repo-simple", fallbackOwner = "profe"))
+    }
+
+    @Test
+    fun `setTemplateStatus envía PATCH con is_template`() {
+        `when`(properties.organization).thenReturn("UNQlassroom")
+        val repoResponse = GitHubRepoResponse(
+            id = 123L,
+            name = "mi-template",
+            fullName = "UNQlassroom/mi-template",
+            htmlUrl = "https://github.com/UNQlassroom/mi-template",
+            isTemplate = true,
+        )
+
+        `when`(
+            gitHubAppClient.executeInstallationRequest(
+                method = eqString("PATCH"),
+                path = eqString("/repos/UNQlassroom/mi-template"),
+                responseType = anyClass(GitHubRepoResponse::class.java),
+                body = anyString()
+            )
+        ).thenReturn(repoResponse)
+
+        val result = gitHubRepoService.setTemplateStatus("mi-template", isTemplate = true)
+        assertTrue(result.isTemplate)
     }
 }
