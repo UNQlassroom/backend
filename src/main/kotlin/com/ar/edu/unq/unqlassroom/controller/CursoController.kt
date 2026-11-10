@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.net.URI
 
@@ -54,12 +55,22 @@ class CursoController(
         return ResponseEntity.ok(response)
     }
 
+    @PostMapping("/{id}/archivar")
+    fun archivarCurso(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<CursoResponseDTO> {
+        val cursoArchivado = cursoService.archivarCurso(id, authentication.name)
+        return ResponseEntity.ok(CursoResponseDTO.desdeModelo(cursoArchivado))
+    }
+
     @GetMapping
     fun obtenerCursos(
+        @RequestParam(name = "archivados", required = false, defaultValue = "false") archivados: Boolean = false,
         authentication: Authentication,
     ): ResponseEntity<List<CursoResponseDTO>> {
         val esDocente = authentication.authorities.any { it.authority == "ROLE_DOCENTE" }
-        val cursos = cursoService.obtenerCursos(authentication.name, esDocente)
+        val cursos = cursoService.obtenerCursos(authentication.name, esDocente, archivados)
         return ResponseEntity.ok(cursos.map { CursoResponseDTO.desdeModelo(it) })
     }
 

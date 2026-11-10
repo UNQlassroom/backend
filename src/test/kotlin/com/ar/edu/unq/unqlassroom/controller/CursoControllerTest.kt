@@ -89,6 +89,7 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.comision").value(1))
             .andExpect(jsonPath("$.descripcion").value("Curso de Estructuras de Datos - Año 2026 - Semestre 1 - Comisión 1"))
             .andExpect(jsonPath("$.ownerUsername").value("profe"))
+            .andExpect(jsonPath("$.archivado").value(false))
     }
 
     @Test
@@ -189,7 +190,7 @@ class CursoControllerTest {
         val cursos = listOf(
             Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, descripcion = "desc", owner = Usuario(username = "profe"))
         )
-        `when`(cursoService.obtenerCursos("profe", true)).thenReturn(cursos)
+        `when`(cursoService.obtenerCursos("profe", true, false)).thenReturn(cursos)
 
         mockMvc.perform(
             get("/cursos")
@@ -206,7 +207,7 @@ class CursoControllerTest {
         val cursos = listOf(
             Curso(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 2, descripcion = "desc", owner = Usuario(username = "otro_profe"))
         )
-        `when`(cursoService.obtenerCursos("alumno", false)).thenReturn(cursos)
+        `when`(cursoService.obtenerCursos("alumno", false, false)).thenReturn(cursos)
 
         mockMvc.perform(
             get("/cursos")
@@ -215,6 +216,29 @@ class CursoControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.size()").value(1))
             .andExpect(jsonPath("$[0].materia").value("Redes"))
+    }
+
+    @Test
+    fun `archivarCurso endpoint returns 200 and archived curso`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val cursoArchivado = Curso(
+            id = 1L,
+            materia = "Estructuras",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            archivado = true,
+            owner = Usuario(username = "profe")
+        )
+        `when`(cursoService.archivarCurso(1L, "profe")).thenReturn(cursoArchivado)
+
+        mockMvc.perform(
+            post("/cursos/1/archivar")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.archivado").value(true))
     }
 
     @Test

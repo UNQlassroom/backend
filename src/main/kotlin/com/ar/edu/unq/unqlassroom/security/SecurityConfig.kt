@@ -39,6 +39,7 @@ class SecurityConfig(
                 auth.requestMatchers(HttpMethod.POST, "/cursos").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/alumnos").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/alumnos/sync").hasRole("DOCENTE")
+                auth.requestMatchers(HttpMethod.POST, "/cursos/*/archivar").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/asignaciones/*/entregar").authenticated()
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/asignaciones/*/calificar").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.PUT, "/cursos/*/asignaciones/*/calificar").hasRole("DOCENTE")
