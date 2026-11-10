@@ -5,15 +5,21 @@ import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgMembershipResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.Curso
+import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
+import com.ar.edu.unq.unqlassroom.model.Repositorio
+import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -23,6 +29,7 @@ import org.mockito.Mockito
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
+import java.time.LocalDate
 import java.util.Optional
 
 @ExtendWith(MockitoExtension::class)
@@ -45,6 +52,10 @@ class CursoServiceImplTest {
 
     @Mock
     private lateinit var sseNotificationService: SseNotificationService
+
+    @Mock
+    private lateinit var asyncService: AsyncService
+
     private lateinit var cursoService: CursoServiceImpl
 
     @BeforeEach
@@ -56,6 +67,7 @@ class CursoServiceImplTest {
             inscripcionRepository = inscripcionRepository,
             gitHubOrgService = gitHubOrgService,
             sseNotificationService = sseNotificationService,
+            asyncService = asyncService,
         )
         Mockito.lenient().`when`(gitHubOrgService.obtenerUsernameCanonico(Mockito.anyString())).thenAnswer {
             it.getArgument<String>(0)
@@ -255,68 +267,6 @@ class CursoServiceImplTest {
     }
 
     @Test
-    fun `sincronizarAlumnos updates pending students to active when accepted in github org`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
-        val curso = Curso(
-            id = 1L,
-            materia = "Estructuras de Datos",
-            anio = 2026,
-            semestre = 1,
-            comision = 1,
-            owner = owner
-        )
-        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
-
-        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false, githubState = "pending")
-        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false, githubState = "pending")
-        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso)
-        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso)
-
-        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
-
-        `when`(gitHubOrgService.obtenerMembresia("alumno1")).thenReturn(
-            GitHubOrgMembershipResponse(state = "active", role = "member")
-        )
-        `when`(gitHubOrgService.obtenerMembresia("alumno2")).thenReturn(
-            GitHubOrgMembershipResponse(state = "pending", role = "member")
-        )
-
-        val response = cursoService.sincronizarAlumnos(1L, "profe_test")
-
-        assertEquals(2, response.size)
-
-        val a1 = response.first { it.usuario.username == "alumno1" }
-        assertEquals("active", a1.usuario.githubState)
-        assertEquals("active", usuario1.githubState)
-
-        val a2 = response.first { it.usuario.username == "alumno2" }
-        assertEquals("pending", a2.usuario.githubState)
-        assertEquals("pending", usuario2.githubState)
-
-        verify(usuarioRepository).save(usuario1)
-        verify(usuarioRepository, Mockito.never()).save(usuario2)
-    }
-
-    @Test
-    fun `sincronizarAlumnos throws NoEsDocenteDelCursoException when solicitante is not owner`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(
-            id = 1L,
-            materia = "Estructuras de Datos",
-            anio = 2026,
-            semestre = 1,
-            comision = 1,
-            owner = owner
-        )
-        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
-
-        val ex = assertThrows<NoEsDocenteDelCursoException> {
-            cursoService.sincronizarAlumnos(1L, "otro_docente")
-        }
-        assertEquals("Solo el docente a cargo del curso puede sincronizar alumnos", ex.message)
-    }
-
-    @Test
     fun `obtenerAlumnos returns enrolled members from DB without calling github`() {
         val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
         val curso = Curso(
@@ -344,7 +294,7 @@ class CursoServiceImplTest {
         assertEquals("alumno2", response[1].usuario.username)
         assertEquals("active", response[1].usuario.githubState)
 
-        verify(gitHubOrgService, Mockito.never()).obtenerMembresia(Mockito.anyString(), Mockito.nullable(String::class.java))
+        verify(gitHubOrgService, Mockito.never()).invitarMiembro(Mockito.anyString(), Mockito.anyString(), Mockito.nullable(String::class.java))
     }
 
     @Test
@@ -432,13 +382,13 @@ class CursoServiceImplTest {
     @Test
     fun `obtenerCursos for docente calls findCursosParaDocente and returns DTOs`() {
         val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1)
-        `when`(cursoRepository.findCursosParaDocente("profe_test")).thenReturn(listOf(curso))
+        `when`(cursoRepository.findCursosParaDocente("profe_test", false)).thenReturn(listOf(curso))
 
         val result = cursoService.obtenerCursos("profe_test", true)
 
         assertEquals(1, result.size)
         assertEquals("Estructuras", result[0].materia)
-        verify(cursoRepository).findCursosParaDocente("profe_test")
+        verify(cursoRepository).findCursosParaDocente("profe_test", false)
         verify(cursoRepository, Mockito.never()).findCursosParaAlumno(Mockito.anyString())
     }
 
@@ -452,7 +402,20 @@ class CursoServiceImplTest {
         assertEquals(1, result.size)
         assertEquals("Redes", result[0].materia)
         verify(cursoRepository).findCursosParaAlumno("alumno_test")
-        verify(cursoRepository, Mockito.never()).findCursosParaDocente(Mockito.anyString())
+        verify(cursoRepository, Mockito.never()).findCursosParaDocente(Mockito.anyString(), Mockito.anyBoolean())
+    }
+
+    @Test
+    fun `obtenerCursos with archivados true returns archived courses for docente and empty list for alumno`() {
+        val cursoArchivado = Curso(id = 1L, materia = "Estructuras", anio = 2025, semestre = 1, comision = 1, archivado = true)
+        `when`(cursoRepository.findCursosParaDocente("profe_test", true)).thenReturn(listOf(cursoArchivado))
+
+        val resultDocente = cursoService.obtenerCursos("profe_test", true, archivados = true)
+        assertEquals(1, resultDocente.size)
+        assertTrue(resultDocente[0].archivado)
+
+        val resultAlumno = cursoService.obtenerCursos("alumno_test", false, archivados = true)
+        assertTrue(resultAlumno.isEmpty())
     }
 
     @Test
@@ -499,6 +462,26 @@ class CursoServiceImplTest {
         assertNotNull(result)
         assertEquals(1L, result.id)
         assertEquals("Estructuras de Datos", result.materia)
+    }
+
+    @Test
+    fun `obtenerCurso throws SinPermisoAccesoCursoException when curso is archived and solicitante is enrolled alumno`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(
+            id = 1L,
+            materia = "Estructuras de Datos",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            archivado = true,
+            owner = owner
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        assertThrows<SinPermisoAccesoCursoException> {
+            cursoService.obtenerCurso(1L, "alumno_inscripto")
+        }
+        assertEquals(1L, cursoService.obtenerCurso(1L, "profe_owner").id)
     }
 
     @Test
@@ -566,5 +549,66 @@ class CursoServiceImplTest {
         assertThrows<ComisionInvalidaException> {
             Curso(materia = "BD", anio = 2026, semestre = 1, comision = 0)
         }
+    }
+
+    @Test
+    fun `archivarCurso marks curso as archived and triggers async GitHub repository archiving`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val asignacion = Asignacion(
+            id = 5L,
+            titulo = "TP1",
+            tipo = TipoAsignacion.INDIVIDUAL,
+            templateRepoName = "tmpl",
+            curso = curso,
+        )
+        val grupo = GrupoAsignacion(
+            id = 10L,
+            asignacion = asignacion,
+            repositorio = Repositorio(nombre = "repo-tp1-a1", htmlUrl = "https://github.com/org/repo-tp1-a1"),
+        )
+        asignacion.grupos.add(grupo)
+        curso.asignaciones.add(asignacion)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(cursoRepository.save(anyCurso())).thenAnswer { it.getArgument(0) }
+
+        val resultado = cursoService.archivarCurso(1L, "profe_owner")
+
+        assertTrue(resultado.archivado)
+        verify(cursoRepository).save(curso)
+        verify(asyncService).archivarRepositoriosAsincronicamente(listOf("repo-tp1-a1"))
+    }
+
+    @Test
+    fun `archivarCurso throws CursoArchivadoException when already archived and NoEsDocenteDelCursoException when not owner`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        assertThrows<NoEsDocenteDelCursoException> {
+            cursoService.archivarCurso(1L, "otro_profe")
+        }
+
+        curso.archivado = true
+        assertThrows<CursoArchivadoException> {
+            cursoService.archivarCurso(1L, "profe_owner")
+        }
+        assertThrows<CursoArchivadoException> {
+            cursoService.agregarAlumnos(1L, listOf("alumno1"), "profe_owner")
+        }
+    }
+
+    @Test
+    fun `archivarCursosVencidosAutomaticamente archives only expired courses`() {
+        val cursoVencido = Curso(id = 1L, materia = "Algoritmos", anio = 2025, semestre = 2, comision = 1)
+        val cursoVigente = Curso(id = 2L, materia = "Redes", anio = 2026, semestre = 1, comision = 1)
+        `when`(cursoRepository.findByArchivadoFalse()).thenReturn(listOf(cursoVencido, cursoVigente))
+        `when`(cursoRepository.save(anyCurso())).thenAnswer { it.getArgument(0) }
+
+        cursoService.archivarCursosVencidosAutomaticamente(LocalDate.of(2026, 3, 1))
+
+        assertTrue(cursoVencido.archivado)
+        assertFalse(cursoVigente.archivado)
     }
 }

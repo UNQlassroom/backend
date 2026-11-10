@@ -366,6 +366,23 @@ class GitHubRepoService(
     }
 
     @JvmOverloads
+    fun archiveRepository(
+        repoName: String,
+        org: String? = null,
+    ): GitHubRepoResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            ArchiveRepoRequest(archived = true)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "PATCH",
+            path = "/repos/$targetOrg/$repoName",
+            responseType = GitHubRepoResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
     fun getWorkflowRunJobs(
         repoName: String,
         runId: Long,
@@ -609,6 +626,11 @@ data class CreateRepoRequest(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+data class ArchiveRepoRequest(
+    @JsonProperty("archived") val archived: Boolean = true,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GenerateRepoFromTemplateRequest(
     @JsonProperty("owner") val owner: String,
     @JsonProperty("name") val name: String,
@@ -625,6 +647,7 @@ data class GitHubRepoResponse(
     @JsonProperty("html_url") val htmlUrl: String = "",
     @JsonProperty("clone_url") val cloneUrl: String = "",
     @JsonProperty("is_template") val isTemplate: Boolean = false,
+    @JsonProperty("archived") val archived: Boolean = false,
     @JsonProperty("description") val description: String? = null,
 )
 

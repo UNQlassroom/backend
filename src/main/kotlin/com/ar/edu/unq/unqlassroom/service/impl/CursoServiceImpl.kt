@@ -7,12 +7,16 @@ import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
 import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import java.time.LocalDate
 
 @Service
 @Transactional
@@ -23,7 +27,10 @@ class CursoServiceImpl(
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubOrgService: GitHubOrgService,
     private val sseNotificationService: SseNotificationService? = null,
+    private val asyncService: AsyncService? = null,
 ) : CursoService {
+
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
         val docente = usuarioService.obtenerDocente(ownerUsername)
@@ -41,11 +48,11 @@ class CursoServiceImpl(
         return cursoRepository.save(curso)
     }
 
-    override fun obtenerCursos(username: String, esDocente: Boolean): List<Curso> {
+    override fun obtenerCursos(username: String, esDocente: Boolean, archivados: Boolean): List<Curso> {
         return if (esDocente) {
-            cursoRepository.findCursosParaDocente(username)
+            cursoRepository.findCursosParaDocente(username, archivados)
         } else {
-            cursoRepository.findCursosParaAlumno(username)
+            if (archivados) emptyList() else cursoRepository.findCursosParaAlumno(username)
         }
     }
 
@@ -73,6 +80,7 @@ class CursoServiceImpl(
         if (!curso.esOwner(solicitanteUsername)) {
             throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede agregar alumnos")
         }
+        curso.validarNoArchivado()
 
         val distinctUsernames = usernames
             .map { it.trim() }
@@ -129,40 +137,6 @@ class CursoServiceImpl(
         return inscripciones
     }
 
-    override fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion> {
-        val curso = cursoRepository.findById(cursoId).orElseThrow {
-            CursoNotFoundException()
-        }
-
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede sincronizar alumnos")
-        }
-
-        val inscripciones = inscripcionRepository.findByCursoId(cursoId)
-        val activados = mutableListOf<String>()
-
-        val resultado = inscripciones.map { inscripcion ->
-            val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
-            if (membership != null && inscripcion.usuario.activarSiCorresponde(membership.state)) {
-                usuarioRepository.save(inscripcion.usuario)
-                activados.add(inscripcion.usuario.username)
-            }
-            inscripcion
-        }
-
-        if (activados.isNotEmpty()) {
-            ejecutarDespuesDeCommit {
-                sseNotificationService?.notificarMiembroCursoActualizado(
-                    cursoId = cursoId,
-                    docenteUsername = curso.owner?.username,
-                    alumnosUsernames = activados
-                )
-            }
-        }
-
-        return resultado
-    }
-
     override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion> {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
@@ -174,6 +148,55 @@ class CursoServiceImpl(
 
         return inscripcionRepository.findByCursoId(cursoId)
     }
+
+    override fun archivarCurso(cursoId: Long, solicitanteUsername: String): Curso {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede archivarlo")
+        }
+
+        return ejecutarArchivadoDeCurso(curso)
+    }
+
+    @Scheduled(cron = "\${cursos.archivado-automatico.cron:0 0 3 * * *}")
+    fun ejecutarTareaArchivadoAutomatico() {
+        archivarCursosVencidosAutomaticamente(LocalDate.now())
+    }
+
+    override fun archivarCursosVencidosAutomaticamente(fechaActual: LocalDate) {
+        val cursosAActualizar = cursoRepository.findByArchivadoFalse()
+            .filter { it.debeArchivarseAutomaticamente(fechaActual) }
+
+        for (curso in cursosAActualizar) {
+            logger.info(
+                "Archivando automáticamente curso ID={} ({} - {}s{} c{}) por vencimiento de semestre",
+                curso.id,
+                curso.materia,
+                curso.anio,
+                curso.semestre,
+                curso.comision
+            )
+            ejecutarArchivadoDeCurso(curso)
+        }
+    }
+
+    private fun ejecutarArchivadoDeCurso(curso: Curso): Curso {
+        curso.archivar()
+        val repoNames = curso.obtenerNombresRepositorios()
+        val guardado = cursoRepository.save(curso)
+
+        if (repoNames.isNotEmpty()) {
+            ejecutarDespuesDeCommit {
+                asyncService?.archivarRepositoriosAsincronicamente(repoNames)
+            }
+        }
+
+        return guardado
+    }
+
     private fun verificarAccesoACurso(
         curso: Curso,
         solicitanteUsername: String,
@@ -181,7 +204,7 @@ class CursoServiceImpl(
     ): Boolean {
         val cursoId = curso.id ?: throw CursoNotFoundException()
         val esOwner = curso.esOwner(solicitanteUsername)
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+        val estaInscripto = !curso.archivado && inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
         if (!esOwner && !estaInscripto) {
             throw excepcionSiFalla()

@@ -10,6 +10,7 @@ data class CursoResponseDTO(
     val comision: Int,
     val descripcion: String? = null,
     val ownerUsername: String? = null,
+    val archivado: Boolean = false,
 ) {
     companion object {
         fun desdeModelo(curso: Curso): CursoResponseDTO {
@@ -21,6 +22,7 @@ data class CursoResponseDTO(
                 comision = curso.comision,
                 descripcion = curso.descripcion,
                 ownerUsername = curso.owner?.username,
+                archivado = curso.archivado,
             )
         }
     }

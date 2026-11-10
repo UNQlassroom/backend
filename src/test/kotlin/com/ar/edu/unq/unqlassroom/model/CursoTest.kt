@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.exception.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.time.LocalDate
 
 class CursoTest {
 
@@ -60,5 +61,34 @@ class CursoTest {
         assertThrows<ComisionInvalidaException> {
             Curso(materia = "Redes", anio = 2026, semestre = 1, comision = 0)
         }
+    }
+
+    @Test
+    fun `archivar marks curso as archivado and throws CursoArchivadoException if already archived`() {
+        val curso = Curso(materia = "Redes", anio = 2026, semestre = 1, comision = 1)
+        assertFalse(curso.archivado)
+
+        curso.archivar()
+        assertTrue(curso.archivado)
+
+        assertThrows<CursoArchivadoException> {
+            curso.archivar()
+        }
+        assertThrows<CursoArchivadoException> {
+            curso.validarNoArchivado()
+        }
+    }
+
+    @Test
+    fun `fechaFinSemestre and debeArchivarseAutomaticamente respect July 31 and Dec 31 plus 2 months`() {
+        val cursoSem1 = Curso(materia = "Algoritmos", anio = 2026, semestre = 1, comision = 1)
+        assertEquals(LocalDate.of(2026, 7, 31), cursoSem1.fechaFinSemestre())
+        assertFalse(cursoSem1.debeArchivarseAutomaticamente(LocalDate.of(2026, 9, 29)))
+        assertTrue(cursoSem1.debeArchivarseAutomaticamente(LocalDate.of(2026, 9, 30)))
+
+        val cursoSem2 = Curso(materia = "Algoritmos", anio = 2026, semestre = 2, comision = 1)
+        assertEquals(LocalDate.of(2026, 12, 31), cursoSem2.fechaFinSemestre())
+        assertFalse(cursoSem2.debeArchivarseAutomaticamente(LocalDate.of(2027, 2, 27)))
+        assertTrue(cursoSem2.debeArchivarseAutomaticamente(LocalDate.of(2027, 2, 28)))
     }
 }
