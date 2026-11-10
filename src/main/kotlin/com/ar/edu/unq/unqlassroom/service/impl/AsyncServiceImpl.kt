@@ -140,4 +140,27 @@ class AsyncServiceImpl(
             }
         }
     }
+
+    @Async
+    override fun archivarRepositoriosAsincronicamente(repoNames: List<String>) {
+        if (repoNames.isEmpty()) {
+            return
+        }
+
+        logger.info(
+            "Iniciando archivado asincrónico de repositorios en GitHub: {}",
+            repoNames
+        )
+
+        for (repoName in repoNames) {
+            try {
+                gitHubRepoService.archiveRepository(repoName)
+                logger.info("Repositorio '{}' archivado exitosamente en GitHub", repoName)
+            } catch (e: GitHubNotFoundException) {
+                logger.warn("El repositorio '{}' no fue encontrado en GitHub al intentar archivarlo", repoName)
+            } catch (e: Exception) {
+                logger.error("Error al archivar el repositorio '{}' en GitHub: {}", repoName, e.message, e)
+            }
+        }
+    }
 }
