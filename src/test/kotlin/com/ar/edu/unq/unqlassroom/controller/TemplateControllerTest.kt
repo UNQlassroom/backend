@@ -67,11 +67,11 @@ class TemplateControllerTest {
     }
 
     @Test
-    fun `crearTemplate with repoAImportar returns 201 and delegates to service`() {
+    fun `crearTemplate with repoAImportar returns 201 with templateAprobado false while importing in background`() {
         val request = CrearTemplateRequestDTO(
             name = "template-importado",
             description = "Desc importada",
-            repoAImportar = "profe/mi-repo-publico",
+            repoAImportar = "https://github.com/profe/mi-repo-publico",
         )
         val repo = Repositorio(
             id = 2L,
@@ -80,8 +80,8 @@ class TemplateControllerTest {
             esTemplate = true,
             descripcion = "Desc importada",
             githubRepoId = 12345L,
-            ultimoCommitSha = "sha123",
-            templateAprobado = true,
+            ultimoCommitSha = null,
+            templateAprobado = false,
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
@@ -90,7 +90,7 @@ class TemplateControllerTest {
                 name = "template-importado",
                 description = "Desc importada",
                 solicitanteUsername = "profe",
-                repoAImportar = "profe/mi-repo-publico",
+                repoAImportar = "https://github.com/profe/mi-repo-publico",
             )
         ).thenReturn(repo)
 
@@ -104,46 +104,7 @@ class TemplateControllerTest {
             .andExpect(header().string("Location", "/templates/template-importado"))
             .andExpect(jsonPath("$.name").value("template-importado"))
             .andExpect(jsonPath("$.githubRepoId").value(12345))
-            .andExpect(jsonPath("$.lastCommitSha").value("sha123"))
-            .andExpect(jsonPath("$.templateAprobado").value(true))
-    }
-
-    @Test
-    fun `importarTemplate endpoint POST templates import works identically`() {
-        val request = CrearTemplateRequestDTO(
-            name = "template-importado",
-            description = "Desc importada",
-            repoAImportar = "https://github.com/profe/mi-repo-publico.git",
-        )
-        val repo = Repositorio(
-            id = 2L,
-            nombre = "template-importado",
-            htmlUrl = "https://github.com/unqlassroom/template-importado",
-            esTemplate = true,
-            descripcion = "Desc importada",
-            githubRepoId = 12345L,
-            templateAprobado = true,
-        )
-
-        val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(
-            templateService.crearTemplateRepository(
-                name = "template-importado",
-                description = "Desc importada",
-                solicitanteUsername = "profe",
-                repoAImportar = "https://github.com/profe/mi-repo-publico.git",
-            )
-        ).thenReturn(repo)
-
-        mockMvc.perform(
-            post("/templates/import")
-                .principal(auth)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-        )
-            .andExpect(status().isCreated)
-            .andExpect(jsonPath("$.name").value("template-importado"))
-            .andExpect(jsonPath("$.templateAprobado").value(true))
+            .andExpect(jsonPath("$.templateAprobado").value(false))
     }
 
     @Test
