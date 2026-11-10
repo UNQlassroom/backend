@@ -45,16 +45,6 @@ class CursoController(
         return ResponseEntity.ok(response)
     }
 
-    @PostMapping("/{id}/alumnos/sync")
-    fun sincronizarAlumnos(
-        @PathVariable id: Long,
-        authentication: Authentication,
-    ): ResponseEntity<CursoAlumnosResponseDTO> {
-        val inscripciones = cursoService.sincronizarAlumnos(id, authentication.name)
-        val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
-        return ResponseEntity.ok(response)
-    }
-
     @PostMapping("/{id}/archivar")
     fun archivarCurso(
         @PathVariable id: Long,

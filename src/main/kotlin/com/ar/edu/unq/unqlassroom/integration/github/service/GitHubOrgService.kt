@@ -51,23 +51,6 @@ class GitHubOrgService(
         }
     }
 
-    @JvmOverloads
-    fun obtenerMembresia(
-        username: String,
-        org: String? = null,
-    ): GitHubOrgMembershipResponse? {
-        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
-        return try {
-            gitHubAppClient.executeInstallationRequest(
-                method = "GET",
-                path = "/orgs/$targetOrg/memberships/$username",
-                responseType = GitHubOrgMembershipResponse::class.java,
-            )
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     private fun requiredOrganization(): String = properties.organization?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }

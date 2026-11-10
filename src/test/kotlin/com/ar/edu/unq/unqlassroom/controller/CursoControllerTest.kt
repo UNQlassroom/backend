@@ -139,30 +139,6 @@ class CursoControllerTest {
     }
 
     @Test
-    fun `sincronizarAlumnos endpoint returns 200 and updated list of students`() {
-        val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
-        val inscripciones = listOf(
-            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active"), githubRole = "push"),
-            Inscripcion(id = 2L, curso = curso, usuario = Usuario(username = "alumno2", githubState = "active"), githubRole = "push")
-        )
-
-        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
-        `when`(cursoService.sincronizarAlumnos(10L, "profe")).thenReturn(inscripciones)
-
-        mockMvc.perform(
-            post("/cursos/10/alumnos/sync")
-                .principal(auth)
-                .contentType(MediaType.APPLICATION_JSON)
-        )
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.cursoId").value(10))
-            .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
-            .andExpect(jsonPath("$.alumnos[0].state").value("active"))
-            .andExpect(jsonPath("$.alumnos[1].username").value("alumno2"))
-            .andExpect(jsonPath("$.alumnos[1].state").value("active"))
-    }
-
-    @Test
     fun `obtenerAlumnos endpoint returns 200 and list of students`() {
         val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
         val inscripciones = listOf(
