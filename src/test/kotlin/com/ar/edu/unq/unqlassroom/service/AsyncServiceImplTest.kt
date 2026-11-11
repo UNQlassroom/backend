@@ -334,6 +334,43 @@ class AsyncServiceImplTest {
     }
 
     @Test
+    fun `archivarRepositoriosAsincronicamente archives all GitHub repositories`() {
+        asyncService.archivarRepositoriosAsincronicamente(listOf("repo-1", "repo-2"))
+
+        verify(gitHubRepoService).archiveRepository("repo-1")
+        verify(gitHubRepoService).archiveRepository("repo-2")
+    }
+
+    @Test
+    fun `archivarRepositoriosAsincronicamente does nothing when list is empty`() {
+        asyncService.archivarRepositoriosAsincronicamente(emptyList())
+
+        verifyNoInteractions(gitHubRepoService)
+    }
+
+    @Test
+    fun `archivarRepositoriosAsincronicamente continues when a repository is not found in GitHub (404)`() {
+        doThrow(GitHubNotFoundException("Repo no existe en GitHub"))
+            .`when`(gitHubRepoService).archiveRepository("repo-1")
+
+        asyncService.archivarRepositoriosAsincronicamente(listOf("repo-1", "repo-2"))
+
+        verify(gitHubRepoService).archiveRepository("repo-1")
+        verify(gitHubRepoService).archiveRepository("repo-2")
+    }
+
+    @Test
+    fun `archivarRepositoriosAsincronicamente continues when GitHub throws generic Exception`() {
+        doThrow(RuntimeException("Network error"))
+            .`when`(gitHubRepoService).archiveRepository("repo-1")
+
+        asyncService.archivarRepositoriosAsincronicamente(listOf("repo-1", "repo-2"))
+
+        verify(gitHubRepoService).archiveRepository("repo-1")
+        verify(gitHubRepoService).archiveRepository("repo-2")
+    }
+
+    @Test
     fun `importarYEstandarizarTemplateAsincronicamente replicates repo, sets template, standardizes and notifies SSE`() {
         val repoEstandarizado = Repositorio(
             id = 10L,
