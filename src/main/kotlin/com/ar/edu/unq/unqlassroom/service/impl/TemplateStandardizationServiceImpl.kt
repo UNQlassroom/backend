@@ -596,26 +596,26 @@ $pluginsXml
             """
           chmod +x gradlew || true
           ./gradlew checkstyleMain checkstyleTest || true
-            """.trimIndent()
+            """.trimIndent().prependIndent("          ")
         } else {
             """
           chmod +x mvnw || true
           ./mvnw org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:checkstyle \
             -Dcheckstyle.config.location=google_checks.xml \
             -Dcheckstyle.violationSeverity=warning || true
-            """.trimIndent()
+            """.trimIndent().prependIndent("          ")
         }
 
         val testRun = if (esGradle) {
             """
           # Corre todos los tests generando reportes y JaCoCo aun si algún test falla
           ./gradlew test jacocoTestReport --continue || true
-            """.trimIndent()
+            """.trimIndent().prependIndent("          ")
         } else {
             """
           # Corre todos los tests generando reportes de Surefire y el XML de JaCoCo aun si algún test falla
           ./mvnw test jacoco:report -Dmaven.test.failure.ignore=true || true
-            """.trimIndent()
+            """.trimIndent().prependIndent("          ")
         }
 
         return """
