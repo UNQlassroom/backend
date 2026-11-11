@@ -34,12 +34,10 @@ class AuthServiceImpl(
             username = perfil.login,
             esDocente = dto.esDocente == true,
             email = perfil.email,
-            nombreCompleto = perfil.name,
             githubState = "pending",
         )
 
         perfil.email?.let { usuario.email = it }
-        perfil.name?.let { usuario.nombreCompleto = it }
         usuario.esDocente = dto.esDocente == true
 
         val org = properties.organization?.trim().orEmpty()

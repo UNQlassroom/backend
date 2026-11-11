@@ -36,9 +36,9 @@ class UsuarioServiceImpl(
             ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
     }
 
-    override fun actualizarNombreCompleto(username: String, nuevoNombre: String): Usuario {
+    override fun actualizarNombreCompleto(username: String, nombre: String, apellido: String): Usuario {
         val usuario = obtenerUsuario(username)
-        usuario.actualizarNombreCompleto(nuevoNombre)
+        usuario.actualizarNombreCompleto(nombre = nombre, apellido = apellido)
         return usuarioRepository.save(usuario)
     }
 }

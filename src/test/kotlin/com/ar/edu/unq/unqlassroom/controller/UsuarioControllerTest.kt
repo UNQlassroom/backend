@@ -51,7 +51,7 @@ class UsuarioControllerTest {
             username = "juanperez",
             esDocente = false,
             email = "juan@unq.edu.ar",
-            nombreCompleto = "Juan Carlos Pérez",
+            nombreCompleto = "García Lorca, Juan Manuel",
         )
 
         `when`(usuarioService.obtenerUsuario("juanperez")).thenReturn(usuario)
@@ -65,22 +65,25 @@ class UsuarioControllerTest {
             .andExpect(jsonPath("$.username").value("juanperez"))
             .andExpect(jsonPath("$.esDocente").value(false))
             .andExpect(jsonPath("$.email").value("juan@unq.edu.ar"))
-            .andExpect(jsonPath("$.nombreCompleto").value("Juan Carlos Pérez"))
+            .andExpect(jsonPath("$.nombreCompleto").value("García Lorca, Juan Manuel"))
     }
 
     @Test
-    fun `actualizarNombreCompleto returns 200 and updated user data when request is valid`() {
+    fun `actualizarNombreCompleto returns 200 and formatted Apellidos, Nombres when given nombre and apellido`() {
         val auth = UsernamePasswordAuthenticationToken("juanperez", null)
-        val request = ActualizarNombreRequestDTO(nombreCompleto = "Juan Carlos Pérez")
+        val request = ActualizarNombreRequestDTO(
+            nombre = "Juan Manuel",
+            apellido = "García Lorca",
+        )
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
             esDocente = false,
             email = "juan@unq.edu.ar",
-            nombreCompleto = "Juan Carlos Pérez",
+            nombreCompleto = "García Lorca, Juan Manuel",
         )
 
-        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Juan Carlos Pérez"))
+        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Juan Manuel", "García Lorca"))
             .thenReturn(usuarioActualizado)
 
         mockMvc.perform(
@@ -90,31 +93,72 @@ class UsuarioControllerTest {
                 .content(objectMapper.writeValueAsString(request))
         )
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.nombreCompleto").value("Juan Carlos Pérez"))
+            .andExpect(jsonPath("$.nombreCompleto").value("García Lorca, Juan Manuel"))
             .andExpect(jsonPath("$.username").value("juanperez"))
     }
 
     @Test
-    fun `actualizarNombreCompleto returns 400 when name is blank`() {
-        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
-        val request = ActualizarNombreRequestDTO(nombreCompleto = "   ")
-
-        mockMvc.perform(
-            put("/usuarios/me/nombre")
-                .principal(auth)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-        )
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
-    }
-
-    @Test
-    fun `actualizarNombreCompleto returns 400 when name exceeds 35 chars`() {
+    fun `actualizarNombreCompleto returns 200 when names contain accents, apostrophes and hyphens`() {
         val auth = UsernamePasswordAuthenticationToken("juanperez", null)
         val request = ActualizarNombreRequestDTO(
-            nombreCompleto = "Nombre Demasiado Largo Que Supera Los Treinta Y Cinco Caracteres"
+            nombre = "Martín",
+            apellido = "D'Angelo-García",
         )
+        val nombreEsperado = "D'Angelo-García, Martín"
+        val usuarioActualizado = Usuario(
+            id = 10L,
+            username = "juanperez",
+            esDocente = false,
+            email = "juan@unq.edu.ar",
+            nombreCompleto = nombreEsperado,
+        )
+
+        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Martín", "D'Angelo-García"))
+            .thenReturn(usuarioActualizado)
+
+        mockMvc.perform(
+            put("/usuarios/me/nombre")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.nombreCompleto").value(nombreEsperado))
+    }
+
+    @Test
+    fun `actualizarNombreCompleto returns 200 when names contain enye tanto mayuscula como minuscula`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarNombreRequestDTO(
+            nombre = "Iñaki",
+            apellido = "Ñúñez Peña",
+        )
+        val nombreEsperado = "Ñúñez Peña, Iñaki"
+        val usuarioActualizado = Usuario(
+            id = 10L,
+            username = "juanperez",
+            esDocente = false,
+            email = "juan@unq.edu.ar",
+            nombreCompleto = nombreEsperado,
+        )
+
+        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Iñaki", "Ñúñez Peña"))
+            .thenReturn(usuarioActualizado)
+
+        mockMvc.perform(
+            put("/usuarios/me/nombre")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.nombreCompleto").value(nombreEsperado))
+    }
+
+    @Test
+    fun `actualizarNombreCompleto returns 400 when nombre is blank`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarNombreRequestDTO(nombre = "   ", apellido = "García Lorca")
 
         mockMvc.perform(
             put("/usuarios/me/nombre")
@@ -127,9 +171,39 @@ class UsuarioControllerTest {
     }
 
     @Test
-    fun `actualizarNombreCompleto returns 400 when name contains invalid characters`() {
+    fun `actualizarNombreCompleto returns 400 when apellido is blank`() {
         val auth = UsernamePasswordAuthenticationToken("juanperez", null)
-        val request = ActualizarNombreRequestDTO(nombreCompleto = "Juan Pérez 123")
+        val request = ActualizarNombreRequestDTO(nombre = "Juan Manuel", apellido = "   ")
+
+        mockMvc.perform(
+            put("/usuarios/me/nombre")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
+    }
+
+    @Test
+    fun `actualizarNombreCompleto returns 400 when nombre contains invalid characters`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarNombreRequestDTO(nombre = "Juan 123", apellido = "Pérez")
+
+        mockMvc.perform(
+            put("/usuarios/me/nombre")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
+    }
+
+    @Test
+    fun `actualizarNombreCompleto returns 400 when apellido contains invalid characters`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarNombreRequestDTO(nombre = "Juan", apellido = "Pérez @#$")
 
         mockMvc.perform(
             put("/usuarios/me/nombre")
@@ -144,9 +218,9 @@ class UsuarioControllerTest {
     @Test
     fun `actualizarNombreCompleto returns 400 when service throws NombreUsuarioInvalidoException`() {
         val auth = UsernamePasswordAuthenticationToken("juanperez", null)
-        val request = ActualizarNombreRequestDTO(nombreCompleto = "Juan")
+        val request = ActualizarNombreRequestDTO(nombre = "Juan", apellido = "Pérez")
 
-        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Juan"))
+        `when`(usuarioService.actualizarNombreCompleto("juanperez", "Juan", "Pérez"))
             .thenThrow(NombreUsuarioInvalidoException("Nombre inválido"))
 
         mockMvc.perform(

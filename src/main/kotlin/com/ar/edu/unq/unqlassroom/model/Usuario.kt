@@ -33,18 +33,24 @@ class Usuario(
         return false
     }
 
-    fun actualizarNombreCompleto(nuevoNombre: String) {
-        val sanitizado = nuevoNombre.trim().replace("\\s+".toRegex(), " ")
-        if (sanitizado.isEmpty()) {
+    fun actualizarNombreCompleto(nombre: String, apellido: String) {
+        val n = nombre.trim().replace("\\s+".toRegex(), " ")
+        val a = apellido.trim().replace("\\s+".toRegex(), " ")
+
+        if (n.isEmpty() || a.isEmpty()) {
             throw NombreUsuarioInvalidoException("El nombre y apellido no puede estar vacío")
         }
-        if (sanitizado.length > 35) {
+
+        val armado = "$a, $n"
+        if (armado.length > 35) {
             throw NombreUsuarioInvalidoException("El nombre y apellido no puede exceder los 35 caracteres")
         }
+
         val regex = Regex("^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ' -]+$")
-        if (!regex.matches(sanitizado)) {
+        if (!regex.matches(n) || !regex.matches(a)) {
             throw NombreUsuarioInvalidoException("El nombre y apellido contiene caracteres inválidos")
         }
-        this.nombreCompleto = sanitizado
+
+        this.nombreCompleto = armado
     }
 }

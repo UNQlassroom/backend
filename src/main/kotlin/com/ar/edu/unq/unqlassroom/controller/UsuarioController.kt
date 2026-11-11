@@ -27,7 +27,8 @@ class UsuarioController(
     ): ResponseEntity<UsuarioResponseDTO> {
         val usuarioActualizado = usuarioService.actualizarNombreCompleto(
             username = authentication.name,
-            nuevoNombre = request.nombreCompleto,
+            nombre = request.nombre,
+            apellido = request.apellido,
         )
         return ResponseEntity.ok(UsuarioResponseDTO.desdeModelo(usuarioActualizado))
     }

@@ -2,14 +2,19 @@ package com.ar.edu.unq.unqlassroom.dto.usuario.request
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
-import jakarta.validation.constraints.Size
 
 data class ActualizarNombreRequestDTO(
-    @field:NotBlank(message = "El nombre y apellido no puede estar vacío")
-    @field:Size(max = 35, message = "El nombre y apellido no puede exceder los 35 caracteres")
+    @field:NotBlank(message = "El nombre no puede estar vacío")
     @field:Pattern(
         regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ' -]+$",
-        message = "El nombre y apellido contiene caracteres inválidos",
+        message = "El nombre contiene caracteres inválidos",
     )
-    val nombreCompleto: String = "",
+    val nombre: String = "",
+
+    @field:NotBlank(message = "El apellido no puede estar vacío")
+    @field:Pattern(
+        regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ' -]+$",
+        message = "El apellido contiene caracteres inválidos",
+    )
+    val apellido: String = "",
 )

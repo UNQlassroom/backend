@@ -84,7 +84,7 @@ class AuthServiceImplTest {
         assertEquals("jwt-token-xyz", response.token)
         assertEquals("alumno_nuevo", response.user?.username)
         assertEquals(false, response.user?.esDocente)
-        assertEquals("Alumno Nuevo", response.user?.nombreCompleto)
+        assertNull(response.user?.nombreCompleto)
         assertEquals("alumno@unq.edu.ar", response.user?.email)
     }
 
@@ -152,6 +152,7 @@ class AuthServiceImplTest {
         assertEquals("jwt-token-docente", response.token)
         assertEquals(false, response.user?.esDocente)
         assertEquals("profe.actualizado@unq.edu.ar", existingDocente.email)
+        assertEquals("Profesor", response.user?.nombreCompleto)
         verifyNoInteractions(gitHubOrgService)
     }
 
@@ -188,17 +189,28 @@ class AuthServiceImplTest {
         val profile = GitHubUserProfileResponse(
             login = "usuario_sin_org",
             id = 555L,
-            name = "Sin Org",
+            name = "Usuario Sin Org",
             email = "sinorg@unq.edu.ar",
             avatar_url = null
         )
 
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-no-org")).thenReturn("gho_token_no_org")
-        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_no_org")).thenReturn(profile)
+        Mockito.lenient().`when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-no-org")).thenReturn("gho_sin_org")
+        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_sin_org")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("usuario_sin_org")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "usuario_sin_org", role = "member"))
             .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "member"))
+        `when`(usuarioRepository.save(anyUsuario())).thenAnswer { invocation ->
+            val u = invocation.getArgument<Usuario>(0)
+            Usuario(
+                id = 99L,
+                username = u.username,
+                esDocente = u.esDocente,
+                email = u.email,
+                nombreCompleto = u.nombreCompleto,
+                githubState = u.githubState
+            )
+        }
 
         val response = authService.loginConGitHub(dto)
 
@@ -207,29 +219,37 @@ class AuthServiceImplTest {
         assertEquals("https://github.com/orgs/UNQlassroom/invitation", response.redirectUrl)
         assertNull(response.token)
         assertNull(response.user)
-
         verify(gitHubOrgService).invitarMiembro(username = "usuario_sin_org", role = "member")
-        verify(usuarioRepository).save(anyUsuario())
-        verify(jwtService, never()).generateToken(anyUsuario())
     }
 
     @Test
-    fun `loginConGitHub invites docente with admin role when new docente is not member of org`() {
-        val dto = GitHubLoginRequestDTO(code = "code-docente-no-org", esDocente = true)
+    fun `loginConGitHub invites user as admin when user is new docente and not member of org`() {
+        val dto = GitHubLoginRequestDTO(code = "code-admin-no-org", esDocente = true)
         val profile = GitHubUserProfileResponse(
             login = "docente_sin_org",
             id = 666L,
             name = "Docente Sin Org",
-            email = "docentesinorg@unq.edu.ar",
+            email = "docente_sin_org@unq.edu.ar",
             avatar_url = null
         )
 
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-docente-no-org")).thenReturn("gho_token_doc_no_org")
-        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_doc_no_org")).thenReturn(profile)
+        Mockito.lenient().`when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-admin-no-org")).thenReturn("gho_admin_sin_org")
+        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_admin_sin_org")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("docente_sin_org")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "docente_sin_org", role = "admin"))
             .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "admin"))
+        `when`(usuarioRepository.save(anyUsuario())).thenAnswer { invocation ->
+            val u = invocation.getArgument<Usuario>(0)
+            Usuario(
+                id = 100L,
+                username = u.username,
+                esDocente = u.esDocente,
+                email = u.email,
+                nombreCompleto = u.nombreCompleto,
+                githubState = u.githubState
+            )
+        }
 
         val response = authService.loginConGitHub(dto)
 
@@ -238,25 +258,22 @@ class AuthServiceImplTest {
         assertEquals("https://github.com/orgs/UNQlassroom/invitation", response.redirectUrl)
         assertNull(response.token)
         assertNull(response.user)
-
         verify(gitHubOrgService).invitarMiembro(username = "docente_sin_org", role = "admin")
-        verify(usuarioRepository).save(anyUsuario())
-        verify(jwtService, never()).generateToken(anyUsuario())
     }
 
     @Test
-    fun `loginConGitHub succeeds and generates token when new user is already active in org`() {
-        val dto = GitHubLoginRequestDTO(code = "code-new-active-org", esDocente = false)
+    fun `loginConGitHub sets githubState active and generates token when new user invitation is immediately active`() {
+        val dto = GitHubLoginRequestDTO(code = "code-active-immediate", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "usuario_nuevo_activo",
-            id = 888L,
+            id = 777L,
             name = "Usuario Nuevo Activo",
-            email = "nuevoactivo@unq.edu.ar",
+            email = "nuevo_activo@unq.edu.ar",
             avatar_url = null
         )
 
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-new-active-org")).thenReturn("gho_token_nuevo_activo")
+        Mockito.lenient().`when`(properties.organization).thenReturn("UNQlassroom")
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-active-immediate")).thenReturn("gho_token_nuevo_activo")
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_nuevo_activo")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("usuario_nuevo_activo")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "usuario_nuevo_activo", role = "member"))

@@ -89,13 +89,13 @@ class UsuarioServiceImplTest {
 
     @Test
     fun `obtenerUsuario returns user when found`() {
-        val usuario = Usuario(id = 5L, username = "usuario1", nombreCompleto = "Juan Pérez")
+        val usuario = Usuario(id = 5L, username = "usuario1", nombreCompleto = "Pérez, Juan")
         `when`(usuarioRepository.findByUsername("usuario1")).thenReturn(usuario)
 
         val result = usuarioService.obtenerUsuario("usuario1")
 
         assertEquals("usuario1", result.username)
-        assertEquals("Juan Pérez", result.nombreCompleto)
+        assertEquals("Pérez, Juan", result.nombreCompleto)
     }
 
     @Test
@@ -108,24 +108,48 @@ class UsuarioServiceImplTest {
     }
 
     @Test
-    fun `actualizarNombreCompleto updates and persists user with sanitized name`() {
+    fun `actualizarNombreCompleto updates and persists user with formatted and sanitized Apellidos, Nombres`() {
         val usuario = Usuario(id = 6L, username = "usuario2", nombreCompleto = "Nombre Viejo")
         `when`(usuarioRepository.findByUsername("usuario2")).thenReturn(usuario)
         `when`(usuarioRepository.save(usuario)).thenReturn(usuario)
 
-        val result = usuarioService.actualizarNombreCompleto("usuario2", "  María   de   los Ángeles  ")
+        val result = usuarioService.actualizarNombreCompleto("usuario2", "  Juan   Manuel  ", "  García   Lorca  ")
 
-        assertEquals("María de los Ángeles", result.nombreCompleto)
+        assertEquals("García Lorca, Juan Manuel", result.nombreCompleto)
         verify(usuarioRepository).save(usuario)
     }
 
     @Test
-    fun `actualizarNombreCompleto throws NombreUsuarioInvalidoException when name exceeds 35 chars`() {
+    fun `actualizarNombreCompleto accepts compound names with accents, hyphens and apostrophes`() {
+        val usuario = Usuario(id = 7L, username = "usuario3", nombreCompleto = null)
+        `when`(usuarioRepository.findByUsername("usuario3")).thenReturn(usuario)
+        `when`(usuarioRepository.save(usuario)).thenReturn(usuario)
+
+        val result = usuarioService.actualizarNombreCompleto("usuario3", "Martín", "D'Angelo-García")
+
+        assertEquals("D'Angelo-García, Martín", result.nombreCompleto)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `actualizarNombreCompleto accepts enye en nombre y apellido`() {
+        val usuario = Usuario(id = 8L, username = "usuario4", nombreCompleto = null)
+        `when`(usuarioRepository.findByUsername("usuario4")).thenReturn(usuario)
+        `when`(usuarioRepository.save(usuario)).thenReturn(usuario)
+
+        val result = usuarioService.actualizarNombreCompleto("usuario4", "Iñaki", "Ñúñez Peña")
+
+        assertEquals("Ñúñez Peña, Iñaki", result.nombreCompleto)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `actualizarNombreCompleto throws NombreUsuarioInvalidoException when combined name exceeds 35 chars`() {
         val usuario = Usuario(id = 6L, username = "usuario2")
         `when`(usuarioRepository.findByUsername("usuario2")).thenReturn(usuario)
 
         assertThrows<NombreUsuarioInvalidoException> {
-            usuarioService.actualizarNombreCompleto("usuario2", "Nombre Extremadamente Largo Que Excede Los Treinta Y Cinco Caracteres")
+            usuarioService.actualizarNombreCompleto("usuario2", "Nombre Extremadamente Largo", "Apellido Extremadamente Largo")
         }
         verify(usuarioRepository, never()).save(any())
     }
@@ -136,7 +160,18 @@ class UsuarioServiceImplTest {
         `when`(usuarioRepository.findByUsername("usuario2")).thenReturn(usuario)
 
         assertThrows<NombreUsuarioInvalidoException> {
-            usuarioService.actualizarNombreCompleto("usuario2", "Juan 123 @#$%")
+            usuarioService.actualizarNombreCompleto("usuario2", "Juan 123", "Pérez")
+        }
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `actualizarNombreCompleto throws NombreUsuarioInvalidoException when name or apellido is blank`() {
+        val usuario = Usuario(id = 6L, username = "usuario2")
+        `when`(usuarioRepository.findByUsername("usuario2")).thenReturn(usuario)
+
+        assertThrows<NombreUsuarioInvalidoException> {
+            usuarioService.actualizarNombreCompleto("usuario2", "   ", "Pérez")
         }
         verify(usuarioRepository, never()).save(any())
     }
