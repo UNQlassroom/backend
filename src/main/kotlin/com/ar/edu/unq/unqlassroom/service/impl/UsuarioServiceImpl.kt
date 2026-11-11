@@ -16,8 +16,7 @@ class UsuarioServiceImpl(
 
     @Transactional(readOnly = true)
     override fun obtenerDocente(username: String): Usuario {
-        val usuario = usuarioRepository.findByUsername(username)
-            ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
+        val usuario = obtenerUsuario(username)
 
         if (!usuario.esDocente) {
             throw UsuarioNoEsDocenteException(username)
@@ -29,5 +28,17 @@ class UsuarioServiceImpl(
     override fun obtenerOCrearAlumno(username: String): Usuario {
         return usuarioRepository.findByUsername(username)
             ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
+    }
+
+    @Transactional(readOnly = true)
+    override fun obtenerUsuario(username: String): Usuario {
+        return usuarioRepository.findByUsername(username)
+            ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
+    }
+
+    override fun actualizarNombreCompleto(username: String, nuevoNombre: String): Usuario {
+        val usuario = obtenerUsuario(username)
+        usuario.actualizarNombreCompleto(nuevoNombre)
+        return usuarioRepository.save(usuario)
     }
 }
