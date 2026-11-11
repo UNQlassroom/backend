@@ -50,7 +50,7 @@ class TemplateControllerTest {
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null)
-        `when`(templateService.crearTemplateRepository("template-tp3", "Desc", "profe")).thenReturn(repo)
+        `when`(templateService.crearTemplateRepository("template-tp3", "Desc", "profe", null)).thenReturn(repo)
 
         mockMvc.perform(
             post("/templates")
@@ -64,6 +64,47 @@ class TemplateControllerTest {
             .andExpect(jsonPath("$.fullName").value("template-tp3"))
             .andExpect(jsonPath("$.htmlUrl").value("https://github.com/unqlassroom/template-tp3"))
             .andExpect(jsonPath("$.description").value("Desc"))
+    }
+
+    @Test
+    fun `crearTemplate with repoAImportar returns 201 with templateAprobado false while importing in background`() {
+        val request = CrearTemplateRequestDTO(
+            name = "template-importado",
+            description = "Desc importada",
+            repoAImportar = "https://github.com/profe/mi-repo-publico",
+        )
+        val repo = Repositorio(
+            id = 2L,
+            nombre = "template-importado",
+            htmlUrl = "https://github.com/unqlassroom/template-importado",
+            esTemplate = true,
+            descripcion = "Desc importada",
+            githubRepoId = 12345L,
+            ultimoCommitSha = null,
+            templateAprobado = false,
+        )
+
+        val auth = UsernamePasswordAuthenticationToken("profe", null)
+        `when`(
+            templateService.crearTemplateRepository(
+                name = "template-importado",
+                description = "Desc importada",
+                solicitanteUsername = "profe",
+                repoAImportar = "https://github.com/profe/mi-repo-publico",
+            )
+        ).thenReturn(repo)
+
+        mockMvc.perform(
+            post("/templates")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isCreated)
+            .andExpect(header().string("Location", "/templates/template-importado"))
+            .andExpect(jsonPath("$.name").value("template-importado"))
+            .andExpect(jsonPath("$.githubRepoId").value(12345))
+            .andExpect(jsonPath("$.templateAprobado").value(false))
     }
 
     @Test

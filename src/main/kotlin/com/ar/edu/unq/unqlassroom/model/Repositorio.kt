@@ -50,6 +50,9 @@ class Repositorio(
 
     @Column(nullable = false)
     var eliminado: Boolean = false,
+
+    @Column(name = "github_repo_id", nullable = true)
+    var githubRepoId: Long? = null,
 ) {
     fun actualizarInfo(ultimoCommit: String?, fechaUltimoCommit: String?, estadoCI: String?) {
         this.ultimoCommit = ultimoCommit

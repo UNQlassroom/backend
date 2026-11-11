@@ -6,6 +6,7 @@ import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
+import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.TemplateStandardizationService
@@ -21,6 +22,7 @@ class AsyncServiceImpl(
     private val asignacionRepository: AsignacionRepository,
     private val templateStandardizationService: TemplateStandardizationService? = null,
     private val sseNotificationService: SseNotificationService? = null,
+    private val repositorioRepository: RepositorioRepository? = null,
 ) : AsyncService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -160,6 +162,60 @@ class AsyncServiceImpl(
                 logger.warn("El repositorio '{}' no fue encontrado en GitHub al intentar archivarlo", repoName)
             } catch (e: Exception) {
                 logger.error("Error al archivar el repositorio '{}' en GitHub: {}", repoName, e.message, e)
+            }
+        }
+    }
+
+    @Async
+    override fun importarYEstandarizarTemplateAsincronicamente(
+        targetRepoName: String,
+        sourceRepoUrl: String,
+    ) {
+        logger.info("Iniciando importación y estandarización asincrónica del template '{}' desde '{}'", targetRepoName, sourceRepoUrl)
+        try {
+            // 1. Replicar todos los archivos del repositorio origen
+            gitHubRepoService.importRepository(
+                targetRepoName = targetRepoName,
+                sourceRepoUrl = sourceRepoUrl,
+            )
+
+            // 2. Configurar formalmente como template vía PATCH (is_template = true)
+            gitHubRepoService.setTemplateStatus(
+                repoName = targetRepoName,
+                isTemplate = true,
+            )
+
+            // 3. Pipeline de Verificación y Blindaje Inicial (marca templateAprobado = true y lo guarda en BD)
+            templateStandardizationService?.asegurarTemplateEstandarizado(targetRepoName)
+
+            logger.info("Template '{}' importado y estandarizado exitosamente en background", targetRepoName)
+            try {
+                sseNotificationService?.notificarTemplatesActualizados(targetRepoName)
+            } catch (notifEx: Exception) {
+                logger.warn("Error enviando notificación SSE para template listo '{}': {}", targetRepoName, notifEx.message)
+            }
+        } catch (e: Exception) {
+            logger.error("Error crítico importando y estandarizando el template '{}'. Ejecutando rollback...", targetRepoName, e)
+            try {
+                val repo = repositorioRepository?.findByNombreIgnoreCase(targetRepoName)
+                if (repo != null) {
+                    repositorioRepository.delete(repo)
+                    logger.info("Repositorio template fallido '{}' eliminado físicamente de la base de datos.", targetRepoName)
+                }
+            } catch (dbEx: Exception) {
+                logger.warn("Error eliminando de la base de datos al template fallido '{}': {}", targetRepoName, dbEx.message)
+            }
+
+            try {
+                gitHubRepoService.deleteRepository(targetRepoName)
+            } catch (ghEx: Exception) {
+                logger.warn("Error eliminando de GitHub el repositorio template fallido '{}': {}", targetRepoName, ghEx.message)
+            }
+
+            try {
+                sseNotificationService?.notificarTemplatesActualizados(targetRepoName)
+            } catch (notifEx: Exception) {
+                logger.warn("Error enviando notificación SSE para template fallido '{}': {}", targetRepoName, notifEx.message)
             }
         }
     }

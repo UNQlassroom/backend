@@ -7,4 +7,6 @@ data class CrearTemplateRequestDTO(
     val name: String,
 
     val description: String? = null,
+
+    val repoAImportar: String? = null,
 )

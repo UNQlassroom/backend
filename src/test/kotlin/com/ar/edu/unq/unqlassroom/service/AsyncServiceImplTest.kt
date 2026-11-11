@@ -7,6 +7,7 @@ import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.integration.github.service.RepositorioInfo
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
+import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.AsyncServiceImpl
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -32,6 +33,12 @@ class AsyncServiceImplTest {
     @Mock
     private lateinit var templateStandardizationService: TemplateStandardizationService
 
+    @Mock
+    private lateinit var sseNotificationService: SseNotificationService
+
+    @Mock
+    private lateinit var repositorioRepository: RepositorioRepository
+
     private lateinit var asyncService: AsyncService
 
     @BeforeEach
@@ -41,6 +48,8 @@ class AsyncServiceImplTest {
             gitHubCollaboratorService = gitHubCollaboratorService,
             asignacionRepository = asignacionRepository,
             templateStandardizationService = templateStandardizationService,
+            sseNotificationService = sseNotificationService,
+            repositorioRepository = repositorioRepository,
         )
     }
 
@@ -359,5 +368,55 @@ class AsyncServiceImplTest {
 
         verify(gitHubRepoService).archiveRepository("repo-1")
         verify(gitHubRepoService).archiveRepository("repo-2")
+    }
+
+    @Test
+    fun `importarYEstandarizarTemplateAsincronicamente replicates repo, sets template, standardizes and notifies SSE`() {
+        val repoEstandarizado = Repositorio(
+            id = 10L,
+            nombre = "template-importado",
+            htmlUrl = "https://github.com/UNQlassroom/template-importado",
+            esTemplate = true,
+            templateAprobado = true,
+        )
+
+        `when`(templateStandardizationService.asegurarTemplateEstandarizado("template-importado"))
+            .thenReturn(repoEstandarizado)
+
+        asyncService.importarYEstandarizarTemplateAsincronicamente(
+            targetRepoName = "template-importado",
+            sourceRepoUrl = "https://github.com/profe/tp1",
+        )
+
+        verify(gitHubRepoService).importRepository(
+            targetRepoName = "template-importado",
+            sourceRepoUrl = "https://github.com/profe/tp1",
+        )
+        verify(gitHubRepoService).setTemplateStatus("template-importado", true)
+        verify(templateStandardizationService).asegurarTemplateEstandarizado("template-importado")
+        verify(sseNotificationService).notificarTemplatesActualizados("template-importado")
+    }
+
+    @Test
+    fun `importarYEstandarizarTemplateAsincronicamente rolls back DB deleting record and GitHub repo on failure and notifies SSE`() {
+        val repoEnBd = Repositorio(
+            id = 50L,
+            nombre = "template-fallido",
+            htmlUrl = "https://github.com/UNQlassroom/template-fallido",
+            esTemplate = true,
+            templateAprobado = false,
+        )
+        `when`(gitHubRepoService.importRepository("template-fallido", "https://github.com/profe/tp1"))
+            .thenThrow(GitHubApiException(502, "Error replicando"))
+        `when`(repositorioRepository.findByNombreIgnoreCase("template-fallido")).thenReturn(repoEnBd)
+
+        asyncService.importarYEstandarizarTemplateAsincronicamente(
+            targetRepoName = "template-fallido",
+            sourceRepoUrl = "https://github.com/profe/tp1",
+        )
+
+        verify(repositorioRepository).delete(repoEnBd)
+        verify(gitHubRepoService).deleteRepository("template-fallido")
+        verify(sseNotificationService).notificarTemplatesActualizados("template-fallido")
     }
 }
