@@ -1,6 +1,10 @@
 package com.ar.edu.unq.unqlassroom.integration.github.service
 
 import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.UrlRepositorioInvalidaException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoNoEncontradoException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoPrivadoException
+import com.ar.edu.unq.unqlassroom.exception.LimiteArchivosTemplateExcedidoException
 import com.ar.edu.unq.unqlassroom.exception.GitHubApiException
 import com.ar.edu.unq.unqlassroom.exception.GitHubNotFoundException
 import org.slf4j.LoggerFactory
@@ -636,23 +640,22 @@ class GitHubRepoService(
     @JvmOverloads
     fun importRepository(
         targetRepoName: String,
-        sourceRepoUrlOrSlug: String,
-        fallbackOwner: String? = null,
+        sourceRepoUrl: String,
         org: String? = null,
     ): Int {
         val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
-        val (sourceOwner, sourceRepo) = parsearOwnerYRepo(sourceRepoUrlOrSlug, fallbackOwner)
+        val (sourceOwner, sourceRepo) = parsearOwnerYRepo(sourceRepoUrl)
 
         logger.info("Iniciando replicación atómica de '{}/{}' en '{}/{}'", sourceOwner, sourceRepo, targetOrg, targetRepoName)
 
         val repoDetails = try {
             getPublicRepoDetails(sourceOwner, sourceRepo)
         } catch (ex: GitHubNotFoundException) {
-            throw BadRequestException("El repositorio público '$sourceOwner/$sourceRepo' no fue encontrado o es privado.")
+            throw RepositorioExternoNoEncontradoException(sourceOwner, sourceRepo)
         }
 
         if (repoDetails.private) {
-            throw BadRequestException("El repositorio '$sourceOwner/$sourceRepo' es privado. Solo se permite importar repositorios públicos.")
+            throw RepositorioExternoPrivadoException(sourceOwner, sourceRepo)
         }
 
         val defaultBranch = repoDetails.defaultBranch?.takeIf { it.isNotBlank() } ?: "main"
@@ -662,10 +665,22 @@ class GitHubRepoService(
             throw GitHubApiException(statusCode = 502, message = "No se pudo obtener la estructura de archivos del repositorio '$sourceOwner/$sourceRepo': ${ex.message}")
         }
 
-        val blobs = treeResponse.tree.filter { it.type == "blob" && it.path.isNotBlank() && !it.path.startsWith(".git/") }
+        // Filtrar archivos válidos excluyendo .git/ y directorios pesados
+        val blobs = treeResponse.tree.filter { item ->
+            item.type == "blob" &&
+                item.path.isNotBlank() &&
+                !item.path.startsWith(".git/") &&
+                !esRutaDirectorioPesado(item.path)
+        }
+
         if (blobs.isEmpty()) {
-            logger.warn("El repositorio origen '{}/{}' está vacío (sin archivos).", sourceOwner, sourceRepo)
+            logger.warn("El repositorio origen '{}/{}' está vacío (sin archivos luego de filtrar).", sourceOwner, sourceRepo)
             return 0
+        }
+
+        val maxArchivos = 300
+        if (blobs.size > maxArchivos) {
+            throw LimiteArchivosTemplateExcedidoException(sourceOwner, sourceRepo, blobs.size, maxArchivos)
         }
 
         logger.info("Subiendo {} archivos de forma concurrente para '{}/{}'...", blobs.size, targetOrg, targetRepoName)
@@ -740,20 +755,31 @@ class GitHubRepoService(
         return treeEntries.size
     }
 
-    @JvmOverloads
-    fun parsearOwnerYRepo(urlOrSlug: String, fallbackOwner: String? = null): Pair<String, String> {
-        val clean = urlOrSlug.trim()
-            .removePrefix("git@github.com:")
-            .removePrefix("https://github.com/")
-            .removePrefix("http://github.com/")
-            .removeSuffix(".git")
-            .trim('/')
-        val parts = clean.split("/")
-        if (parts.size == 1 && !fallbackOwner.isNullOrBlank() && parts[0].isNotBlank()) {
-            return Pair(fallbackOwner.trim(), parts[0].trim())
+    private fun esRutaDirectorioPesado(path: String): Boolean {
+        val lower = path.lowercase().replace('\\', '/')
+        val carpetasPesadas = listOf(
+            "node_modules/", "target/", "build/", ".gradle/", ".idea/", ".vscode/",
+            "dist/", "out/", "bin/", "obj/", ".venv/", "venv/", "env/",
+            "__pycache__/", ".pytest_cache/", ".next/", ".nuxt/", "vendor/", "coverage/",
+        )
+        return carpetasPesadas.any { carpeta ->
+            lower.startsWith(carpeta) || lower.contains("/$carpeta")
         }
-        if (parts.size < 2 || parts[0].isBlank() || parts[1].isBlank()) {
-            throw BadRequestException("El formato del repositorio a importar es inválido: '$urlOrSlug'. Debe ser 'usuario/repositorio' o una URL de GitHub.")
+    }
+
+    fun parsearOwnerYRepo(url: String): Pair<String, String> {
+        val trimmed = url.trim()
+        val rawPath = when {
+            trimmed.startsWith("https://github.com/") -> trimmed.removePrefix("https://github.com/")
+            trimmed.startsWith("http://github.com/") -> trimmed.removePrefix("http://github.com/")
+            trimmed.startsWith("git@github.com:") -> trimmed.removePrefix("git@github.com:")
+            else -> throw UrlRepositorioInvalidaException(url)
+        }
+
+        val clean = rawPath.removeSuffix(".git").trim('/')
+        val parts = clean.split("/")
+        if (parts.size != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            throw UrlRepositorioInvalidaException(url)
         }
         return Pair(parts[0].trim(), parts[1].trim())
     }
@@ -869,50 +895,6 @@ class GitHubRepoService(
                 responseType = JsonNode::class.java,
                 body = createRefBody,
             )
-        }
-    }
-
-    @JvmOverloads
-    fun createOrUpdateRawBase64File(
-        repoName: String,
-        path: String,
-        base64Content: String,
-        message: String,
-        sha: String? = null,
-        branch: String? = null,
-        org: String? = null,
-    ): GitHubContentUpdateResponse {
-        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
-        val normalizedPath = path.trim().trimStart('/')
-        val cleanBase64 = base64Content.replace("\n", "").replace("\r", "")
-
-        fun executePut(targetSha: String?): GitHubContentUpdateResponse {
-            val requestBody = objectMapper.writeValueAsString(
-                CreateOrUpdateFileRequest(
-                    message = message,
-                    content = cleanBase64,
-                    sha = targetSha?.takeIf { it.isNotBlank() },
-                    branch = branch?.takeIf { it.isNotBlank() },
-                )
-            )
-            return gitHubAppClient.executeInstallationRequest(
-                method = "PUT",
-                path = "/repos/$targetOrg/$repoName/contents/$normalizedPath",
-                responseType = GitHubContentUpdateResponse::class.java,
-                body = requestBody,
-            )
-        }
-
-        return try {
-            executePut(sha)
-        } catch (ex: GitHubApiException) {
-            if (sha.isNullOrBlank() && (ex.statusCode == 422 || ex.statusCode == 409)) {
-                val existingSha = getFileContent(repoName, normalizedPath, targetOrg)?.sha
-                if (!existingSha.isNullOrBlank()) {
-                    return executePut(existingSha)
-                }
-            }
-            throw ex
         }
     }
 

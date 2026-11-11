@@ -1,5 +1,7 @@
 package com.ar.edu.unq.unqlassroom.integration.github.service
 
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.UrlRepositorioInvalidaException
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 
@@ -788,12 +790,17 @@ class GitHubRepoServiceTest {
     }
 
     @Test
-    fun `parsearOwnerYRepo parsea urls y slugs correctamente`() {
-        assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("octocat/Hello-World"))
+    fun `parsearOwnerYRepo parsea urls completas correctamente y rechaza slugs sueltos`() {
         assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("https://github.com/octocat/Hello-World"))
         assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("https://github.com/octocat/Hello-World.git"))
         assertEquals(Pair("octocat", "Hello-World"), gitHubRepoService.parsearOwnerYRepo("git@github.com:octocat/Hello-World.git"))
-        assertEquals(Pair("profe", "repo-simple"), gitHubRepoService.parsearOwnerYRepo("repo-simple", fallbackOwner = "profe"))
+
+        assertThrows<BadRequestException> {
+            gitHubRepoService.parsearOwnerYRepo("octocat/Hello-World")
+        }
+        assertThrows<BadRequestException> {
+            gitHubRepoService.parsearOwnerYRepo("repo-simple")
+        }
     }
 
     @Test
