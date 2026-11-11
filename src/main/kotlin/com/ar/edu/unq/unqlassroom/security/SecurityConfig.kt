@@ -48,6 +48,7 @@ class SecurityConfig(
                 auth.requestMatchers(HttpMethod.POST, "/templates").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.GET, "/templates").hasRole("DOCENTE")
                 auth.requestMatchers("/cursos/**").authenticated()
+                auth.requestMatchers("/usuarios/**").authenticated()
                 auth.anyRequest().authenticated()
             }
             .sessionManagement {
