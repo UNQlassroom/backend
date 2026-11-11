@@ -22,6 +22,9 @@ class TemplateStandardizationServiceImpl(
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    private val targetWebhookUrl: String
+        get() = webhookPublicUrl.trim()
+
     @Transactional
     override fun asegurarTemplateEstandarizado(templateRepoName: String): Repositorio {
         val cleanName = templateRepoName.trim()
@@ -588,7 +591,7 @@ $pluginsXml
     }
 
     private fun construirWorkflowCIJava(esGradle: Boolean = false): String {
-        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        val targetUrl = targetWebhookUrl
         val linterRun = if (esGradle) {
             """
           chmod +x gradlew || true
@@ -759,7 +762,7 @@ $testRun
     }
 
     private fun construirWorkflowCIPython(): String {
-        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        val targetUrl = targetWebhookUrl
         return """
 name: CI Linter & Tests (Python)
 
@@ -899,7 +902,7 @@ jobs:
     }
 
     private fun construirWorkflowCINode(): String {
-        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        val targetUrl = targetWebhookUrl
         return """
 name: CI Linter & Tests (Node.js)
 
@@ -1046,7 +1049,7 @@ jobs:
     }
 
     private fun construirWorkflowCIDotnet(): String {
-        val targetUrl = webhookPublicUrl.trim().ifBlank { "https://smee.io/bP2Po2TmL7DMmaGd" }
+        val targetUrl = targetWebhookUrl
         return """
 name: CI Linter & Tests (.NET)
 

@@ -1,11 +1,15 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
+import com.ar.edu.unq.unqlassroom.exception.GitHubNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoNoEncontradoException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoPrivadoException
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
+import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.TemplateService
-import com.ar.edu.unq.unqlassroom.service.TemplateStandardizationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -16,7 +20,7 @@ class TemplateServiceImpl(
     private val usuarioService: UsuarioService,
     private val gitHubRepoService: GitHubRepoService,
     private val repositorioRepository: RepositorioRepository,
-    private val templateStandardizationService: TemplateStandardizationService,
+    private val asyncService: AsyncService,
 ) : TemplateService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -47,14 +51,27 @@ class TemplateServiceImpl(
                 esTemplate = true,
                 descripcion = repoResponse.description,
                 githubRepoId = repoResponse.id.takeIf { it > 0 },
+                templateAprobado = false,
             )
 
             return repositorioRepository.save(repositorio)
         }
 
-        logger.info("Iniciando creación e importación de template '{}' desde '{}'", cleanName, cleanRepoAImportar)
+        // 1. Validar sincrónicamente formato de URL y que el repositorio origen exista y sea público
+        val (sourceOwner, sourceRepo) = gitHubRepoService.parsearOwnerYRepo(cleanRepoAImportar)
+        val repoDetails = try {
+            gitHubRepoService.getPublicRepoDetails(sourceOwner, sourceRepo)
+        } catch (_: GitHubNotFoundException) {
+            throw RepositorioExternoNoEncontradoException(sourceOwner, sourceRepo)
+        }
 
-        // 1. Crear el repositorio en la organización con autoInit = true para tener la rama base lista
+        if (repoDetails.private) {
+            throw RepositorioExternoPrivadoException(sourceOwner, sourceRepo)
+        }
+
+        logger.info("Iniciando creación de repo base '{}' para importar asincrónicamente desde '{}'", cleanName, cleanRepoAImportar)
+
+        // 2. Crear el repositorio en la organización con autoInit = true para tener la rama base lista
         val repoResponse = gitHubRepoService.createOrgRepository(
             name = cleanName,
             description = description,
@@ -63,35 +80,31 @@ class TemplateServiceImpl(
             isTemplate = false,
         )
 
-        // 2. Replicar todos los archivos del repositorio origen
-        gitHubRepoService.importRepository(
-            targetRepoName = cleanName,
-            sourceRepoUrlOrSlug = cleanRepoAImportar,
-            fallbackOwner = solicitanteUsername,
+        // 3. Persistir en BD con esTemplate = true y templateAprobado = false (en proceso de creación/importación)
+        val repositorio = Repositorio(
+            nombre = repoResponse.name.ifBlank { cleanName },
+            htmlUrl = repoResponse.htmlUrl,
+            esTemplate = true,
+            descripcion = description ?: repoResponse.description,
+            githubRepoId = repoResponse.id.takeIf { it > 0 },
+            templateAprobado = false,
         )
+        val repoGuardado = repositorioRepository.save(repositorio)
 
-        // 3. Configurar formalmente como template vía PATCH (is_template = true)
-        gitHubRepoService.setTemplateStatus(
-            repoName = cleanName,
-            isTemplate = true,
-        )
-
-        // 4. Pipeline de Verificación y Blindaje Inicial
-        val repoEstandarizado = templateStandardizationService.asegurarTemplateEstandarizado(cleanName)
-        if (repoResponse.id > 0) {
-            repoEstandarizado.githubRepoId = repoResponse.id
-        }
-        if (description != null) {
-            repoEstandarizado.descripcion = description
+        // 4. Lanzar importación, conversión a template y estandarización en background después del commit
+        ejecutarDespuesDeCommit {
+            asyncService.importarYEstandarizarTemplateAsincronicamente(
+                targetRepoName = cleanName,
+                sourceRepoUrl = cleanRepoAImportar,
+            )
         }
 
-        return repositorioRepository.save(repoEstandarizado)
+        return repoGuardado
     }
 
     @Transactional(readOnly = true)
     override fun listarTemplates(solicitanteUsername: String): List<Repositorio> {
         usuarioService.obtenerDocente(solicitanteUsername)
-
         return repositorioRepository.findByEsTemplateTrueAndEliminadoFalseOrderByNombreAsc()
     }
 }
