@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.usuario.response.UsuarioResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
 import com.ar.edu.unq.unqlassroom.model.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
@@ -383,7 +384,7 @@ class AsignacionControllerTest {
         val grupoCorreccion = CorreccionGrupoResponseDTO(
             grupoId = 1L,
             nombre = "alumno1",
-            integrantes = listOf("alumno1"),
+            integrantes = listOf(UsuarioResponseDTO(username = "alumno1", nombreCompleto = "Alumno Uno")),
             repoNombre = "repo1",
             repoHtmlUrl = "https://github.com/UNQlassroom/repo1",
             issues = listOf(issue),
@@ -399,6 +400,8 @@ class AsignacionControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$[0].grupoId").value(1))
             .andExpect(jsonPath("$[0].repoNombre").value("repo1"))
+            .andExpect(jsonPath("$[0].integrantes[0].username").value("alumno1"))
+            .andExpect(jsonPath("$[0].integrantes[0].nombreCompleto").value("Alumno Uno"))
             .andExpect(jsonPath("$[0].issues[0].numero").value(1))
             .andExpect(jsonPath("$[0].issues[0].estado").value("PENDIENTE"))
     }

@@ -142,7 +142,7 @@ class CursoControllerTest {
     fun `obtenerAlumnos endpoint returns 200 and list of students`() {
         val curso = Curso(id = 10L, materia = "Estructuras de Datos", anio = 2026, semestre = 1, comision = 1)
         val inscripciones = listOf(
-            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active"), githubRole = "write")
+            Inscripcion(id = 1L, curso = curso, usuario = Usuario(username = "alumno1", githubState = "active", nombreCompleto = "Alumno Uno"), githubRole = "write")
         )
 
         val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
@@ -158,6 +158,7 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.alumnos[0].username").value("alumno1"))
             .andExpect(jsonPath("$.alumnos[0].role").value("write"))
             .andExpect(jsonPath("$.alumnos[0].state").value("active"))
+            .andExpect(jsonPath("$.alumnos[0].nombreCompleto").value("Alumno Uno"))
     }
 
     @Test

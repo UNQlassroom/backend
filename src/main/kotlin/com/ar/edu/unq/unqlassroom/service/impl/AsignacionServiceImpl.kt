@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.service.impl
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
+import com.ar.edu.unq.unqlassroom.dto.usuario.response.UsuarioResponseDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
@@ -331,7 +332,7 @@ class AsignacionServiceImpl(
             CorreccionGrupoResponseDTO(
                 grupoId = grupo.id!!,
                 nombre = grupo.nombre ?: grupo.integrantes.firstOrNull()?.username,
-                integrantes = grupo.integrantes.map { it.username },
+                integrantes = grupo.integrantes.map { UsuarioResponseDTO.desdeModelo(it) },
                 repoNombre = repoNombre,
                 repoHtmlUrl = repoHtmlUrl,
                 issues = issuesDTOs,
