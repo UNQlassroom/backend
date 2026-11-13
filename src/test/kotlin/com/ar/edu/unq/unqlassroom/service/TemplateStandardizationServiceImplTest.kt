@@ -9,6 +9,12 @@ import com.ar.edu.unq.unqlassroom.model.Repositorio
 import com.ar.edu.unq.unqlassroom.model.webhook.WebhookEvent
 import com.ar.edu.unq.unqlassroom.repository.RepositorioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.TemplateStandardizationServiceImpl
+import com.ar.edu.unq.unqlassroom.service.standardization.DotnetTemplateHandler
+import com.ar.edu.unq.unqlassroom.service.standardization.JavaBuildPatcher
+import com.ar.edu.unq.unqlassroom.service.standardization.JavaTemplateHandler
+import com.ar.edu.unq.unqlassroom.service.standardization.NodeTemplateHandler
+import com.ar.edu.unq.unqlassroom.service.standardization.PythonTemplateHandler
+import com.ar.edu.unq.unqlassroom.service.standardization.WorkflowCiBuilder
 import com.ar.edu.unq.unqlassroom.service.webhook.PushWebhookHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.*
@@ -41,11 +47,23 @@ class TemplateStandardizationServiceImplTest {
             installationId = "456",
             organization = "UNQlassroom",
         )
+        val workflowCiBuilder = WorkflowCiBuilder("https://webhook.unqlassroom.edu.ar/events")
+        val javaBuildPatcher = JavaBuildPatcher()
+        val javaTemplateHandler = JavaTemplateHandler(javaBuildPatcher, workflowCiBuilder)
+        val pythonTemplateHandler = PythonTemplateHandler(workflowCiBuilder)
+        val nodeTemplateHandler = NodeTemplateHandler(workflowCiBuilder)
+        val dotnetTemplateHandler = DotnetTemplateHandler(workflowCiBuilder)
+
         service = TemplateStandardizationServiceImpl(
             gitHubRepoService = gitHubRepoService,
             repositorioRepository = repositorioRepository,
             gitHubAppProperties = gitHubAppProperties,
-            webhookPublicUrl = "https://webhook.unqlassroom.edu.ar/events",
+            javaTemplateHandler = javaTemplateHandler,
+            pythonTemplateHandler = pythonTemplateHandler,
+            nodeTemplateHandler = nodeTemplateHandler,
+            dotnetTemplateHandler = dotnetTemplateHandler,
+            javaBuildPatcher = javaBuildPatcher,
+            workflowCiBuilder = workflowCiBuilder,
         )
     }
 
@@ -554,6 +572,16 @@ class TemplateStandardizationServiceImplTest {
         val resultado = service.asegurarTemplateEstandarizado("template-node")
 
         assertTrue(resultado.templateAprobado)
+        // Inyecta eslint.config.mjs
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-node"),
+            eqNonNull("eslint.config.mjs"),
+            matchString { it.contains("export default") && it.contains("no-unused-vars") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
+        )
         // Inyecta test/sanity.test.js
         verify(gitHubRepoService).createOrUpdateFile(
             eqNonNull("template-node"),
@@ -583,6 +611,73 @@ class TemplateStandardizationServiceImplTest {
             any(),
             any(),
             any()
+        )
+    }
+
+    @Test
+    fun `asegurarTemplateEstandarizado con proyecto Node js respeta eslint config preexistente`() {
+        val repoTemplate = Repositorio(
+            id = 12L,
+            nombre = "template-node-con-eslint",
+            htmlUrl = "https://github.com/UNQlassroom/template-node-con-eslint",
+            esTemplate = true,
+            ultimoCommitSha = "sha-old",
+            templateAprobado = false,
+        )
+
+        `when`(repositorioRepository.findByNombreIgnoreCase("template-node-con-eslint")).thenReturn(repoTemplate)
+        `when`(gitHubRepoService.getUltimoCommit("template-node-con-eslint")).thenReturn(
+            GitHubCommitResponse(sha = "sha-node-2")
+        )
+        `when`(gitHubRepoService.getRepositoryTree("template-node-con-eslint", "sha-node-2", true)).thenReturn(
+            GitHubGitTreeResponse(
+                sha = "sha-node-2",
+                tree = listOf(
+                    GitHubTreeItem(path = "package.json", type = "blob", sha = "blob-pkg"),
+                    GitHubTreeItem(path = ".eslintrc.json", type = "blob", sha = "blob-eslint"),
+                    GitHubTreeItem(path = "test/app.test.js", type = "blob", sha = "blob-test"),
+                )
+            )
+        )
+        `when`(
+            gitHubRepoService.createOrUpdateFile(anyString(), anyString(), anyString(), anyString(), any(), any(), any())
+        ).thenAnswer { invocation ->
+            GitHubContentUpdateResponse(commit = GitHubContentCommitInfo(sha = "sha-node-updated-2"))
+        }
+        `when`(repositorioRepository.save(anyRepositorio())).thenAnswer { it.getArgument(0) }
+
+        val resultado = service.asegurarTemplateEstandarizado("template-node-con-eslint")
+
+        assertTrue(resultado.templateAprobado)
+        // NO debe inyectar eslint.config.mjs porque ya existía .eslintrc.json
+        verify(gitHubRepoService, never()).createOrUpdateFile(
+            eqNonNull("template-node-con-eslint"),
+            eqNonNull("eslint.config.mjs"),
+            anyString(),
+            anyString(),
+            any(),
+            any(),
+            any()
+        )
+        // NO debe inyectar test/sanity.test.js porque ya existía test/app.test.js
+        verify(gitHubRepoService, never()).createOrUpdateFile(
+            eqNonNull("template-node-con-eslint"),
+            eqNonNull("test/sanity.test.js"),
+            anyString(),
+            anyString(),
+            any(),
+            any(),
+            any()
+        )
+        // Inyecta el workflow de CI
+        verify(gitHubRepoService).createOrUpdateFile(
+            eqNonNull("template-node-con-eslint"),
+            eqNonNull(".github/workflows/ci.yml"),
+            matchString { it.contains("CI Linter & Tests (Node.js)") },
+            anyString(),
+            isNull(),
+            isNull(),
+            isNull()
         )
     }
 }

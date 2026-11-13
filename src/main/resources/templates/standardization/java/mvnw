@@ -1,0 +1,28 @@
+#!/bin/sh
+# Apache Maven Wrapper startup script (only-script mode)
+set -euf
+if command -v mvn >/dev/null 2>&1; then
+  exec mvn "$@"
+fi
+scriptDir="$(dirname "$0")"
+distributionUrl="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip"
+if [ -f "$scriptDir/.mvn/wrapper/maven-wrapper.properties" ]; then
+  while IFS="=" read -r key value; do
+    case "${key-}" in
+      distributionUrl) distributionUrl=$(printf "%s" "${value-}" | tr -d '[:space:]') ;;
+    esac
+  done <"$scriptDir/.mvn/wrapper/maven-wrapper.properties"
+fi
+MAVEN_HOME="${HOME}/.m2/wrapper/dists/apache-maven-bin"
+if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
+  mkdir -p "$MAVEN_HOME"
+  tmpZip="$(mktemp)"
+  curl -fsSL "$distributionUrl" -o "$tmpZip"
+  unzip -q "$tmpZip" -d "$MAVEN_HOME"
+  rm -f "$tmpZip"
+  extractedDir=$(find "$MAVEN_HOME" -maxdepth 1 -type d -name "apache-maven-*" | head -n 1)
+  if [ -n "$extractedDir" ]; then
+    cp -r "$extractedDir"/* "$MAVEN_HOME"/
+  fi
+fi
+exec "$MAVEN_HOME/bin/mvn" "$@"

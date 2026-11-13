@@ -1,0 +1,100 @@
+name: CI Linter & Tests (.NET)
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+
+jobs:
+  evaluar-calidad:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 3. Restaurar dependencias
+        run: dotnet restore || true
+
+      - name: 4. Ejecutar Linter / Formato
+        run: |
+          mkdir -p target
+          dotnet format --verify-no-changes --report ./target/format-report.json || true
+
+      - name: 5. Ejecutar Tests y Cobertura (Coverlet)
+        run: |
+          mkdir -p target/surefire-reports
+          dotnet test --logger "junit;LogFilePath=target/surefire-reports/TEST-dotnet.xml" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./target/coverage.cobertura.xml || true
+
+      - name: 6. Enviar reporte de Cobertura, Tests y Líneas de Commit a UNQlassroom
+        if: always()
+        run: |
+          # 1. Leer reportes de JUnit si existen
+          SUREFIRE_XML=""
+          if compgen -G "target/surefire-reports/TEST-*.xml" > /dev/null; then
+            SUREFIRE_XML="<testsuites>$(cat target/surefire-reports/TEST-*.xml)</testsuites>"
+          fi
+          JUNIT_XML=$(echo "$SUREFIRE_XML" | jq -Rs .)
+
+          # 2. Extraer cobertura si existe
+          COV_PERCENT="0"
+          if [ -f "target/coverage.cobertura.xml" ]; then
+            COV_PERCENT=$(python3 -c "import xml.etree.ElementTree as ET; tree=ET.parse('target/coverage.cobertura.xml'); root=tree.getroot(); print(round(float(root.attrib.get('line-rate', 0))*100, 2))" 2>/dev/null || echo "0")
+          fi
+
+          # 3. Calcular líneas agregadas y eliminadas del commit con Git
+          PARENT=$(git rev-parse --verify HEAD~1 2>/dev/null || echo "")
+          if [ -n "$PARENT" ]; then
+            INSERTIONS=$(git diff --numstat HEAD~1 HEAD | awk '{s+=$1} END {print s+0}')
+            DELETIONS=$(git diff --numstat HEAD~1 HEAD | awk '{s+=$2} END {print s+0}')
+            FILES_CHANGED=$(git diff --numstat HEAD~1 HEAD | wc -l | tr -d ' ')
+          else
+            INSERTIONS=$(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | awk '{s+=$1} END {print s+0}')
+            DELETIONS=0
+            FILES_CHANGED=$(git diff --numstat 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD 2>/dev/null | wc -l | tr -d ' ')
+          fi
+          TOTAL_LINES=$((INSERTIONS + DELETIONS))
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+
+          # 4. Construir y enviar payload
+          PAYLOAD_CI=$(jq -n \
+            --arg repo "${{ github.event.repository.name }}" \
+            --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg author "${{ github.actor }}" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg msg "$COMMIT_MSG" \
+            --arg insertions "$INSERTIONS" \
+            --arg deletions "$DELETIONS" \
+            --arg total_lines "$TOTAL_LINES" \
+            --arg files_changed "$FILES_CHANGED" \
+            --arg cov_percent "$COV_PERCENT" \
+            --argjson junit "$JUNIT_XML" \
+            '{
+              repository: { name: $repo },
+              sha: $sha,
+              head_commit: {
+                id: $sha,
+                message: $msg,
+                author: { username: $author },
+                stats: {
+                  additions: ($insertions | tonumber),
+                  deletions: ($deletions | tonumber),
+                  total: ($total_lines | tonumber),
+                  files_changed: ($files_changed | tonumber)
+                }
+              },
+              run_id: ($run_id | tonumber),
+              cobertura_lineas: ($cov_percent | tonumber),
+              junit_xml: $junit
+            }')
+
+          curl -X POST "{{TARGET_WEBHOOK_URL}}" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: coverage_report" \
+            -d "$PAYLOAD_CI"
