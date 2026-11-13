@@ -70,7 +70,7 @@ class AsignacionServiceImpl(
         asignacion.estado = EstadoAsignacion.CREANDO
 
         val docenteUsername = curso.owner?.username ?: solicitanteUsername
-        val inscripcionesCurso = inscripcionRepository.findByCursoId(cursoId)
+        val inscripcionesCurso = inscripcionRepository.findByCursoIdAndActivaTrue(cursoId)
         val alumnosInscriptosUsernames = inscripcionesCurso.map { it.usuario.username }.toSet()
 
         if (asignacion.tipo == TipoAsignacion.INDIVIDUAL) {

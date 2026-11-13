@@ -156,7 +156,7 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(gitHubRepoService.repositoryExists("template-tp1")).thenReturn(true)
-        `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
         `when`(asignacionRepository.save(anyAsignacion())).thenAnswer { invocation ->
             val asig = invocation.getArgument<Asignacion>(0)
@@ -216,7 +216,7 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(gitHubRepoService.repositoryExists("template-tp2")).thenReturn(true)
-        `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(10L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
         `when`(usuarioService.obtenerOCrearAlumno("alumno1")).thenReturn(alumno1)
         `when`(usuarioService.obtenerOCrearAlumno("alumno2")).thenReturn(alumno2)
@@ -297,7 +297,7 @@ class AsignacionServiceImplTest {
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(gitHubRepoService.repositoryExists("template-tp")).thenReturn(true)
-        `when`(inscripcionRepository.findByCursoId(10L)).thenReturn(
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(10L)).thenReturn(
             listOf(Inscripcion(curso = curso, usuario = alumno1))
         )
 
