@@ -300,6 +300,7 @@ class AsignacionServiceImpl(
             ?: throw AsignacionNotFoundException()
 
         val gruposAMostrar = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner).grupos
+        val inscripcionesPorUsuarioId = curso.inscripciones.associateBy { it.usuario.id }
 
         return gruposAMostrar.map { grupo ->
             val repo = grupo.repositorio
@@ -332,7 +333,10 @@ class AsignacionServiceImpl(
             CorreccionGrupoResponseDTO(
                 grupoId = grupo.id!!,
                 nombre = grupo.nombre ?: grupo.integrantes.firstOrNull()?.username,
-                integrantes = grupo.integrantes.map { UsuarioResponseDTO.desdeModelo(it) },
+                integrantes = grupo.integrantes.map { integrante ->
+                    val esActivo = inscripcionesPorUsuarioId[integrante.id]?.activa ?: false
+                    UsuarioResponseDTO.desdeModelo(integrante, activo = esActivo)
+                },
                 repoNombre = repoNombre,
                 repoHtmlUrl = repoHtmlUrl,
                 issues = issuesDTOs,
