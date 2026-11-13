@@ -20,10 +20,8 @@ data class GrupoAsignacionResponseDTO(
 ) {
     companion object {
         fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO {
-            val inscripcionesPorUsuarioId = grupo.asignacion?.curso?.inscripciones?.associateBy { it.usuario.id }
             val integrantesDTO = grupo.integrantes.map { usuario ->
-                val esActivo = inscripcionesPorUsuarioId?.get(usuario.id)?.activa ?: false
-                UsuarioResponseDTO.desdeModelo(usuario, activo = esActivo)
+                UsuarioResponseDTO.desdeModelo(usuario, activo = grupo.esUsuarioActivo(usuario))
             }
 
             return GrupoAsignacionResponseDTO(
