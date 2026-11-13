@@ -19,18 +19,24 @@ data class GrupoAsignacionResponseDTO(
     val advertenciasGit: List<AdvertenciaGitResponseDTO> = emptyList(),
 ) {
     companion object {
-        fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO = GrupoAsignacionResponseDTO(
-            id = grupo.id!!,
-            nombre = grupo.nombre,
-            integrantes = grupo.integrantes.map { UsuarioResponseDTO.desdeModelo(it) },
-            repositorio = grupo.repositorio?.let { RepositorioDTO.desdeModelo(it) },
-            entregada = grupo.entregada,
-            fechaEntregada = grupo.fechaEntregada,
-            releaseUrl = grupo.releaseUrl,
-            calificacion = grupo.calificacion,
-            observaciones = grupo.observaciones,
-            fechaCalificacion = grupo.fechaCalificacion,
-            advertenciasGit = grupo.advertenciasGit.map { AdvertenciaGitResponseDTO.desdeModelo(it) },
-        )
+        fun desdeModelo(grupo: GrupoAsignacion): GrupoAsignacionResponseDTO {
+            val integrantesDTO = grupo.integrantes.map { usuario ->
+                UsuarioResponseDTO.desdeModelo(usuario, activo = grupo.esUsuarioActivo(usuario))
+            }
+
+            return GrupoAsignacionResponseDTO(
+                id = grupo.id!!,
+                nombre = grupo.nombre,
+                integrantes = integrantesDTO,
+                repositorio = grupo.repositorio?.let { RepositorioDTO.desdeModelo(it) },
+                entregada = grupo.entregada,
+                fechaEntregada = grupo.fechaEntregada,
+                releaseUrl = grupo.releaseUrl,
+                calificacion = grupo.calificacion,
+                observaciones = grupo.observaciones,
+                fechaCalificacion = grupo.fechaCalificacion,
+                advertenciasGit = grupo.advertenciasGit.map { AdvertenciaGitResponseDTO.desdeModelo(it) },
+            )
+        }
     }
 }

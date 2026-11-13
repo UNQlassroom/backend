@@ -15,7 +15,7 @@ interface CursoRepository : JpaRepository<Curso, Long> {
         @Param("archivado") archivado: Boolean = false,
     ): List<Curso>
 
-    @Query("SELECT DISTINCT c FROM Curso c LEFT JOIN FETCH c.owner JOIN c.inscripciones i WHERE i.usuario.username = :username AND c.archivado = false AND (c.owner IS NULL OR c.owner.username <> :username)")
+    @Query("SELECT DISTINCT c FROM Curso c LEFT JOIN FETCH c.owner JOIN c.inscripciones i WHERE i.usuario.username = :username AND i.activa = true AND c.archivado = false AND (c.owner IS NULL OR c.owner.username <> :username)")
     fun findCursosParaAlumno(@Param("username") username: String): List<Curso>
 
     fun findByArchivadoFalse(): List<Curso>

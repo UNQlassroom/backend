@@ -74,6 +74,9 @@ class GrupoAsignacion(
     fun tieneIntegrante(username: String): Boolean =
         integrantes.any { it.username.equals(username.trim(), ignoreCase = true) }
 
+    fun esUsuarioActivo(usuario: Usuario): Boolean =
+        asignacion?.curso?.inscripciones?.any { it.usuario.id == usuario.id && it.activa } ?: false
+
     fun generarProximoTagNameRelease(): String = "entrega-v${cantidadEntregas + 1}"
 
     fun generarNombreRelease(tituloAsignacion: String): String =

@@ -10,6 +10,8 @@ interface CursoService {
 
     fun agregarAlumnos(cursoId: Long, usernames: List<String>, solicitanteUsername: String): List<Inscripcion>
 
+    fun darDeBajaAlumno(cursoId: Long, alumnoUsername: String, solicitanteUsername: String)
+
     fun obtenerCursos(username: String, esDocente: Boolean, archivados: Boolean = false): List<Curso>
 
     fun obtenerCurso(id: Long, solicitanteUsername: String): Curso

@@ -15,11 +15,13 @@ import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.any
 import org.mockito.Mockito.eq
+import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -136,6 +138,19 @@ class CursoControllerTest {
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
             .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `darDeBajaAlumno endpoint returns 204 no content`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+
+        mockMvc.perform(
+            delete("/cursos/10/alumnos/alumno1")
+                .principal(auth)
+        )
+            .andExpect(status().isNoContent)
+
+        verify(cursoService).darDeBajaAlumno(10L, "alumno1", "profe")
     }
 
     @Test

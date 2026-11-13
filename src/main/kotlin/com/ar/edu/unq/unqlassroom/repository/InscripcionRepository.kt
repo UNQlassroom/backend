@@ -7,6 +7,9 @@ import org.springframework.stereotype.Repository
 @Repository
 interface InscripcionRepository : JpaRepository<Inscripcion, Long> {
     fun findByCursoId(cursoId: Long): List<Inscripcion>
+    fun findByCursoIdAndActivaTrue(cursoId: Long): List<Inscripcion>
     fun findByCursoIdAndUsuarioUsername(cursoId: Long, username: String): Inscripcion?
+    fun findByCursoIdAndUsuarioUsernameAndActivaTrue(cursoId: Long, username: String): Inscripcion?
     fun findByUsuarioUsernameIgnoreCase(username: String): List<Inscripcion>
+    fun findByUsuarioUsernameIgnoreCaseAndActivaTrue(username: String): List<Inscripcion>
 }
