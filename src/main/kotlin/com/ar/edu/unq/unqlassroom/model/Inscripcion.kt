@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.model
 
 import jakarta.persistence.*
+import java.time.LocalDateTime
 
 @Entity
 @Table(
@@ -24,4 +25,23 @@ class Inscripcion(
 
     @Column(nullable = false)
     var githubRole: String = "member",
-)
+
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    var activa: Boolean = true,
+
+    @Column(nullable = true)
+    var fechaBaja: LocalDateTime? = null,
+) {
+    fun darDeBaja() {
+        this.activa = false
+        this.fechaBaja = LocalDateTime.now()
+    }
+
+    fun reactivar(nuevoGithubRole: String? = null) {
+        this.activa = true
+        this.fechaBaja = null
+        if (nuevoGithubRole != null) {
+            this.githubRole = nuevoGithubRole
+        }
+    }
+}
