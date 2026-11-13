@@ -166,7 +166,7 @@ class CursoServiceImplTest {
             owner = owner
         )
         val alumnoExistente = Usuario(id = 2L, username = "alumno1", esDocente = false, githubState = "active")
-        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente)
+        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente, activa = true)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcionExistente))
@@ -193,7 +193,7 @@ class CursoServiceImplTest {
             owner = owner
         )
         val alumnoExistente = Usuario(id = 2L, username = "alumno_viejo", esDocente = false, githubState = "active")
-        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente)
+        val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente, activa = true)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcionExistente))
@@ -281,10 +281,10 @@ class CursoServiceImplTest {
 
         val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false, githubState = "pending")
         val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false, githubState = "active")
-        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso)
-        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso)
+        val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso, activa = true)
+        val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso, activa = true)
 
-        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(1L)).thenReturn(listOf(inscripcion1, inscripcion2))
 
         val response = cursoService.obtenerAlumnos(1L, "profe_test")
 
@@ -350,9 +350,9 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
-        val inscripcion = Inscripcion(curso = curso, usuario = alumno)
+        val inscripcion = Inscripcion(curso = curso, usuario = alumno, activa = true)
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
-        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(emptyList())
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(1L)).thenReturn(emptyList())
 
         val response = cursoService.obtenerAlumnos(1L, "alumno_inscripto")
         assertNotNull(response)
@@ -454,7 +454,7 @@ class CursoServiceImplTest {
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
-        val inscripcion = Inscripcion(curso = curso, usuario = alumno)
+        val inscripcion = Inscripcion(curso = curso, usuario = alumno, activa = true)
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
 
         val result = cursoService.obtenerCurso(1L, "alumno_inscripto")
@@ -610,5 +610,136 @@ class CursoServiceImplTest {
 
         assertTrue(cursoVencido.archivado)
         assertFalse(cursoVigente.archivado)
+    }
+
+    @Test
+    fun `darDeBajaAlumno marks inscripcion as inactive and sets fechaBaja`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val inscripcion = Inscripcion(id = 5L, curso = curso, usuario = alumno, activa = true)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno1")).thenReturn(inscripcion)
+
+        cursoService.darDeBajaAlumno(1L, "alumno1", "profe_owner")
+
+        assertFalse(inscripcion.activa)
+        assertNotNull(inscripcion.fechaBaja)
+        verify(inscripcionRepository).save(inscripcion)
+        verify(sseNotificationService).notificarMiembroCursoActualizado(
+            cursoId = 1L,
+            docenteUsername = "profe_owner",
+            alumnosUsernames = listOf("alumno1")
+        )
+    }
+
+    @Test
+    fun `darDeBajaAlumno marks inscripcion as inactive preserving group integrantes`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
+        val inscripcion = Inscripcion(id = 5L, curso = curso, usuario = alumno1, activa = true)
+
+        val asignacionGrupal = Asignacion(
+            id = 10L,
+            titulo = "TP Grupal",
+            tipo = TipoAsignacion.GRUPAL,
+            templateRepoName = "tmpl",
+            curso = curso
+        )
+        val grupo = GrupoAsignacion(
+            id = 20L,
+            nombre = "Grupo 1",
+            asignacion = asignacionGrupal,
+            integrantes = mutableListOf(alumno1, alumno2)
+        )
+        asignacionGrupal.grupos.add(grupo)
+        curso.asignaciones.add(asignacionGrupal)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno1")).thenReturn(inscripcion)
+
+        cursoService.darDeBajaAlumno(1L, "alumno1", "profe_owner")
+
+        assertFalse(inscripcion.activa)
+        assertEquals(2, grupo.integrantes.size)
+        assertTrue(grupo.integrantes.any { it.username == "alumno1" })
+        assertTrue(grupo.integrantes.any { it.username == "alumno2" })
+    }
+
+    @Test
+    fun `darDeBajaAlumno throws NoEsDocenteDelCursoException when caller is not owner`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        assertThrows<NoEsDocenteDelCursoException> {
+            cursoService.darDeBajaAlumno(1L, "alumno1", "otro_usuario")
+        }
+    }
+
+    @Test
+    fun `darDeBajaAlumno throws CursoArchivadoException when curso is archived`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner, archivado = true)
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        assertThrows<CursoArchivadoException> {
+            cursoService.darDeBajaAlumno(1L, "alumno1", "profe_owner")
+        }
+    }
+
+    @Test
+    fun `darDeBajaAlumno throws AlumnoNoInscriptoException when student is not active or enrolled`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_no_inscripto")).thenReturn(null)
+
+        val exception = assertThrows<AlumnoNoInscriptoException> {
+            cursoService.darDeBajaAlumno(1L, "alumno_no_inscripto", "profe_owner")
+        }
+
+        assertEquals("El alumno 'alumno_no_inscripto' no está inscripto en el curso", exception.message)
+    }
+
+    @Test
+    fun `obtenerAlumnos returns only active inscripciones`() {
+        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val alumnoActivo = Usuario(id = 2L, username = "alumno_activo")
+        val alumnoInactivo = Usuario(id = 3L, username = "alumno_inactivo")
+        val inscripcionActiva = Inscripcion(id = 1L, curso = curso, usuario = alumnoActivo, activa = true)
+        val inscripcionInactiva = Inscripcion(id = 2L, curso = curso, usuario = alumnoInactivo, activa = false)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoIdAndActivaTrue(1L)).thenReturn(listOf(inscripcionActiva))
+
+        val resultado = cursoService.obtenerAlumnos(1L, "profe_owner")
+
+        assertEquals(1, resultado.size)
+        assertEquals("alumno_activo", resultado[0].usuario.username)
+        assertTrue(resultado[0].activa)
+    }
+
+    @Test
+    fun `agregarAlumnos reactivates existing inactive inscripcion instead of throwing duplicate`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val alumno = Usuario(id = 2L, username = "alumno_inactivo", esDocente = false, githubState = "active")
+        val inscripcionInactiva = Inscripcion(id = 5L, curso = curso, usuario = alumno, activa = false)
+
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(inscripcionRepository.findByCursoId(1L)).thenReturn(listOf(inscripcionInactiva))
+        `when`(usuarioService.obtenerOCrearAlumno("alumno_inactivo")).thenReturn(alumno)
+        `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
+
+        val resultado = cursoService.agregarAlumnos(1L, listOf("alumno_inactivo"), "profe_test")
+
+        assertEquals(1, resultado.size)
+        assertTrue(resultado[0].activa)
+        assertEquals(5L, resultado[0].id)
     }
 }
