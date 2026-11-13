@@ -8,6 +8,7 @@ import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -43,6 +44,16 @@ class CursoController(
         val inscripciones = cursoService.agregarAlumnos(id, request.usernames, authentication.name)
         val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
         return ResponseEntity.ok(response)
+    }
+
+    @DeleteMapping("/{id}/alumnos/{username}")
+    fun darDeBajaAlumno(
+        @PathVariable id: Long,
+        @PathVariable username: String,
+        authentication: Authentication,
+    ): ResponseEntity<Void> {
+        cursoService.darDeBajaAlumno(id, username, authentication.name)
+        return ResponseEntity.noContent().build()
     }
 
     @PostMapping("/{id}/archivar")
