@@ -1,3 +1,5 @@
 ﻿package com.ar.edu.unq.unqlassroom.exception
 
-class UsuarioNotFoundException(message: String = "Usuario no encontrado") : ResourceNotFoundException(message)
+class UsuarioNotFoundException(
+    message: String = "Usuario no encontrado",
+) : ResourceNotFoundException(message, errorCode = "USUARIO_NOT_FOUND")

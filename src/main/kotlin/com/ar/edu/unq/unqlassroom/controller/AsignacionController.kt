@@ -1,70 +1,85 @@
-﻿package com.ar.edu.unq.unqlassroom.controller
+package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.dto.asignacion.*
+import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.*
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
-import java.net.URI
 
 @RestController
+@RequestMapping("/cursos/{cursoId}/asignaciones")
 class AsignacionController(
     private val asignacionService: AsignacionService
 ) {
 
-    @PostMapping("/cursos/{cursoId}/asignaciones")
+    @PostMapping
     fun crearAsignacion(
         @PathVariable cursoId: Long,
         @RequestBody @Valid request: CrearAsignacionRequestDTO,
         authentication: Authentication,
     ): ResponseEntity<AsignacionResponseDTO> {
-        val response = asignacionService.crearAsignacion(cursoId, request, authentication.name)
-        return ResponseEntity.created(URI.create("/cursos/$cursoId/asignaciones/${response.id}")).body(response)
+        val asignacion = request.aModelo()
+        val asignacionGuardada = asignacionService.crearAsignacion(cursoId, asignacion, authentication.name)
+        val response = AsignacionResponseDTO.desdeModelo(asignacionGuardada)
+        return ResponseEntity.accepted().body(response)
     }
 
-    @GetMapping("/cursos/{cursoId}/asignaciones")
+    @PutMapping("/{asignacionId}")
+    fun modificarAsignacion(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestBody @Valid request: ModificarAsignacionRequestDTO,
+        authentication: Authentication,
+    ): ResponseEntity<AsignacionResponseDTO> {
+        val asignacion = asignacionService.modificarAsignacion(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            descripcion = request.descripcion,
+            fechaLimite = request.fechaLimite,
+            solicitanteUsername = authentication.name,
+        )
+        return ResponseEntity.ok(AsignacionResponseDTO.desdeModelo(asignacion))
+    }
+
+    @GetMapping
     fun obtenerAsignaciones(
         @PathVariable cursoId: Long,
         authentication: Authentication,
     ): ResponseEntity<List<AsignacionResponseDTO>> {
-        val response = asignacionService.obtenerAsignaciones(cursoId, authentication.name)
-        return ResponseEntity.ok(response)
+        val asignaciones = asignacionService.obtenerAsignaciones(cursoId, authentication.name)
+        return ResponseEntity.ok(asignaciones.map { AsignacionResponseDTO.desdeModelo(it) })
     }
 
-    @GetMapping("/cursos/{cursoId}/asignaciones/{asignacionId}")
+    @GetMapping("/{asignacionId}")
     fun obtenerAsignacion(
         @PathVariable cursoId: Long,
         @PathVariable asignacionId: Long,
         authentication: Authentication,
     ): ResponseEntity<AsignacionResponseDTO> {
-        val response = asignacionService.obtenerAsignacion(cursoId, asignacionId, authentication.name)
-        return ResponseEntity.ok(response)
+        val asignacion = asignacionService.obtenerAsignacion(cursoId, asignacionId, authentication.name)
+        return ResponseEntity.ok(AsignacionResponseDTO.desdeModelo(asignacion))
     }
 
-    @PostMapping("/cursos/{cursoId}/asignaciones/{asignacionId}/entregar")
+    @PostMapping("/{asignacionId}/entregar")
     fun marcarAsignacionComoEntregada(
         @PathVariable cursoId: Long,
         @PathVariable asignacionId: Long,
-        @RequestParam(required = false) grupoId: Long?,
-        @RequestBody(required = false) request: EntregarAsignacionRequestDTO?,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
         authentication: Authentication,
     ): ResponseEntity<AsignacionResponseDTO> {
-        val targetGrupoId = request?.grupoId ?: grupoId
-        val response = asignacionService.marcarAsignacionComoEntregada(
+        val asignacion = asignacionService.marcarAsignacionComoEntregada(
             cursoId = cursoId,
             asignacionId = asignacionId,
             solicitanteUsername = authentication.name,
-            grupoId = targetGrupoId,
+            grupoId = grupo,
         )
-        return ResponseEntity.ok(response)
+        return ResponseEntity.ok(AsignacionResponseDTO.desdeModelo(asignacion))
     }
 
     @RequestMapping(
-        value = [
-            "/cursos/{cursoId}/asignaciones/{asignacionId}/individual/calificar",
-            "/cursos/{cursoId}/asignaciones/{asignacionId}/grupos/calificar"
-        ],
+        value = ["/{asignacionId}/calificar"],
         method = [RequestMethod.POST, RequestMethod.PUT]
     )
     fun calificarAsignacion(
@@ -73,33 +88,18 @@ class AsignacionController(
         @RequestBody @Valid request: CalificarAsignacionRequestDTO,
         authentication: Authentication,
     ): ResponseEntity<AsignacionResponseDTO> {
-        val response = asignacionService.calificarAsignacion(
+        val asignacion = asignacionService.calificarAsignacion(
             cursoId = cursoId,
             asignacionId = asignacionId,
+            grupoId = request.grupoId,
+            calificacion = request.calificacion,
+            observaciones = request.observaciones,
             solicitanteUsername = authentication.name,
-            dto = request
         )
-        return ResponseEntity.ok(response)
+        return ResponseEntity.ok(AsignacionResponseDTO.desdeModelo(asignacion))
     }
 
-    @PostMapping("/templates")
-    fun crearTemplate(
-        @RequestBody @Valid request: CrearTemplateRepoRequestDTO,
-        authentication: Authentication,
-    ): ResponseEntity<TemplateRepoResponseDTO> {
-        val response = asignacionService.crearTemplateRepository(request, authentication.name)
-        return ResponseEntity.created(URI.create("/templates/${response.name}")).body(response)
-    }
-
-    @GetMapping("/templates")
-    fun listarTemplates(
-        authentication: Authentication,
-    ): ResponseEntity<List<TemplateRepoResponseDTO>> {
-        val response = asignacionService.listarTemplates(authentication.name)
-        return ResponseEntity.ok(response)
-    }
-
-    @GetMapping("/cursos/{cursoId}/asignaciones/{asignacionId}/correcciones")
+    @GetMapping("/{asignacionId}/correcciones")
     fun obtenerCorrecciones(
         @PathVariable cursoId: Long,
         @PathVariable asignacionId: Long,
@@ -107,5 +107,73 @@ class AsignacionController(
     ): ResponseEntity<List<CorreccionGrupoResponseDTO>> {
         val response = asignacionService.obtenerCorrecciones(cursoId, asignacionId, authentication.name)
         return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/{asignacionId}/diagnostico-ci")
+    fun obtenerDiagnosticoCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<DiagnosticoCIResponseDTO> {
+        val repo = asignacionService.obtenerDiagnosticoCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        return ResponseEntity.ok(DiagnosticoCIResponseDTO.desdeModelo(repo))
+    }
+
+    @GetMapping("/{asignacionId}/metricas")
+    fun obtenerMetricasCI(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<MetricasCIResponseDTO> {
+        val (repo, metrica) = asignacionService.obtenerMetricasCI(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        val response = if (metrica != null) {
+            MetricasCIResponseDTO.desdeModelo(metrica)
+        } else {
+            MetricasCIResponseDTO.sinMetricas(repo.nombre)
+        }
+        return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/{asignacionId}/linter")
+    fun obtenerReporteLinter(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        @RequestParam(name = "grupo", required = false) grupo: Long?,
+        authentication: Authentication,
+    ): ResponseEntity<ReporteLinterResponseDTO> {
+        val (repo, reporte) = asignacionService.obtenerReporteLinter(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = authentication.name,
+            grupoId = grupo,
+        )
+        val response = if (reporte != null) {
+            ReporteLinterResponseDTO.desdeModelo(reporte)
+        } else {
+            ReporteLinterResponseDTO.sinReporte(repo.nombre)
+        }
+        return ResponseEntity.ok(response)
+    }
+
+    @DeleteMapping("/{asignacionId}")
+    fun eliminarAsignacion(
+        @PathVariable cursoId: Long,
+        @PathVariable asignacionId: Long,
+        authentication: Authentication,
+    ): ResponseEntity<Void> {
+        asignacionService.eliminarAsignacion(cursoId, asignacionId, authentication.name)
+        return ResponseEntity.accepted().build()
     }
 }

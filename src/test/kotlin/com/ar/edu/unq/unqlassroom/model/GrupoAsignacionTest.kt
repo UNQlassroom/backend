@@ -1,8 +1,11 @@
 package com.ar.edu.unq.unqlassroom.model
 
+import com.ar.edu.unq.unqlassroom.exception.CalificacionInvalidaException
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.time.LocalDateTime
 
 class GrupoAsignacionTest {
@@ -82,5 +85,58 @@ class GrupoAsignacionTest {
         assertEquals(ahora, grupo.fechaCalificacion)
         assertEquals(ahora, grupo.fechaEntregada)
         assertEquals("https://release.url", grupo.releaseUrl)
+    }
+
+    @Test
+    fun `calificar sets calificacion, observaciones and fechaCalificacion when nota is between 1 and 10`() {
+        val grupo = GrupoAsignacion(id = 1L)
+        grupo.calificar(8, "Excelente")
+        assertEquals(8, grupo.calificacion)
+        assertEquals("Excelente", grupo.observaciones)
+        Assertions.assertNotNull(grupo.fechaCalificacion)
+    }
+
+    @Test
+    fun `calificar throws CalificacionInvalidaException when nota is out of bounds`() {
+        val grupo = GrupoAsignacion(id = 1L)
+        val ex1 = assertThrows<CalificacionInvalidaException> {
+            grupo.calificar(0, null)
+        }
+        assertEquals("La nota debe ser entre 1 y 10", ex1.message)
+
+        val ex2 = assertThrows<CalificacionInvalidaException> {
+            grupo.calificar(11, null)
+        }
+        assertEquals("La nota debe ser entre 1 y 10", ex2.message)
+    }
+
+    @Test
+    fun `registrarEntrega updates cantidadEntregas, entregada, fechaEntregada and releaseUrl`() {
+        val grupo = GrupoAsignacion(id = 1L)
+        assertEquals(0, grupo.cantidadEntregas)
+        Assertions.assertFalse(grupo.entregada)
+
+        grupo.registrarEntrega("https://github.com/rel/1")
+        assertEquals(1, grupo.cantidadEntregas)
+        assertTrue(grupo.entregada)
+        Assertions.assertNotNull(grupo.fechaEntregada)
+        assertEquals("https://github.com/rel/1", grupo.releaseUrl)
+    }
+
+    @Test
+    fun `tieneIntegrante returns true when user is present regardless of casing`() {
+        val alumno = Usuario(username = "JuanPerez")
+        val grupo = GrupoAsignacion(integrantes = mutableListOf(alumno))
+        assertTrue(grupo.tieneIntegrante("juanperez"))
+        assertTrue(grupo.tieneIntegrante(" JuanPerez "))
+        Assertions.assertFalse(grupo.tieneIntegrante("otro"))
+    }
+
+    @Test
+    fun `release generators create correct tag, name and body`() {
+        val grupo = GrupoAsignacion(cantidadEntregas = 2)
+        assertEquals("entrega-v3", grupo.generarProximoTagNameRelease())
+        assertEquals("Entrega v2 - TP Final", grupo.generarNombreRelease("TP Final"))
+        assertTrue(grupo.generarCuerpoRelease("profe").contains("profe"))
     }
 }

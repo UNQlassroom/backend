@@ -1,36 +1,38 @@
-﻿package com.ar.edu.unq.unqlassroom.controller
+package com.ar.edu.unq.unqlassroom.controller
 
-import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.validation.Valid
-import lombok.RequiredArgsConstructor
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.net.URI
 
 @RestController
 @RequestMapping("/cursos")
-@RequiredArgsConstructor
-class CursoController (
-    val cursoService: CursoService
-)   {
+class CursoController(
+    private val cursoService: CursoService
+) {
 
-    @PostMapping("/crear")
+    @PostMapping
     fun crearCurso(
         @RequestBody @Valid cursoRequest: CursoRequestDTO,
         authentication: Authentication
     ): ResponseEntity<CursoResponseDTO> {
-        val response = cursoService.crearCurso(cursoRequest, authentication.name)
-        return ResponseEntity.created(URI.create("/cursos" + response.id)).body(response)
+        val curso = cursoRequest.aModelo()
+        val cursoGuardado = cursoService.crearCurso(curso, authentication.name)
+        val response = CursoResponseDTO.desdeModelo(cursoGuardado)
+        return ResponseEntity.created(URI.create("/cursos/${response.id}")).body(response)
     }
 
     @PostMapping("/{id}/alumnos")
@@ -38,27 +40,39 @@ class CursoController (
         @PathVariable id: Long,
         @RequestBody @Valid request: AgregarAlumnosRequestDTO,
         authentication: Authentication,
-    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
-        val response = cursoService.agregarAlumnos(id, request, authentication.name)
+    ): ResponseEntity<CursoAlumnosResponseDTO> {
+        val inscripciones = cursoService.agregarAlumnos(id, request.usernames, authentication.name)
+        val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
         return ResponseEntity.ok(response)
     }
 
-    @PostMapping("/{id}/alumnos/sync")
-    fun sincronizarAlumnos(
+    @DeleteMapping("/{id}/alumnos/{username}")
+    fun darDeBajaAlumno(
+        @PathVariable id: Long,
+        @PathVariable username: String,
+        authentication: Authentication,
+    ): ResponseEntity<Void> {
+        cursoService.darDeBajaAlumno(id, username, authentication.name)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/{id}/archivar")
+    fun archivarCurso(
         @PathVariable id: Long,
         authentication: Authentication,
-    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
-        val response = cursoService.sincronizarAlumnos(id, authentication.name)
-        return ResponseEntity.ok(response)
+    ): ResponseEntity<CursoResponseDTO> {
+        val cursoArchivado = cursoService.archivarCurso(id, authentication.name)
+        return ResponseEntity.ok(CursoResponseDTO.desdeModelo(cursoArchivado))
     }
 
     @GetMapping
     fun obtenerCursos(
+        @RequestParam(name = "archivados", required = false, defaultValue = "false") archivados: Boolean = false,
         authentication: Authentication,
     ): ResponseEntity<List<CursoResponseDTO>> {
         val esDocente = authentication.authorities.any { it.authority == "ROLE_DOCENTE" }
-        val cursos = cursoService.obtenerCursos(authentication.name, esDocente)
-        return ResponseEntity.ok(cursos)
+        val cursos = cursoService.obtenerCursos(authentication.name, esDocente, archivados)
+        return ResponseEntity.ok(cursos.map { CursoResponseDTO.desdeModelo(it) })
     }
 
     @GetMapping("/{id}")
@@ -67,15 +81,16 @@ class CursoController (
         authentication: Authentication,
     ): ResponseEntity<CursoResponseDTO> {
         val curso = cursoService.obtenerCurso(id, authentication.name)
-        return ResponseEntity.ok(curso)
+        return ResponseEntity.ok(CursoResponseDTO.desdeModelo(curso))
     }
 
     @GetMapping("/{id}/alumnos")
     fun obtenerAlumnos(
         @PathVariable id: Long,
         authentication: Authentication,
-    ): ResponseEntity<AlumnosDeUnCursoResponseDTO> {
-        val alumnos = cursoService.obtenerAlumnos(id, authentication.name)
-        return ResponseEntity.ok(alumnos)
+    ): ResponseEntity<CursoAlumnosResponseDTO> {
+        val inscripciones = cursoService.obtenerAlumnos(id, authentication.name)
+        val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
+        return ResponseEntity.ok(response)
     }
 }

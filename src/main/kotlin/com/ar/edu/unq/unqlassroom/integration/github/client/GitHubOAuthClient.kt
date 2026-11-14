@@ -1,6 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.integration.github.client
 
-import com.ar.edu.unq.unqlassroom.exception.UnauthorizedException
+import com.ar.edu.unq.unqlassroom.exception.GitHubOAuthException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.*
 import org.springframework.stereotype.Component
@@ -55,13 +55,13 @@ class GitHubOAuthClient(
         val response = try {
             restTemplate.postForEntity(tokenUrl, request, GitHubOAuthTokenResponse::class.java)
         } catch (e: Exception) {
-            throw UnauthorizedException("Error de comunicación con GitHub OAuth: ${e.message}")
+            throw GitHubOAuthException("Error de comunicación con GitHub OAuth: ${e.message}")
         }
 
         val tokenResponse = response.body
         if (tokenResponse?.access_token.isNullOrBlank()) {
             val errorMsg = tokenResponse?.error_description ?: tokenResponse?.error ?: "Código de autorización inválido o expirado"
-            throw UnauthorizedException("No se pudo obtener el token de acceso de GitHub: $errorMsg")
+            throw GitHubOAuthException("No se pudo obtener el token de acceso de GitHub: $errorMsg")
         }
 
         return tokenResponse!!.access_token!!
@@ -77,9 +77,9 @@ class GitHubOAuthClient(
         val response = try {
             restTemplate.exchange(userUrl, HttpMethod.GET, request, GitHubUserProfileResponse::class.java)
         } catch (e: Exception) {
-            throw UnauthorizedException("Error al consultar el perfil del usuario en GitHub: ${e.message}")
+            throw GitHubOAuthException("Error al consultar el perfil del usuario en GitHub: ${e.message}")
         }
 
-        return response.body ?: throw UnauthorizedException("GitHub no retornó información del usuario")
+        return response.body ?: throw GitHubOAuthException("GitHub no retornó información del usuario")
     }
 }

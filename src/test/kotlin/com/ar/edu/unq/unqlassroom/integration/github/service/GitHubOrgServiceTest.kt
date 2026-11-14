@@ -5,7 +5,6 @@ import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -53,6 +52,15 @@ class GitHubOrgServiceTest {
     }
 
     @Test
+    fun `obtenerUsernameCanonico delegates to gitHubAppClient getUserLogin`() {
+        `when`(gitHubAppClient.getUserLogin("THIAGOdePRUEBA")).thenReturn("thiagoDePrueba")
+        `when`(gitHubAppClient.getUserLogin("usuario_invalido")).thenReturn(null)
+
+        assertEquals("thiagoDePrueba", gitHubOrgService.obtenerUsernameCanonico("THIAGOdePRUEBA"))
+        assertNull(gitHubOrgService.obtenerUsernameCanonico("usuario_invalido"))
+    }
+
+    @Test
     fun `invitarMiembro sends PUT request to org memberships and returns response`() {
         `when`(properties.organization).thenReturn("UNQlassroom")
         val membership = GitHubOrgMembershipResponse(state = "pending", role = "member")
@@ -94,43 +102,5 @@ class GitHubOrgServiceTest {
 
         assertEquals("pending", result.state)
         assertEquals("member", result.role)
-    }
-
-    @Test
-    fun `obtenerMembresia returns membership when user found`() {
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        val membership = GitHubOrgMembershipResponse(state = "active", role = "member")
-
-        `when`(
-            gitHubAppClient.executeInstallationRequest(
-                method = anyString(),
-                path = anyString(),
-                responseType = anyClass(GitHubOrgMembershipResponse::class.java),
-                body = Mockito.isNull()
-            )
-        ).thenReturn(membership)
-
-        val result = gitHubOrgService.obtenerMembresia("alumno1")
-
-        assertNotNull(result)
-        assertEquals("active", result?.state)
-        assertEquals("member", result?.role)
-    }
-
-    @Test
-    fun `obtenerMembresia returns null when request fails`() {
-        `when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(
-            gitHubAppClient.executeInstallationRequest(
-                method = anyString(),
-                path = anyString(),
-                responseType = anyClass(GitHubOrgMembershipResponse::class.java),
-                body = Mockito.isNull()
-            )
-        ).thenThrow(RuntimeException("404 Not Found"))
-
-        val result = gitHubOrgService.obtenerMembresia("alumno_no_invitado")
-
-        assertNull(result)
     }
 }

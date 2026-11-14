@@ -1,3 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.exception
 
-open class UnauthorizedException(message: String) : RuntimeException(message)
+open class UnauthorizedException(
+    message: String,
+    open val errorCode: String? = null,
+) : RuntimeException(message)

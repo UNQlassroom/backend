@@ -1,25 +1,26 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.dto.asignacion.*
-import com.ar.edu.unq.unqlassroom.dto.curso.RepositorioDTO
-import com.ar.edu.unq.unqlassroom.dto.issue.IssueResponseDTO
-import com.ar.edu.unq.unqlassroom.exception.AsignacionNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
-import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubCollaboratorService
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueItemResponse
-import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubIssueService
+import com.ar.edu.unq.unqlassroom.dto.asignacion.response.CorreccionGrupoResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.issue.response.IssueResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
+import com.ar.edu.unq.unqlassroom.dto.usuario.response.UsuarioResponseDTO
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubRepoService
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.AdvertenciaGitRepository
 import com.ar.edu.unq.unqlassroom.repository.AsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
+import com.ar.edu.unq.unqlassroom.repository.IssueRepository
+import com.ar.edu.unq.unqlassroom.repository.MetricaCIRepository
+import com.ar.edu.unq.unqlassroom.repository.ReporteLinterRepository
 import com.ar.edu.unq.unqlassroom.service.AsignacionService
+import com.ar.edu.unq.unqlassroom.service.AsyncService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
 import org.springframework.stereotype.Service
-import java.time.Instant
 import java.time.LocalDateTime
 
 @Service
@@ -30,225 +31,151 @@ class AsignacionServiceImpl(
     private val inscripcionRepository: InscripcionRepository,
     private val usuarioService: UsuarioService,
     private val gitHubRepoService: GitHubRepoService,
-    private val gitHubCollaboratorService: GitHubCollaboratorService,
-    private val gitHubIssueService: GitHubIssueService,
+    private val issueRepository: IssueRepository,
+    private val asyncService: AsyncService,
+    private val advertenciaGitRepository: AdvertenciaGitRepository? = null,
+    private val metricaCIRepository: MetricaCIRepository? = null,
+    private val reporteLinterRepository: ReporteLinterRepository? = null,
+    private val sseNotificationService: SseNotificationService? = null,
 ) : AsignacionService {
 
     override fun crearAsignacion(
         cursoId: Long,
-        dto: CrearAsignacionRequestDTO,
+        asignacion: Asignacion,
         solicitanteUsername: String
-    ): AsignacionResponseDTO {
+    ): Asignacion {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede crear asignaciones")
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede crear asignaciones")
+        }
+        curso.validarNoArchivado()
+
+        if (asignacionRepository.findByCursoIdAndTituloIgnoreCase(cursoId, asignacion.titulo.trim()) != null) {
+            throw AsignacionDuplicadaException(asignacion.titulo)
         }
 
-        if (!gitHubRepoService.repositoryExists(dto.templateRepoName)) {
-            throw BadRequestException("El repositorio template '${dto.templateRepoName}' no existe en GitHub")
+        if (asignacion.estaVencida()) {
+            throw FechaLimiteInvalidaException()
         }
+
+        if (!gitHubRepoService.repositoryExists(asignacion.templateRepoName)) {
+            throw TemplateRepoNoExisteException(asignacion.templateRepoName)
+        }
+
+        asignacion.asociarACurso(curso)
+        asignacion.validarEstructuraGrupos()
+        asignacion.estado = EstadoAsignacion.CREANDO
 
         val docenteUsername = curso.owner?.username ?: solicitanteUsername
-        val inscripcionesCurso = inscripcionRepository.findByCursoId(cursoId)
+        val inscripcionesCurso = inscripcionRepository.findByCursoIdAndActivaTrue(cursoId)
         val alumnosInscriptosUsernames = inscripcionesCurso.map { it.usuario.username }.toSet()
 
-        val asignacion = Asignacion(
-            titulo = dto.titulo,
-            descripcion = dto.descripcion,
-            tipo = dto.tipo,
-            templateRepoName = dto.templateRepoName,
-            fechaLimite = dto.fechaLimite,
-            curso = curso,
-        )
-
-        if (dto.tipo == TipoAsignacion.INDIVIDUAL) {
-            inscripcionesCurso.forEach { inscripcion ->
-                val alumno = inscripcion.usuario
-                val repoName = asignacion.generarNombreRepo(alumno.username)
-                val repoDesc = asignacion.generarDescripcionRepo(alumno.username)
-
-                if (!gitHubRepoService.repositoryExists(repoName)) {
-                    gitHubRepoService.createRepositoryFromTemplate(
-                        templateRepoName = asignacion.templateRepoName,
-                        newRepoName = repoName,
-                        description = repoDesc,
-                        private = true,
-                    )
-                }
-
-                gitHubCollaboratorService.addCollaborator(
-                    repoName = repoName,
-                    username = alumno.username,
-                    permission = "push",
-                )
-
-                if (docenteUsername != alumno.username) {
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = docenteUsername,
-                        permission = "push",
-                    )
-                }
-
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                val repositorio = Repositorio(
-                    nombre = info.nombre,
-                    htmlUrl = info.htmlUrl,
-                    ultimoCommit = info.ultimoCommit,
-                    fechaUltimoCommit = info.fechaUltimoCommit,
-                    estadoCI = info.estadoCI,
-                )
-
-                val grupo = GrupoAsignacion(
+        if (asignacion.tipo == TipoAsignacion.INDIVIDUAL) {
+            val gruposGenerados = inscripcionesCurso.map { inscripcion ->
+                GrupoAsignacion(
                     nombre = null,
                     asignacion = asignacion,
-                    repositorio = repositorio,
-                    integrantes = mutableListOf(alumno),
+                    repositorio = null,
+                    integrantes = mutableListOf(inscripcion.usuario),
                 )
-                asignacion.grupos.add(grupo)
-            }
+            }.toMutableList()
+            asignacion.grupos = gruposGenerados
         } else {
-            // GRUPAL
-            val gruposDTO = dto.grupos
-            if (gruposDTO.isNullOrEmpty()) {
-                throw BadRequestException("Para una asignación grupal debe especificar al menos un grupo")
-            }
-
-            val allMembers = gruposDTO.flatMap { it.integrantesUsernames.map { u -> u.trim() } }
-            if (allMembers.size != allMembers.distinct().size) {
-                throw BadRequestException("Un alumno no puede pertenecer a más de un grupo en la misma asignación")
-            }
-
+            val allMembers = asignacion.grupos.flatMap { it.integrantes.map { u -> u.username.trim() } }
             val notEnrolled = allMembers.filterNot { alumnosInscriptosUsernames.contains(it) }
             if (notEnrolled.isNotEmpty()) {
-                throw BadRequestException("Los siguientes alumnos no están inscriptos en el curso: ${notEnrolled.joinToString()}")
+                throw AlumnosNoInscriptosException(notEnrolled)
             }
 
-            gruposDTO.forEach { grupoDTO ->
-                val grupoNombre = grupoDTO.nombre.trim()
-                val repoName = asignacion.generarNombreRepo(grupoNombre)
-                val repoDesc = asignacion.generarDescripcionRepo(grupoNombre)
-
-                if (!gitHubRepoService.repositoryExists(repoName)) {
-                    gitHubRepoService.createRepositoryFromTemplate(
-                        templateRepoName = asignacion.templateRepoName,
-                        newRepoName = repoName,
-                        description = repoDesc,
-                        private = true,
-                    )
+            val gruposConfigurados = asignacion.grupos.map { grupoOriginal ->
+                val grupoNombre = grupoOriginal.nombre!!.trim()
+                val integrantesUsuarios = grupoOriginal.integrantes.map { u ->
+                    usuarioService.obtenerOCrearAlumno(u.username.trim())
                 }
 
-                val integrantesUsuarios = grupoDTO.integrantesUsernames.map { username ->
-                    usuarioService.obtenerOCrearAlumno(username.trim())
-                }
-
-                integrantesUsuarios.forEach { integrante ->
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = integrante.username,
-                        permission = "push",
-                    )
-                }
-
-                if (integrantesUsuarios.none { it.username == docenteUsername }) {
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = docenteUsername,
-                        permission = "push",
-                    )
-                }
-
-                val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)
-                val repositorio = Repositorio(
-                    nombre = info.nombre,
-                    htmlUrl = info.htmlUrl,
-                    ultimoCommit = info.ultimoCommit,
-                    fechaUltimoCommit = info.fechaUltimoCommit,
-                    estadoCI = info.estadoCI,
-                )
-
-                val grupo = GrupoAsignacion(
+                GrupoAsignacion(
                     nombre = grupoNombre,
                     asignacion = asignacion,
-                    repositorio = repositorio,
+                    repositorio = null,
                     integrantes = integrantesUsuarios.toMutableList(),
                 )
-                asignacion.grupos.add(grupo)
             }
+            asignacion.grupos = gruposConfigurados.toMutableList()
         }
 
         val asignacionGuardada = asignacionRepository.save(asignacion)
-        return AsignacionResponseDTO.desdeModelo(asignacionGuardada)
+        val asignacionId = asignacionGuardada.id!!
+
+        ejecutarDespuesDeCommit {
+            asyncService.crearRepositoriosAsignacionAsincronicamente(asignacionId, docenteUsername)
+        }
+
+        return asignacionGuardada
     }
 
-    override fun obtenerAsignaciones(cursoId: Long, solicitanteUsername: String): List<AsignacionResponseDTO> {
+    override fun modificarAsignacion(
+        cursoId: Long,
+        asignacionId: Long,
+        descripcion: String?,
+        fechaLimite: LocalDateTime?,
+        solicitanteUsername: String
+    ): Asignacion {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede modificar asignaciones")
+        }
+        curso.validarNoArchivado()
 
-        if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver las asignaciones de este curso")
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        asignacion.actualizar(descripcion, fechaLimite)
+
+        val guardada = asignacionRepository.save(asignacion)
+
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(guardada)
+        }
+
+        return guardada
+    }
+
+    override fun obtenerAsignaciones(cursoId: Long, solicitanteUsername: String): List<Asignacion> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver las asignaciones de este curso")
         }
 
         val asignaciones = asignacionRepository.findByCursoId(cursoId)
-
-        return asignaciones.map { asignacion ->
-            val gruposFiltrados = if (esOwner) {
-                asignacion.grupos
-            } else {
-                asignacion.grupos.filter { grupo ->
-                    grupo.integrantes.any { it.username == solicitanteUsername }
-                }
-            }
-            AsignacionResponseDTO.desdeModelo(asignacion, gruposFiltrados)
-        }
+        return asignaciones.map { it.paraVisualizacionDe(solicitanteUsername, esOwner) }
     }
 
     override fun obtenerAsignacion(
         cursoId: Long,
         asignacionId: Long,
         solicitanteUsername: String
-    ): AsignacionResponseDTO {
+    ): Asignacion {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val gruposAMostrar = if (esOwner) {
-            asignacion.grupos
-        } else {
-            asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
-            }
-        }
-
-        // Sincronizar info de repositorio en vivo
-        gruposAMostrar.forEach { grupo ->
-            try {
-                val info = gitHubRepoService.obtenerInformacionRepositorio(grupo.repositorio.nombre)
-                grupo.repositorio.ultimoCommit = info.ultimoCommit
-                grupo.repositorio.fechaUltimoCommit = info.fechaUltimoCommit
-                grupo.repositorio.estadoCI = info.estadoCI
-            } catch (_: Exception) {
-                // Si falla consulta puntual a github, mantener el estado persistido
-            }
-        }
-        return AsignacionResponseDTO.desdeModelo(asignacion, gruposAMostrar)
+        return asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -256,7 +183,7 @@ class AsignacionServiceImpl(
         asignacionId: Long,
         solicitanteUsername: String,
         grupoId: Long?
-    ): AsignacionResponseDTO {
+    ): Asignacion {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
@@ -264,149 +191,96 @@ class AsignacionServiceImpl(
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        if (asignacion.fechaLimite != null && LocalDateTime.now().isAfter(asignacion.fechaLimite)) {
-            throw BadRequestException("No se puede entregar la asignación porque la fecha límite ha vencido")
-        }
+        asignacion.validarEstadoLista()
+        asignacion.validarVencimiento()
 
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para entregar esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
         }
+        curso.validarNoArchivado()
 
         val grupo = if (esOwner) {
             if (grupoId != null) {
-                asignacion.grupos.find { it.id == grupoId }
-                    ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
+                asignacion.buscarGrupo(grupoId)
             } else {
-                throw BadRequestException("Debe especificar el grupoId para marcar la entrega como docente")
+                throw GrupoIdRequeridoParaDocenteException()
             }
         } else {
-            val grupoDelAlumno = asignacion.grupos.find { g ->
-                g.integrantes.any { it.username == solicitanteUsername }
-            } ?: throw BadRequestException("El usuario no pertenece a ningún grupo de esta asignación")
-
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
             if (grupoId != null && grupoDelAlumno.id != grupoId) {
-                throw ForbiddenException("No tiene permisos para entregar en nombre de otro grupo")
+                throw SinPermisoEntregaOtroGrupoException()
             }
             grupoDelAlumno
         }
 
-        grupo.cantidadEntregas += 1
-        grupo.entregada = true
-        grupo.fechaEntregada = LocalDateTime.now()
+        grupo.registrarEntrega()
 
         val tagName = "entrega-v${grupo.cantidadEntregas}"
-        val releaseName = "Entrega v${grupo.cantidadEntregas} - ${asignacion.titulo}"
-        val releaseBody = "Entrega realizada por $solicitanteUsername el ${grupo.fechaEntregada}"
+        val releaseName = grupo.generarNombreRelease(asignacion.titulo)
+        val releaseBody = grupo.generarCuerpoRelease(solicitanteUsername)
 
-        try {
-            val release = gitHubRepoService.createRelease(
-                repoName = grupo.repositorio.nombre,
-                tagName = tagName,
-                name = releaseName,
-                body = releaseBody,
-            )
-            grupo.releaseUrl = release.htmlUrl
-        } catch (_: Exception) {
-            // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
+        grupo.repositorio?.let { repo ->
+            try {
+                val release = gitHubRepoService.createRelease(
+                    repoName = repo.nombre,
+                    tagName = tagName,
+                    name = releaseName,
+                    body = releaseBody,
+                )
+                grupo.releaseUrl = release.htmlUrl
+            } catch (_: Exception) {
+                // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
+            }
+
+
         }
 
-        try {
-            val info = gitHubRepoService.obtenerInformacionRepositorio(grupo.repositorio.nombre)
-            grupo.repositorio.ultimoCommit = info.ultimoCommit
-            grupo.repositorio.fechaUltimoCommit = info.fechaUltimoCommit
-            grupo.repositorio.estadoCI = info.estadoCI
-        } catch (_: Exception) {
-            // Si falla github puntual, continuar
-        }
+        val guardada = asignacionRepository.save(asignacion)
 
-        val gruposAMostrar = if (esOwner) {
-            asignacion.grupos
-        } else {
-            asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
+        val repoNombre = grupo.repositorio?.nombre
+        ejecutarDespuesDeCommit {
+            if (repoNombre != null) {
+                sseNotificationService?.notificarEventoDeRepositorio(repoNombre, SseEventType.ENTREGA_REALIZADA)
+            } else {
+                sseNotificationService?.notificarAsignacionActualizada(guardada, grupo)
             }
         }
 
-        return AsignacionResponseDTO.desdeModelo(asignacion, gruposAMostrar)
+        return guardada.paraVisualizacionDe(solicitanteUsername, esOwner)
     }
 
     override fun calificarAsignacion(
         cursoId: Long,
         asignacionId: Long,
+        grupoId: Long,
+        calificacion: Int,
+        observaciones: String?,
         solicitanteUsername: String,
-        dto: CalificarAsignacionRequestDTO,
-    ): AsignacionResponseDTO {
+    ): Asignacion {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede calificar asignaciones")
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede calificar asignaciones")
         }
+        curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val calificacion = dto.calificacion ?: throw BadRequestException("La nota debe ser entre 1 y 10")
-        if (calificacion < 1 || calificacion > 10) {
-            throw BadRequestException("La nota debe ser entre 1 y 10")
+        asignacion.validarEstadoLista()
+
+        val grupo = asignacion.buscarGrupo(grupoId)
+        grupo.calificar(calificacion, observaciones)
+
+        val guardada = asignacionRepository.save(asignacion)
+
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(guardada, grupo)
         }
 
-        val targetGrupoId = dto.grupoId
-        val grupo = if (targetGrupoId != null) {
-            asignacion.grupos.find { it.id == targetGrupoId }
-                ?: throw BadRequestException("El grupo especificado no pertenece a la asignación")
-        } else if (dto.alumnoUsername != null) {
-            asignacion.grupos.find { g -> g.integrantes.any { it.username == dto.alumnoUsername } }
-                ?: throw BadRequestException("El alumno especificado no pertenece a la asignación")
-        } else {
-            throw BadRequestException("Debe especificar el grupo a calificar")
-        }
-
-        grupo.calificacion = dto.calificacion
-        grupo.observaciones = dto.observaciones
-        grupo.fechaCalificacion = LocalDateTime.now()
-
-        val asignacionGuardada = asignacionRepository.save(asignacion)
-
-        return AsignacionResponseDTO.desdeModelo(asignacionGuardada)
-
-    }
-
-    override fun crearTemplateRepository(
-        dto: CrearTemplateRepoRequestDTO,
-        solicitanteUsername: String
-    ): TemplateRepoResponseDTO {
-        usuarioService.obtenerDocente(solicitanteUsername)
-
-        val repoResponse = gitHubRepoService.createTemplateRepository(
-            name = dto.name,
-            description = dto.description,
-        )
-
-        return TemplateRepoResponseDTO(
-            name = repoResponse.name,
-            fullName = repoResponse.fullName,
-            htmlUrl = repoResponse.htmlUrl,
-            description = repoResponse.description,
-        )
-    }
-
-    override fun listarTemplates(solicitanteUsername: String): List<TemplateRepoResponseDTO> {
-        usuarioService.obtenerDocente(solicitanteUsername)
-
-        val templates = gitHubRepoService.listTemplateRepositories()
-        return templates.map {
-            TemplateRepoResponseDTO(
-                name = it.name,
-                fullName = it.fullName,
-                htmlUrl = it.htmlUrl,
-                description = it.description,
-            )
-        }
+        return guardada
     }
 
     override fun obtenerCorrecciones(
@@ -418,88 +292,222 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver las correcciones de esta asignación")
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCorreccionesException()
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val gruposAMostrar = if (esOwner) {
-            asignacion.grupos
-        } else {
-            asignacion.grupos.filter { grupo ->
-                grupo.integrantes.any { it.username == solicitanteUsername }
-            }
-        }
+        val gruposAMostrar = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner).grupos
+        val inscripcionesPorUsuarioId = curso.inscripciones.associateBy { it.usuario.id }
 
         return gruposAMostrar.map { grupo ->
-            try {
-                val info = gitHubRepoService.obtenerInformacionRepositorio(grupo.repositorio.nombre)
-                grupo.repositorio.ultimoCommit = info.ultimoCommit
-                grupo.repositorio.fechaUltimoCommit = info.fechaUltimoCommit
-                grupo.repositorio.estadoCI = info.estadoCI
-            } catch (_: Exception) {
-                // Mantener estado persistido si falla la consulta
+            val repo = grupo.repositorio
+            val repoNombre = repo?.nombre ?: ""
+            val repoHtmlUrl = repo?.htmlUrl ?: ""
+            val fechaUltimoCommit = repo?.fechaUltimoCommit
+
+            val repoId = repo?.id
+            val issues = if (repoId != null) {
+                issueRepository.findByRepositorioIdAndEliminadoFalseOrderByNumeroDesc(repoId)
+            } else {
+                emptyList()
             }
 
-            val issuesGitHub = gitHubIssueService.getRepositoryIssues(grupo.repositorio.nombre)
-            val issuesDTOs = issuesGitHub.map { issue ->
-                val (estado, tieneCommitsPosteriores) = calcularEstadoIssue(issue, grupo.repositorio.fechaUltimoCommit)
+            val issuesDTOs = issues.map { issue ->
                 IssueResponseDTO(
-                    numero = issue.number,
-                    titulo = issue.title,
+                    numero = issue.numero,
+                    titulo = issue.titulo,
                     htmlUrl = issue.htmlUrl,
-                    autor = issue.user?.login ?: "",
-                    estado = estado,
-                    tieneCommitsPosteriores = tieneCommitsPosteriores,
-                    cantComentarios = issue.comments,
-                    fechaCreacion = issue.createdAt,
-                    fechaActualizacion = issue.updatedAt,
-                    fechaCierre = issue.closedAt,
+                    autor = issue.autor,
+                    estado = issue.calcularEstado(fechaUltimoCommit),
+                    tieneCommitsPosteriores = issue.tieneCommitsPosteriores(fechaUltimoCommit),
+                    cantComentarios = issue.cantComentarios,
+                    fechaCreacion = issue.fechaCreacion,
+                    fechaActualizacion = issue.fechaActualizacion,
+                    fechaCierre = issue.fechaCierre,
                 )
             }
 
             CorreccionGrupoResponseDTO(
-                grupoId = grupo.id ?: 0L,
+                grupoId = grupo.id!!,
                 nombre = grupo.nombre ?: grupo.integrantes.firstOrNull()?.username,
-                integrantes = grupo.integrantes.map { it.username },
-                repoNombre = grupo.repositorio.nombre,
-                repoHtmlUrl = grupo.repositorio.htmlUrl,
+                integrantes = grupo.integrantes.map { integrante ->
+                    val esActivo = inscripcionesPorUsuarioId[integrante.id]?.activa ?: false
+                    UsuarioResponseDTO.desdeModelo(integrante, activo = esActivo)
+                },
+                repoNombre = repoNombre,
+                repoHtmlUrl = repoHtmlUrl,
                 issues = issuesDTOs,
             )
         }
     }
 
-    private fun calcularEstadoIssue(
-        issue: GitHubIssueItemResponse,
-        fechaUltimoCommit: String?
-    ): Pair<String, Boolean> {
-        if (issue.state.equals("closed", ignoreCase = true)) {
-            return Pair("RESUELTO", false)
+    override fun obtenerDiagnosticoCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Repositorio {
+        val (asignacion, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el diagnóstico de CI",
+        )
+
+        if (repo.estadoCI == "failure" && (repo.ciEtapaFallida.isNullOrBlank() || repo.ciLogError.isNullOrBlank())) {
+            try {
+                val diagnostico = gitHubRepoService.obtenerUltimoDiagnosticoCIFallido(repo.nombre)
+                if (diagnostico != null) {
+                    repo.registrarFallaCI(
+                        etapaFallida = diagnostico.etapaFallida,
+                        logError = diagnostico.logError,
+                        runUrl = diagnostico.runUrl,
+                        runId = diagnostico.runId,
+                    )
+                    asignacionRepository.save(asignacion)
+                }
+            } catch (_: Exception) {
+                // Si falla la consulta a GitHub, devolver el estado persistido
+            }
         }
 
-        val tieneCommitsPosteriores = if (!fechaUltimoCommit.isNullOrBlank() && issue.createdAt.isNotBlank()) {
-            try {
-                val commitInstant = Instant.parse(fechaUltimoCommit)
-                val issueInstant = Instant.parse(issue.createdAt)
-                commitInstant.isAfter(issueInstant)
-            } catch (_: Exception) {
-                false
+        return repo
+    }
+
+    override fun obtenerMetricasCI(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Pair<Repositorio, MetricaCI?> {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "las métricas de CI",
+        )
+
+        val metrica = repo.id?.let { repoId ->
+            metricaCIRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return Pair(repo, metrica)
+    }
+
+    override fun obtenerReporteLinter(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+    ): Pair<Repositorio, ReporteLinter?> {
+        val (_, repo) = resolverAsignacionYRepositorio(
+            cursoId = cursoId,
+            asignacionId = asignacionId,
+            solicitanteUsername = solicitanteUsername,
+            grupoId = grupoId,
+            recursoDescripcion = "el reporte de linter",
+        )
+
+        val reporte = repo.id?.let { repoId ->
+            reporteLinterRepository?.findFirstByRepositorioIdOrderByFechaActualizacionDesc(repoId)
+        }
+
+        return Pair(repo, reporte)
+    }
+
+    private fun resolverAsignacionYRepositorio(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String,
+        grupoId: Long?,
+        recursoDescripcion: String,
+    ): Pair<Asignacion, Repositorio> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
+        }
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        val grupo = if (esOwner) {
+            if (grupoId != null) {
+                asignacion.buscarGrupo(grupoId)
+            } else {
+                throw GrupoIdRequeridoParaDocenteException()
             }
         } else {
-            false
+            val grupoDelAlumno = asignacion.buscarGrupoPorAlumno(solicitanteUsername)
+            if (grupoId != null && grupoDelAlumno.id != grupoId) {
+                throw SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de otro grupo")
+            }
+            grupoDelAlumno
         }
 
-        val estado = if (tieneCommitsPosteriores || issue.comments > 0) {
-            "ACTUALIZADO"
-        } else {
-            "PENDIENTE"
+        val repo = grupo.repositorio
+            ?: throw ResourceNotFoundException("El grupo no posee un repositorio asociado", "REPOSITORIO_NOT_FOUND")
+
+        return Pair(asignacion, repo)
+    }
+
+    override fun eliminarAsignacion(
+        cursoId: Long,
+        asignacionId: Long,
+        solicitanteUsername: String
+    ) {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
         }
 
-        return Pair(estado, tieneCommitsPosteriores)
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede eliminar asignaciones")
+        }
+        curso.validarNoArchivado()
+
+        val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
+            ?: throw AsignacionNotFoundException()
+
+        asignacion.validarEliminacion()
+
+        val repoNames = asignacion.grupos.mapNotNull { it.repositorio?.nombre }
+        val repoIds = asignacion.grupos.mapNotNull { it.repositorio?.id }
+
+        if (repoIds.isNotEmpty()) {
+            issueRepository.deleteAllByRepositorioIdIn(repoIds)
+            advertenciaGitRepository?.deleteAllByRepositorioIdIn(repoIds)
+            metricaCIRepository?.deleteAllByRepositorioIdIn(repoIds)
+            reporteLinterRepository?.deleteAllByRepositorioIdIn(repoIds)
+        }
+
+        curso.asignaciones.remove(asignacion)
+        asignacionRepository.delete(asignacion)
+
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarAsignacionActualizada(asignacion)
+            asyncService.eliminarRepositoriosAsincronicamente(repoNames)
+        }
+    }
+
+    private fun verificarAccesoACurso(
+        curso: Curso,
+        solicitanteUsername: String,
+        excepcionSiFalla: () -> RuntimeException,
+    ): Boolean {
+        val cursoId = curso.id ?: throw CursoNotFoundException()
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val estaInscripto = !curso.archivado && inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+
+        if (!esOwner && !estaInscripto) {
+            throw excepcionSiFalla()
+        }
+        return esOwner
     }
 }

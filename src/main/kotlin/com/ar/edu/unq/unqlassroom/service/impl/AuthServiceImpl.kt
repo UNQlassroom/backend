@@ -1,8 +1,8 @@
-﻿package com.ar.edu.unq.unqlassroom.service.impl
+package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.dto.auth.AuthResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.auth.GitHubLoginResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.request.GitHubLoginRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.response.AuthResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.auth.response.GitHubLoginResponseDTO
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubOAuthClient
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
@@ -30,45 +30,39 @@ class AuthServiceImpl(
         val perfil = gitHubOAuthClient.obtenerPerfilGitHub(accessToken)
 
         val usuarioExistente = usuarioRepository.findByUsername(perfil.login)
-        if (usuarioExistente != null) {
-            perfil.email?.let { usuarioExistente.email = it }
-            perfil.name?.let { usuarioExistente.nombreCompleto = it }
-            usuarioExistente.esDocente = dto.esDocente == true
-            val usuarioGuardado = usuarioRepository.save(usuarioExistente)
-            val token = jwtService.generateToken(usuarioGuardado)
-            return AuthResponseDTO(
-                token = token,
-                user = GitHubLoginResponseDTO.desdeModelo(usuarioGuardado)
-            )
-        }
+        val usuario = usuarioExistente ?: Usuario(
+            username = perfil.login,
+            esDocente = dto.esDocente == true,
+            email = perfil.email,
+            githubState = "pending",
+        )
+
+        perfil.email?.let { usuario.email = it }
+        usuario.esDocente = dto.esDocente == true
 
         val org = properties.organization?.trim().orEmpty()
-        if (org.isNotEmpty()) {
-            val membresia = gitHubOrgService.obtenerMembresia(perfil.login)
-            val esMiembroActivo = membresia != null && membresia.state == "active"
-
-            if (!esMiembroActivo) {
-                if (membresia == null) {
-                    val rolOrg = if (dto.esDocente == true) "admin" else "member"
-                    gitHubOrgService.invitarMiembro(username = perfil.login, role = rolOrg)
+        if (org.isNotEmpty() && usuario.githubState != "active") {
+            if (usuarioExistente == null) {
+                val rolOrg = if (dto.esDocente == true) "admin" else "member"
+                val invitacion = gitHubOrgService.invitarMiembro(username = perfil.login, role = rolOrg)
+                if (invitacion.state == "active") {
+                    usuario.githubState = "active"
                 }
+            }
+
+            if (usuario.githubState != "active") {
+                usuarioRepository.save(usuario)
                 val redirectUrl = "https://github.com/orgs/$org/invitation"
                 return AuthResponseDTO(
                     token = null,
                     user = null,
                     requiereUnirseAOrg = true,
-                    redirectUrl = redirectUrl
+                    redirectUrl = redirectUrl,
                 )
             }
         }
 
-        val nuevoUsuario = Usuario(
-            username = perfil.login,
-            esDocente = dto.esDocente == true,
-            email = perfil.email,
-            nombreCompleto = perfil.name
-        )
-        val usuarioGuardado = usuarioRepository.save(nuevoUsuario)
+        val usuarioGuardado = usuarioRepository.save(usuario)
         val token = jwtService.generateToken(usuarioGuardado)
 
         return AuthResponseDTO(

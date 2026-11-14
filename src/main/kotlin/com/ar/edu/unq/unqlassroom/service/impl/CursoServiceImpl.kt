@@ -1,172 +1,256 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.dto.curso.AgregarAlumnosRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnoMiembroDeUnCursoDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoRequestDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.CursoResponseDTO
-import com.ar.edu.unq.unqlassroom.dto.curso.AlumnosDeUnCursoResponseDTO
-import com.ar.edu.unq.unqlassroom.exception.BadRequestException
-import com.ar.edu.unq.unqlassroom.exception.CursoNotFoundException
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
+import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
+import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
+import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
+import com.ar.edu.unq.unqlassroom.service.AsyncService
 import com.ar.edu.unq.unqlassroom.service.CursoService
+import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
 import jakarta.transaction.Transactional
+import com.ar.edu.unq.unqlassroom.util.ejecutarDespuesDeCommit
+import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import java.time.LocalDate
 
 @Service
 @Transactional
-class CursoServiceImpl (
+class CursoServiceImpl(
     private val cursoRepository: CursoRepository,
     private val usuarioService: UsuarioService,
+    private val usuarioRepository: UsuarioRepository,
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubOrgService: GitHubOrgService,
+    private val sseNotificationService: SseNotificationService? = null,
+    private val asyncService: AsyncService? = null,
 ) : CursoService {
 
-    override fun crearCurso(dto: CursoRequestDTO, ownerUsername: String): CursoResponseDTO {
-        val curso = dto.aModelo()
-        curso.owner = usuarioService.obtenerDocente(ownerUsername)
+    private val logger = LoggerFactory.getLogger(javaClass)
 
-        val cursoGuardado = cursoRepository.save(curso)
-        return CursoResponseDTO.desdeModelo(cursoGuardado)
-    }
-
-    override fun obtenerCursos(username: String, esDocente: Boolean): List<CursoResponseDTO> {
-        val cursos = if (esDocente) {
-            cursoRepository.findCursosParaDocente(username)
-        } else {
-            cursoRepository.findCursosParaAlumno(username)
+    override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
+        val docente = usuarioService.obtenerDocente(ownerUsername)
+        if (cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
+                docente.username,
+                curso.materia,
+                curso.anio,
+                curso.semestre,
+                curso.comision
+            )
+        ) {
+            throw CursoDuplicadoException(curso.materia, curso.anio, curso.semestre, curso.comision)
         }
-        return cursos.map { CursoResponseDTO.desdeModelo(it) }
+        curso.asignarOwner(docente)
+        return cursoRepository.save(curso)
     }
 
-    override fun obtenerCurso(id: Long, solicitanteUsername: String): CursoResponseDTO {
+    override fun obtenerCursos(username: String, esDocente: Boolean, archivados: Boolean): List<Curso> {
+        return if (esDocente) {
+            cursoRepository.findCursosParaDocente(username, archivados)
+        } else {
+            if (archivados) emptyList() else cursoRepository.findCursosParaAlumno(username)
+        }
+    }
+
+    override fun obtenerCurso(id: Long, solicitanteUsername: String): Curso {
         val curso = cursoRepository.findById(id).orElseThrow {
             CursoNotFoundException()
         }
 
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(id, solicitanteUsername) != null
-
-        if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para acceder a este curso")
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException()
         }
 
-        return CursoResponseDTO.desdeModelo(curso)
+        return curso
     }
 
-    override fun agregarAlumnos(cursoId: Long, dto: AgregarAlumnosRequestDTO, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
+    override fun agregarAlumnos(
+        cursoId: Long,
+        usernames: List<String>,
+        solicitanteUsername: String
+    ): List<Inscripcion> {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede agregar alumnos")
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede agregar alumnos")
         }
+        curso.validarNoArchivado()
 
-        val distinctUsernames = dto.usernames
+        val distinctUsernames = usernames
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .distinct()
+            .distinctBy { it.lowercase() }
 
-        val usuariosInexistentes = distinctUsernames.filterNot { gitHubOrgService.userExists(it) }
-        if (usuariosInexistentes.isNotEmpty()) {
-            throw BadRequestException(
-                "Los siguientes usuarios no existen en GitHub: ${usuariosInexistentes.joinToString()}"
-            )
+        val inscripcionesExistentes = inscripcionRepository.findByCursoId(cursoId)
+        val inscriptosPorLowercase = inscripcionesExistentes.associateBy { it.usuario.username.lowercase() }
+
+        val alumnosDuplicados = distinctUsernames.mapNotNull { rawUsername ->
+            val existente = inscriptosPorLowercase[rawUsername.lowercase()]
+            if (existente != null && existente.activa) existente.usuario.username else null
+        }.distinct()
+
+        if (alumnosDuplicados.isNotEmpty()) {
+            throw AlumnoDuplicadoException(alumnosDuplicados)
         }
 
-        val alumnosAgregados = distinctUsernames.map { username ->
+        val usernamesCanonicos = distinctUsernames.associateWith { gitHubOrgService.obtenerUsernameCanonico(it) }
+        val usuariosInexistentes = usernamesCanonicos.filterValues { it == null }.keys.toList()
+        if (usuariosInexistentes.isNotEmpty()) {
+            throw UsuariosGitHubNoEncontradosException(usuariosInexistentes)
+        }
+
+        val inscripciones = distinctUsernames.map { rawUsername ->
+            val username = usernamesCanonicos.getValue(rawUsername)!!
             val usuario = usuarioService.obtenerOCrearAlumno(username)
 
-            val inscripcionExistente = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, username)
-            val inscripcionAGuardar = if (inscripcionExistente != null) {
-                inscripcionExistente
+            val role = if (usuario.githubState == "active") {
+                "member"
             } else {
                 val membership = gitHubOrgService.invitarMiembro(username)
+                usuario.githubState = membership.state
+                usuarioRepository.save(usuario)
+                membership.role
+            }
+
+            val existente = inscriptosPorLowercase[username.lowercase()]
+            if (existente != null) {
+                existente.reactivar(role)
+                inscripcionRepository.save(existente)
+            } else {
                 val nuevaInscripcion = Inscripcion(
                     curso = curso,
                     usuario = usuario,
-                    githubRole = membership.role,
-                    githubState = membership.state,
+                    githubRole = role,
+                    activa = true,
                 )
                 inscripcionRepository.save(nuevaInscripcion)
             }
+        }
 
-            AlumnoMiembroDeUnCursoDTO(
-                username = inscripcionAGuardar.usuario.username,
-                role = inscripcionAGuardar.githubRole,
-                state = inscripcionAGuardar.githubState,
+        val alumnosUsernames = inscripciones.map { it.usuario.username }
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarMiembroCursoActualizado(
+                cursoId = cursoId,
+                docenteUsername = curso.owner?.username,
+                alumnosUsernames = alumnosUsernames
             )
         }
 
-        return AlumnosDeUnCursoResponseDTO(
-            cursoId = cursoId,
-            alumnos = alumnosAgregados,
-        )
+        return inscripciones
     }
 
-    override fun sincronizarAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
+    override fun darDeBajaAlumno(
+        cursoId: Long,
+        alumnoUsername: String,
+        solicitanteUsername: String
+    ) {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        if (curso.owner?.username != solicitanteUsername) {
-            throw ForbiddenException("Solo el docente a cargo del curso puede sincronizar alumnos")
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede dar de baja alumnos")
+        }
+        curso.validarNoArchivado()
+
+        val normalizedUsername = alumnoUsername.trim()
+        val inscripcion = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, normalizedUsername)
+        if (inscripcion == null || !inscripcion.activa) {
+            throw AlumnoNoInscriptoException(normalizedUsername)
         }
 
-        val inscripciones = inscripcionRepository.findByCursoId(cursoId)
+        inscripcion.darDeBaja()
+        inscripcionRepository.save(inscripcion)
 
-        val alumnosActualizados = inscripciones.map { inscripcion ->
-            if (inscripcion.githubState == "pending") {
-                val membership = gitHubOrgService.obtenerMembresia(inscripcion.usuario.username)
-                if (membership != null && membership.state == "active") {
-                    inscripcion.githubState = "active"
-                    inscripcionRepository.save(inscripcion)
-                }
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarMiembroCursoActualizado(
+                cursoId = cursoId,
+                docenteUsername = curso.owner?.username,
+                alumnosUsernames = listOf(inscripcion.usuario.username)
+            )
+        }
+    }
+
+    override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): List<Inscripcion> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException("No tiene permisos para ver los alumnos de este curso")
+        }
+
+        return inscripcionRepository.findByCursoIdAndActivaTrue(cursoId)
+    }
+
+    override fun archivarCurso(cursoId: Long, solicitanteUsername: String): Curso {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        if (!curso.esOwner(solicitanteUsername)) {
+            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede archivarlo")
+        }
+
+        return ejecutarArchivadoDeCurso(curso)
+    }
+
+    @Scheduled(cron = "\${cursos.archivado-automatico.cron:0 0 3 * * *}")
+    fun ejecutarTareaArchivadoAutomatico() {
+        archivarCursosVencidosAutomaticamente(LocalDate.now())
+    }
+
+    override fun archivarCursosVencidosAutomaticamente(fechaActual: LocalDate) {
+        val cursosAActualizar = cursoRepository.findByArchivadoFalse()
+            .filter { it.debeArchivarseAutomaticamente(fechaActual) }
+
+        for (curso in cursosAActualizar) {
+            logger.info(
+                "Archivando automáticamente curso ID={} ({} - {}s{} c{}) por vencimiento de semestre",
+                curso.id,
+                curso.materia,
+                curso.anio,
+                curso.semestre,
+                curso.comision
+            )
+            ejecutarArchivadoDeCurso(curso)
+        }
+    }
+
+    private fun ejecutarArchivadoDeCurso(curso: Curso): Curso {
+        curso.archivar()
+        val repoNames = curso.obtenerNombresRepositorios()
+        val guardado = cursoRepository.save(curso)
+
+        if (repoNames.isNotEmpty()) {
+            ejecutarDespuesDeCommit {
+                asyncService?.archivarRepositoriosAsincronicamente(repoNames)
             }
-
-            AlumnoMiembroDeUnCursoDTO(
-                username = inscripcion.usuario.username,
-                role = inscripcion.githubRole,
-                state = inscripcion.githubState,
-            )
         }
 
-        return AlumnosDeUnCursoResponseDTO(
-            cursoId = cursoId,
-            alumnos = alumnosActualizados,
-        )
+        return guardado
     }
 
-    override fun obtenerAlumnos(cursoId: Long, solicitanteUsername: String): AlumnosDeUnCursoResponseDTO {
-        val curso = cursoRepository.findById(cursoId).orElseThrow {
-            CursoNotFoundException()
-        }
-
-        val esOwner = curso.owner?.username == solicitanteUsername
-        val estaInscripto = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
+    private fun verificarAccesoACurso(
+        curso: Curso,
+        solicitanteUsername: String,
+        excepcionSiFalla: () -> RuntimeException,
+    ): Boolean {
+        val cursoId = curso.id ?: throw CursoNotFoundException()
+        val esOwner = curso.esOwner(solicitanteUsername)
+        val inscripcion = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername)
+        val estaInscripto = !curso.archivado && inscripcion != null && inscripcion.activa
 
         if (!esOwner && !estaInscripto) {
-            throw ForbiddenException("No tiene permisos para ver los alumnos de este curso")
+            throw excepcionSiFalla()
         }
-
-        val inscripcionesPersistidas = inscripcionRepository.findByCursoId(cursoId)
-
-        val alumnos = inscripcionesPersistidas.map { inscripcion ->
-            AlumnoMiembroDeUnCursoDTO(
-                username = inscripcion.usuario.username,
-                role = inscripcion.githubRole,
-                state = inscripcion.githubState,
-            )
-        }
-
-        return AlumnosDeUnCursoResponseDTO(
-            cursoId = cursoId,
-            alumnos = alumnos,
-        )
+        return esOwner
     }
 }

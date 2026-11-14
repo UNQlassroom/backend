@@ -22,6 +22,10 @@ class GitHubOrgService(
         return gitHubAppClient.userExists(username)
     }
 
+    fun obtenerUsernameCanonico(username: String): String? {
+        return gitHubAppClient.getUserLogin(username)
+    }
+
     @JvmOverloads
     fun invitarMiembro(
         username: String,
@@ -44,23 +48,6 @@ class GitHubOrgService(
                 state = "pending",
                 role = role,
             )
-        }
-    }
-
-    @JvmOverloads
-    fun obtenerMembresia(
-        username: String,
-        org: String? = null,
-    ): GitHubOrgMembershipResponse? {
-        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
-        return try {
-            gitHubAppClient.executeInstallationRequest(
-                method = "GET",
-                path = "/orgs/$targetOrg/memberships/$username",
-                responseType = GitHubOrgMembershipResponse::class.java,
-            )
-        } catch (_: Exception) {
-            null
         }
     }
 

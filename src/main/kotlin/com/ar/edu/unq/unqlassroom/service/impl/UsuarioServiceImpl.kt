@@ -1,6 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.exception.ForbiddenException
+import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -16,11 +16,10 @@ class UsuarioServiceImpl(
 
     @Transactional(readOnly = true)
     override fun obtenerDocente(username: String): Usuario {
-        val usuario = usuarioRepository.findByUsername(username)
-            ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
+        val usuario = obtenerUsuario(username)
 
         if (!usuario.esDocente) {
-            throw ForbiddenException("El usuario $username no tiene permisos de docente")
+            throw UsuarioNoEsDocenteException(username)
         }
 
         return usuario
@@ -29,5 +28,17 @@ class UsuarioServiceImpl(
     override fun obtenerOCrearAlumno(username: String): Usuario {
         return usuarioRepository.findByUsername(username)
             ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
+    }
+
+    @Transactional(readOnly = true)
+    override fun obtenerUsuario(username: String): Usuario {
+        return usuarioRepository.findByUsername(username)
+            ?: throw UsuarioNotFoundException("Usuario no encontrado: $username")
+    }
+
+    override fun actualizarNombreCompleto(username: String, nombre: String, apellido: String): Usuario {
+        val usuario = obtenerUsuario(username)
+        usuario.actualizarNombreCompleto(nombre = nombre, apellido = apellido)
+        return usuarioRepository.save(usuario)
     }
 }

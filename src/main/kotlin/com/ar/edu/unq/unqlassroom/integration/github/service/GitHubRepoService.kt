@@ -1,5 +1,13 @@
-﻿package com.ar.edu.unq.unqlassroom.integration.github.service
+package com.ar.edu.unq.unqlassroom.integration.github.service
 
+import com.ar.edu.unq.unqlassroom.exception.BadRequestException
+import com.ar.edu.unq.unqlassroom.exception.UrlRepositorioInvalidaException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoNoEncontradoException
+import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoPrivadoException
+import com.ar.edu.unq.unqlassroom.exception.LimiteArchivosTemplateExcedidoException
+import com.ar.edu.unq.unqlassroom.exception.GitHubApiException
+import com.ar.edu.unq.unqlassroom.exception.GitHubNotFoundException
+import org.slf4j.LoggerFactory
 import com.ar.edu.unq.unqlassroom.integration.github.client.GitHubAppClient
 import com.ar.edu.unq.unqlassroom.integration.github.config.GitHubAppProperties
 
@@ -7,8 +15,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 
 @Service
 class GitHubRepoService(
@@ -17,6 +30,7 @@ class GitHubRepoService(
     private val objectMapper: ObjectMapper = ObjectMapper()
         .findAndRegisterModules()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
+    private val logger: org.slf4j.Logger = LoggerFactory.getLogger(GitHubRepoService::class.java),
 ) {
 
     @JvmOverloads
@@ -142,6 +156,89 @@ class GitHubRepoService(
     }
 
     @JvmOverloads
+    fun getFileContent(
+        repoName: String,
+        path: String,
+        org: String? = null,
+    ): GitHubFileContentResponse? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val normalizedPath = path.trim().trimStart('/')
+        return try {
+            gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/contents/$normalizedPath",
+                responseType = GitHubFileContentResponse::class.java,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
+    fun createOrUpdateFile(
+        repoName: String,
+        path: String,
+        content: String,
+        message: String,
+        sha: String? = null,
+        branch: String? = null,
+        org: String? = null,
+    ): GitHubContentUpdateResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val normalizedPath = path.trim().trimStart('/')
+        val encodedContent = Base64.getEncoder().encodeToString(content.toByteArray(StandardCharsets.UTF_8))
+
+        fun executePut(targetSha: String?): GitHubContentUpdateResponse {
+            val requestBody = objectMapper.writeValueAsString(
+                CreateOrUpdateFileRequest(
+                    message = message,
+                    content = encodedContent,
+                    sha = targetSha?.takeIf { it.isNotBlank() },
+                    branch = branch?.takeIf { it.isNotBlank() },
+                )
+            )
+            return gitHubAppClient.executeInstallationRequest(
+                method = "PUT",
+                path = "/repos/$targetOrg/$repoName/contents/$normalizedPath",
+                responseType = GitHubContentUpdateResponse::class.java,
+                body = requestBody,
+            )
+        }
+
+        return try {
+            executePut(sha)
+        } catch (ex: GitHubApiException) {
+            if (sha.isNullOrBlank() && (ex.statusCode == 422 || ex.statusCode == 409)) {
+                val existingSha = getFileContent(repoName, normalizedPath, targetOrg)?.sha
+                if (!existingSha.isNullOrBlank()) {
+                    return executePut(existingSha)
+                }
+            }
+            throw ex
+        }
+    }
+
+    @JvmOverloads
+    fun getRepositoryTree(
+        repoName: String,
+        treeSha: String,
+        recursive: Boolean = true,
+        org: String? = null,
+    ): GitHubGitTreeResponse? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val query = if (recursive) "?recursive=1" else ""
+        return try {
+            gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/git/trees/$treeSha$query",
+                responseType = GitHubGitTreeResponse::class.java,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
     fun getEstadoCI(
         repoName: String,
         commitSha: String? = null,
@@ -196,9 +293,22 @@ class GitHubRepoService(
                 path = "/repos/$targetOrg/$repoName/actions/runs?head_sha=$commitSha&per_page=5",
                 responseType = GitHubWorkflowRunsResponse::class.java,
             )
-            if (workflowRuns.totalCount > 0) {
-                val runs = workflowRuns.workflowRuns
-                if (runs.any { it.conclusion?.lowercase() in listOf("failure", "timed_out", "cancelled") }) {
+            val runs = if (workflowRuns.totalCount > 0) {
+                workflowRuns.workflowRuns
+            } else {
+                // Fallback: si no hubo coincidencias exactas por head_sha, consultar las últimas corridas del repositorio
+                try {
+                    gitHubAppClient.executeInstallationRequest(
+                        method = "GET",
+                        path = "/repos/$targetOrg/$repoName/actions/runs?per_page=5",
+                        responseType = GitHubWorkflowRunsResponse::class.java,
+                    ).workflowRuns
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+            if (runs.isNotEmpty()) {
+                if (runs.any { it.conclusion?.lowercase() in listOf("failure", "timed_out", "cancelled", "action_required") }) {
                     return "failure"
                 }
                 if (runs.any { it.status.lowercase() != "completed" }) {
@@ -266,6 +376,545 @@ class GitHubRepoService(
         )
     }
 
+    @JvmOverloads
+    fun deleteRepository(
+        repoName: String,
+        org: String? = null,
+    ) {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        gitHubAppClient.executeInstallationRequest(
+            method = "DELETE",
+            path = "/repos/$targetOrg/$repoName",
+            responseType = Unit::class.java,
+        )
+    }
+
+    @JvmOverloads
+    fun archiveRepository(
+        repoName: String,
+        org: String? = null,
+    ): GitHubRepoResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            ArchiveRepoRequest(archived = true)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "PATCH",
+            path = "/repos/$targetOrg/$repoName",
+            responseType = GitHubRepoResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun getWorkflowRunJobs(
+        repoName: String,
+        runId: Long,
+        org: String? = null,
+    ): List<GitHubWorkflowJobItem> {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        return try {
+            val response = gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/actions/runs/$runId/jobs",
+                responseType = GitHubWorkflowJobsResponse::class.java,
+            )
+            response.jobs
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    @JvmOverloads
+    fun getJobLogs(
+        repoName: String,
+        jobId: Long,
+        org: String? = null,
+    ): String? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        return try {
+            gitHubAppClient.downloadTextResource("/repos/$targetOrg/$repoName/actions/jobs/$jobId/logs")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @JvmOverloads
+    fun obtenerDiagnosticoCorridaFallida(
+        repoName: String,
+        runId: Long,
+        runHtmlUrl: String? = null,
+        org: String? = null,
+    ): DiagnosticoCIInfo {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val defaultRunUrl = runHtmlUrl?.takeIf { it.isNotBlank() }
+            ?: "https://github.com/$targetOrg/$repoName/actions/runs/$runId"
+
+        val failureConclusions = setOf("failure", "timed_out", "cancelled", "action_required")
+        val jobs = getWorkflowRunJobs(repoName, runId, targetOrg)
+
+        val failedJob = jobs.firstOrNull { job ->
+            job.conclusion?.lowercase() in failureConclusions ||
+                job.steps.any { step -> step.conclusion?.lowercase() in failureConclusions }
+        } ?: jobs.firstOrNull()
+
+        if (failedJob == null) {
+            return DiagnosticoCIInfo(
+                runId = runId,
+                jobName = null,
+                etapaFallida = "Ejecución de workflow",
+                logError = "La corrida de CI/CD finalizó con errores. Revisá el detalle completo en GitHub Actions.",
+                runUrl = defaultRunUrl,
+            )
+        }
+
+        val failedStep = failedJob.steps.firstOrNull { it.conclusion?.lowercase() in failureConclusions }
+        val etapaFallida = failedStep?.name?.takeIf { it.isNotBlank() }
+            ?: failedJob.name.takeIf { it.isNotBlank() }
+            ?: "Ejecución de workflow"
+
+        val rawLog = if (failedJob.id > 0) {
+            getJobLogs(repoName, failedJob.id, targetOrg)
+        } else {
+            null
+        }
+
+        val logError = extraerResumenLogError(
+            rawLog = rawLog,
+            etapaFallida = etapaFallida,
+            jobName = failedJob.name.takeIf { it.isNotBlank() },
+        )
+
+        val finalRunUrl = runHtmlUrl?.takeIf { it.isNotBlank() }
+            ?: failedJob.htmlUrl?.takeIf { it.isNotBlank() }
+            ?: defaultRunUrl
+
+        return DiagnosticoCIInfo(
+            runId = runId,
+            jobName = failedJob.name.takeIf { it.isNotBlank() },
+            etapaFallida = etapaFallida,
+            logError = logError,
+            runUrl = finalRunUrl,
+        )
+    }
+
+    @JvmOverloads
+    fun obtenerUltimoDiagnosticoCIFallido(
+        repoName: String,
+        org: String? = null,
+    ): DiagnosticoCIInfo? {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val failureConclusions = setOf("failure", "timed_out", "cancelled", "action_required")
+        return try {
+            val workflowRuns = gitHubAppClient.executeInstallationRequest(
+                method = "GET",
+                path = "/repos/$targetOrg/$repoName/actions/runs?per_page=5",
+                responseType = GitHubWorkflowRunsResponse::class.java,
+            )
+            val latestRun = workflowRuns.workflowRuns.firstOrNull() ?: return null
+            if (latestRun.conclusion?.lowercase() in failureConclusions && latestRun.id > 0) {
+                obtenerDiagnosticoCorridaFallida(
+                    repoName = repoName,
+                    runId = latestRun.id,
+                    runHtmlUrl = latestRun.htmlUrl,
+                    org = targetOrg,
+                )
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun extraerResumenLogError(
+        rawLog: String?,
+        etapaFallida: String?,
+        jobName: String? = null,
+    ): String {
+        if (rawLog.isNullOrBlank()) {
+            return if (!etapaFallida.isNullOrBlank()) {
+                val sufijoJob = if (!jobName.isNullOrBlank() && !jobName.equals(etapaFallida, ignoreCase = true)) {
+                    " (job '$jobName')"
+                } else {
+                    ""
+                }
+                "Fallo en la etapa '$etapaFallida'$sufijoJob."
+            } else {
+                "La corrida de CI/CD finalizó con errores."
+            }
+        }
+
+        val timestampRegex = Regex("""^\uFEFF?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s?""")
+        val ansiRegex = Regex("""\u001B\[[;\d]*[A-Za-z]""")
+
+        val cleanedLines = rawLog.lines()
+            .map { line ->
+                line.replace(timestampRegex, "")
+                    .replace(ansiRegex, "")
+                    .trimEnd()
+            }
+            .filter { it.isNotBlank() }
+
+        if (cleanedLines.isEmpty()) {
+            return if (!etapaFallida.isNullOrBlank()) {
+                "Fallo en la etapa '$etapaFallida'."
+            } else {
+                "La corrida de CI/CD finalizó con errores."
+            }
+        }
+
+        val stepGroupIndex = if (!etapaFallida.isNullOrBlank()) {
+            cleanedLines.indexOfLast { line ->
+                line.startsWith("##[group]", ignoreCase = true) &&
+                    line.contains(etapaFallida, ignoreCase = true)
+            }
+        } else {
+            -1
+        }
+
+        val lastErrorMarkerIndex = cleanedLines.indexOfLast { it.startsWith("##[error]", ignoreCase = true) }
+        val lastGroupBeforeErrorIndex = if (lastErrorMarkerIndex >= 0) {
+            cleanedLines.subList(0, lastErrorMarkerIndex + 1)
+                .indexOfLast { it.startsWith("##[group]", ignoreCase = true) }
+        } else {
+            cleanedLines.indexOfLast { it.startsWith("##[group]", ignoreCase = true) }
+        }
+
+        val sectionStartIndex = when {
+            stepGroupIndex >= 0 -> stepGroupIndex
+            lastGroupBeforeErrorIndex >= 0 -> lastGroupBeforeErrorIndex
+            else -> 0
+        }
+
+        val sectionLines = cleanedLines.subList(sectionStartIndex, cleanedLines.size)
+            .filterNot { it.equals("##[endgroup]", ignoreCase = true) }
+            .map { line ->
+                when {
+                    line.startsWith("##[group]", ignoreCase = true) ->
+                        "$ " + line.removePrefix("##[group]").removePrefix("##[GROUP]").trim()
+                    line.startsWith("##[error]", ignoreCase = true) ->
+                        "[ERROR] " + line.removePrefix("##[error]").removePrefix("##[ERROR]").trim()
+                    else -> line
+                }
+            }
+
+        val maxLines = 50
+        val maxChars = 4000
+
+        val relevantLines = if (sectionLines.size > maxLines) {
+            val errorKeywords = listOf(
+                "[ERROR]",
+                "FAILURE",
+                "Exception",
+                "Error:",
+                "error:",
+                "ERR!",
+                "FAIL ",
+                "COMPILATION ERROR",
+                "Tests run:",
+                "AssertionFailedError",
+            )
+            val firstErrorIdx = sectionLines.indexOfFirst { line ->
+                errorKeywords.any { kw -> line.contains(kw) }
+            }
+            if (firstErrorIdx >= 0) {
+                val startIdx = (firstErrorIdx - 3).coerceAtLeast(0)
+                sectionLines.subList(startIdx, sectionLines.size).takeLast(maxLines)
+            } else {
+                sectionLines.takeLast(maxLines)
+            }
+        } else {
+            sectionLines
+        }
+
+        val joined = relevantLines.joinToString("\n")
+        return if (joined.length > maxChars) {
+            "...\n" + joined.takeLast(maxChars).trimStart()
+        } else {
+            joined
+        }
+    }
+
+    @JvmOverloads
+    fun setTemplateStatus(
+        repoName: String,
+        isTemplate: Boolean = true,
+        org: String? = null,
+    ): GitHubRepoResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            mapOf("is_template" to isTemplate)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "PATCH",
+            path = "/repos/$targetOrg/$repoName",
+            responseType = GitHubRepoResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun importRepository(
+        targetRepoName: String,
+        sourceRepoUrl: String,
+        org: String? = null,
+    ): Int {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val (sourceOwner, sourceRepo) = parsearOwnerYRepo(sourceRepoUrl)
+
+        logger.info("Iniciando replicación atómica de '{}/{}' en '{}/{}'", sourceOwner, sourceRepo, targetOrg, targetRepoName)
+
+        val repoDetails = try {
+            getPublicRepoDetails(sourceOwner, sourceRepo)
+        } catch (ex: GitHubNotFoundException) {
+            throw RepositorioExternoNoEncontradoException(sourceOwner, sourceRepo)
+        }
+
+        if (repoDetails.private) {
+            throw RepositorioExternoPrivadoException(sourceOwner, sourceRepo)
+        }
+
+        val defaultBranch = repoDetails.defaultBranch?.takeIf { it.isNotBlank() } ?: "main"
+        val treeResponse = try {
+            getPublicRepoTree(sourceOwner, sourceRepo, defaultBranch)
+        } catch (ex: Exception) {
+            throw GitHubApiException(statusCode = 502, message = "No se pudo obtener la estructura de archivos del repositorio '$sourceOwner/$sourceRepo': ${ex.message}")
+        }
+
+        // Filtrar archivos válidos excluyendo .git/ y directorios pesados
+        val blobs = treeResponse.tree.filter { item ->
+            item.type == "blob" &&
+                item.path.isNotBlank() &&
+                !item.path.startsWith(".git/") &&
+                !esRutaDirectorioPesado(item.path)
+        }
+
+        if (blobs.isEmpty()) {
+            logger.warn("El repositorio origen '{}/{}' está vacío (sin archivos luego de filtrar).", sourceOwner, sourceRepo)
+            return 0
+        }
+
+        val maxArchivos = 300
+        if (blobs.size > maxArchivos) {
+            throw LimiteArchivosTemplateExcedidoException(sourceOwner, sourceRepo, blobs.size, maxArchivos)
+        }
+
+        logger.info("Subiendo {} archivos de forma concurrente para '{}/{}'...", blobs.size, targetOrg, targetRepoName)
+
+        val executor = Executors.newFixedThreadPool(8)
+        val treeEntries: List<CreateGitTreeItem> = try {
+            val futures = blobs.map { item ->
+                CompletableFuture.supplyAsync({
+                    val blobResponse = getBlobContent(sourceOwner, sourceRepo, item.sha)
+                    val createdBlob = createGitBlob(
+                        repoName = targetRepoName,
+                        content = blobResponse.content,
+                        encoding = "base64",
+                        org = targetOrg,
+                    )
+                    CreateGitTreeItem(
+                        path = item.path,
+                        mode = item.mode.takeIf { it.isNotBlank() } ?: "100644",
+                        type = "blob",
+                        sha = createdBlob.sha,
+                    )
+                }, executor)
+            }
+            futures.map { it.join() }
+        } catch (ex: Exception) {
+            val cause = ex.cause ?: ex
+            logger.error("Error durante la subida concurrente de blobs a '{}': {}", targetRepoName, cause.message)
+            throw GitHubApiException(statusCode = 502, message = "Error al replicar archivos de '$sourceOwner/$sourceRepo': ${cause.message}")
+        } finally {
+            executor.shutdown()
+        }
+
+        // 1. Crear Git Tree atómico con todos los archivos (base_tree = null para pisar el repo inicial)
+        val newTree = createGitTree(
+            repoName = targetRepoName,
+            tree = treeEntries,
+            baseTree = null,
+            org = targetOrg,
+        )
+
+        // 2. Obtener commit padre inicial si existe
+        val parentCommitSha = getUltimoCommit(targetRepoName, targetOrg)?.sha
+        val parents = if (!parentCommitSha.isNullOrBlank()) listOf(parentCommitSha) else emptyList()
+
+        // 3. Crear commit único
+        val newCommit = createGitCommit(
+            repoName = targetRepoName,
+            message = "feat(import): clonar repositorio desde $sourceOwner/$sourceRepo",
+            tree = newTree.sha,
+            parents = parents,
+            org = targetOrg,
+        )
+
+        // 4. Actualizar ref de la rama principal
+        val targetBranch: String = try {
+            val repo = getRepository(targetRepoName, targetOrg)
+            repo.defaultBranch?.takeIf { it.isNotBlank() } ?: "main"
+        } catch (_: Exception) {
+            "main"
+        }
+
+        updateBranchRef(
+            repoName = targetRepoName,
+            branch = targetBranch,
+            sha = newCommit.sha,
+            force = true,
+            org = targetOrg,
+        )
+
+        logger.info("Importación atómica completada para '{}'. Se importaron {} archivos en 1 único commit atómico (SHA: {}).",
+            targetRepoName, treeEntries.size, newCommit.sha)
+        return treeEntries.size
+    }
+
+    private fun esRutaDirectorioPesado(path: String): Boolean {
+        val lower = path.lowercase().replace('\\', '/')
+        val carpetasPesadas = listOf(
+            "node_modules/", "target/", "build/", ".gradle/", ".idea/", ".vscode/",
+            "dist/", "out/", "bin/", "obj/", ".venv/", "venv/", "env/",
+            "__pycache__/", ".pytest_cache/", ".next/", ".nuxt/", "vendor/", "coverage/",
+        )
+        return carpetasPesadas.any { carpeta ->
+            lower.startsWith(carpeta) || lower.contains("/$carpeta")
+        }
+    }
+
+    fun parsearOwnerYRepo(url: String): Pair<String, String> {
+        val trimmed = url.trim()
+        val rawPath = when {
+            trimmed.startsWith("https://github.com/") -> trimmed.removePrefix("https://github.com/")
+            trimmed.startsWith("http://github.com/") -> trimmed.removePrefix("http://github.com/")
+            trimmed.startsWith("git@github.com:") -> trimmed.removePrefix("git@github.com:")
+            else -> throw UrlRepositorioInvalidaException(url)
+        }
+
+        val clean = rawPath.removeSuffix(".git").trim('/')
+        val parts = clean.split("/")
+        if (parts.size != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            throw UrlRepositorioInvalidaException(url)
+        }
+        return Pair(parts[0].trim(), parts[1].trim())
+    }
+
+    fun getPublicRepoDetails(owner: String, repo: String): GitHubPublicRepoDetails {
+        return gitHubAppClient.executeInstallationRequest(
+            method = "GET",
+            path = "/repos/$owner/$repo",
+            responseType = GitHubPublicRepoDetails::class.java,
+        )
+    }
+
+    fun getPublicRepoTree(owner: String, repo: String, treeShaOrBranch: String): GitHubGitTreeResponse {
+        return gitHubAppClient.executeInstallationRequest(
+            method = "GET",
+            path = "/repos/$owner/$repo/git/trees/$treeShaOrBranch?recursive=1",
+            responseType = GitHubGitTreeResponse::class.java,
+        )
+    }
+
+    fun getBlobContent(owner: String, repo: String, blobSha: String): GitHubBlobContentResponse {
+        return gitHubAppClient.executeInstallationRequest(
+            method = "GET",
+            path = "/repos/$owner/$repo/git/blobs/$blobSha",
+            responseType = GitHubBlobContentResponse::class.java,
+        )
+    }
+
+    @JvmOverloads
+    fun createGitBlob(
+        repoName: String,
+        content: String,
+        encoding: String = "base64",
+        org: String? = null,
+    ): GitHubGitCreateResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            CreateGitBlobRequest(content = content, encoding = encoding)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "POST",
+            path = "/repos/$targetOrg/$repoName/git/blobs",
+            responseType = GitHubGitCreateResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun createGitTree(
+        repoName: String,
+        tree: List<CreateGitTreeItem>,
+        baseTree: String? = null,
+        org: String? = null,
+    ): GitHubGitCreateResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            CreateGitTreeRequest(tree = tree, base_tree = baseTree)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "POST",
+            path = "/repos/$targetOrg/$repoName/git/trees",
+            responseType = GitHubGitCreateResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun createGitCommit(
+        repoName: String,
+        message: String,
+        tree: String,
+        parents: List<String> = emptyList(),
+        org: String? = null,
+    ): GitHubGitCreateResponse {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            CreateGitCommitRequest(message = message, tree = tree, parents = parents)
+        )
+        return gitHubAppClient.executeInstallationRequest(
+            method = "POST",
+            path = "/repos/$targetOrg/$repoName/git/commits",
+            responseType = GitHubGitCreateResponse::class.java,
+            body = requestBody,
+        )
+    }
+
+    @JvmOverloads
+    fun updateBranchRef(
+        repoName: String,
+        branch: String = "main",
+        sha: String,
+        force: Boolean = true,
+        org: String? = null,
+    ) {
+        val targetOrg = org?.takeIf { it.isNotBlank() } ?: requiredOrganization()
+        val requestBody = objectMapper.writeValueAsString(
+            UpdateGitRefRequest(sha = sha, force = force)
+        )
+        try {
+            gitHubAppClient.executeInstallationRequest(
+                method = "PATCH",
+                path = "/repos/$targetOrg/$repoName/git/refs/heads/$branch",
+                responseType = JsonNode::class.java,
+                body = requestBody,
+            )
+        } catch (_: GitHubNotFoundException) {
+            val createRefBody = objectMapper.writeValueAsString(
+                CreateGitRefRequest(ref = "refs/heads/$branch", sha = sha)
+            )
+            gitHubAppClient.executeInstallationRequest(
+                method = "POST",
+                path = "/repos/$targetOrg/$repoName/git/refs",
+                responseType = JsonNode::class.java,
+                body = createRefBody,
+            )
+        }
+    }
+
     private fun requiredOrganization(): String = properties.organization?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw IllegalStateException("github.app.organization must be configured with the GitHub Organization name")
 }
@@ -277,6 +926,11 @@ data class CreateRepoRequest(
     @JsonProperty("private") val private: Boolean = true,
     @JsonProperty("auto_init") val autoInit: Boolean = true,
     @JsonProperty("is_template") val isTemplate: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class ArchiveRepoRequest(
+    @JsonProperty("archived") val archived: Boolean = true,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -296,7 +950,9 @@ data class GitHubRepoResponse(
     @JsonProperty("html_url") val htmlUrl: String = "",
     @JsonProperty("clone_url") val cloneUrl: String = "",
     @JsonProperty("is_template") val isTemplate: Boolean = false,
+    @JsonProperty("archived") val archived: Boolean = false,
     @JsonProperty("description") val description: String? = null,
+    @JsonProperty("default_branch") val defaultBranch: String? = "main",
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -354,8 +1010,42 @@ data class GitHubWorkflowRunsResponse(
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class GitHubWorkflowRunItem(
+    @JsonProperty("id") val id: Long = 0,
     @JsonProperty("status") val status: String = "",
     @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("html_url") val htmlUrl: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowJobsResponse(
+    @JsonProperty("total_count") val totalCount: Int = 0,
+    @JsonProperty("jobs") val jobs: List<GitHubWorkflowJobItem> = emptyList(),
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowJobItem(
+    @JsonProperty("id") val id: Long = 0,
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("status") val status: String = "",
+    @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("html_url") val htmlUrl: String? = null,
+    @JsonProperty("steps") val steps: List<GitHubWorkflowStepItem> = emptyList(),
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubWorkflowStepItem(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("status") val status: String = "",
+    @JsonProperty("conclusion") val conclusion: String? = null,
+    @JsonProperty("number") val number: Int = 0,
+)
+
+data class DiagnosticoCIInfo(
+    val runId: Long,
+    val jobName: String? = null,
+    val etapaFallida: String,
+    val logError: String,
+    val runUrl: String,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -376,4 +1066,124 @@ data class GitHubReleaseResponse(
     @JsonProperty("name") val name: String? = null,
     @JsonProperty("html_url") val htmlUrl: String = "",
     @JsonProperty("created_at") val createdAt: String = "",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateOrUpdateFileRequest(
+    @JsonProperty("message") val message: String,
+    @JsonProperty("content") val content: String,
+    @JsonProperty("sha") val sha: String? = null,
+    @JsonProperty("branch") val branch: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubFileContentResponse(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("encoding") val encoding: String? = null,
+    @JsonProperty("content") val content: String? = null,
+) {
+    fun decodedContent(): String {
+        val raw = content?.takeIf { it.isNotBlank() } ?: return ""
+        return try {
+            String(Base64.getMimeDecoder().decode(raw), StandardCharsets.UTF_8)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubContentUpdateResponse(
+    @JsonProperty("content") val content: GitHubFileContentInfo? = null,
+    @JsonProperty("commit") val commit: GitHubContentCommitInfo? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubFileContentInfo(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("sha") val sha: String = "",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubContentCommitInfo(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("message") val message: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubGitTreeResponse(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("tree") val tree: List<GitHubTreeItem> = emptyList(),
+    @JsonProperty("truncated") val truncated: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubTreeItem(
+    @JsonProperty("path") val path: String = "",
+    @JsonProperty("mode") val mode: String = "",
+    @JsonProperty("type") val type: String = "",
+    @JsonProperty("sha") val sha: String = "",
+)
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubPublicRepoDetails(
+    @JsonProperty("default_branch") val defaultBranch: String? = "main",
+    @JsonProperty("private") val private: Boolean = false,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubBlobContentResponse(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("content") val content: String = "",
+    @JsonProperty("encoding") val encoding: String = "base64",
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateGitBlobRequest(
+    @JsonProperty("content") val content: String,
+    @JsonProperty("encoding") val encoding: String = "base64",
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GitHubGitCreateResponse(
+    @JsonProperty("sha") val sha: String = "",
+    @JsonProperty("url") val url: String? = null,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateGitTreeItem(
+    @JsonProperty("path") val path: String,
+    @JsonProperty("mode") val mode: String = "100644",
+    @JsonProperty("type") val type: String = "blob",
+    @JsonProperty("sha") val sha: String,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateGitTreeRequest(
+    @JsonProperty("tree") val tree: List<CreateGitTreeItem>,
+    @JsonProperty("base_tree") val base_tree: String? = null,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateGitCommitRequest(
+    @JsonProperty("message") val message: String,
+    @JsonProperty("tree") val tree: String,
+    @JsonProperty("parents") val parents: List<String> = emptyList(),
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class UpdateGitRefRequest(
+    @JsonProperty("sha") val sha: String,
+    @JsonProperty("force") val force: Boolean = true,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class CreateGitRefRequest(
+    @JsonProperty("ref") val ref: String,
+    @JsonProperty("sha") val sha: String,
 )
