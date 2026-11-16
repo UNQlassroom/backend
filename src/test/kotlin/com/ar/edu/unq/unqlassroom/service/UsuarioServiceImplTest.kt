@@ -1,8 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.service
 
-import com.ar.edu.unq.unqlassroom.exception.NombreUsuarioInvalidoException
-import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
-import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.UsuarioServiceImpl
@@ -173,6 +171,134 @@ class UsuarioServiceImplTest {
         assertThrows<NombreUsuarioInvalidoException> {
             usuarioService.actualizarNombreCompleto("usuario2", "   ", "Pérez")
         }
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    // --- Tests para actualizarDatos ---
+
+    @Test
+    fun `actualizarDatos updates email, dni and nombreCompleto when all provided and valid`() {
+        val usuario = Usuario(id = 10L, username = "user1")
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario)
+        `when`(usuarioRepository.findByEmailIgnoreCase("carlos@santana.com.ar")).thenReturn(null)
+        `when`(usuarioRepository.findByDni("35123456")).thenReturn(null)
+        `when`(usuarioRepository.save(usuario)).thenReturn(usuario)
+
+        val result = usuarioService.actualizarDatos(
+            username = "user1",
+            nombre = "Carlos",
+            apellido = "Santana",
+            email = "carlos@santana.com.ar",
+            dni = "35123456",
+        )
+
+        assertEquals("carlos@santana.com.ar", result.email)
+        assertEquals("35123456", result.dni)
+        assertEquals("Santana, Carlos", result.nombreCompleto)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `actualizarDatos succeeds when user keeps their current email and dni`() {
+        val usuario = Usuario(
+            id = 10L,
+            username = "user1",
+            email = "existente@correo.com",
+            dni = "12345678",
+            nombreCompleto = "Gómez, Ana",
+        )
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario)
+        `when`(usuarioRepository.findByEmailIgnoreCase("existente@correo.com")).thenReturn(usuario)
+        `when`(usuarioRepository.findByDni("12345678")).thenReturn(usuario)
+        `when`(usuarioRepository.save(usuario)).thenReturn(usuario)
+
+        val result = usuarioService.actualizarDatos(
+            username = "user1",
+            nombre = "Ana",
+            apellido = "Gómez",
+            email = "existente@correo.com",
+            dni = "12345678",
+        )
+
+        assertEquals("existente@correo.com", result.email)
+        assertEquals("12345678", result.dni)
+        verify(usuarioRepository).save(usuario)
+    }
+
+    @Test
+    fun `actualizarDatos throws EmailDuplicadoException when email is registered in another account`() {
+        val usuario1 = Usuario(id = 10L, username = "user1")
+        val usuario2 = Usuario(id = 20L, username = "user2", email = "repetido@correo.com")
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario1)
+        `when`(usuarioRepository.findByEmailIgnoreCase("repetido@correo.com")).thenReturn(usuario2)
+
+        val ex = assertThrows<EmailDuplicadoException> {
+            usuarioService.actualizarDatos(
+                username = "user1",
+                nombre = "Juan",
+                apellido = "Pérez",
+                email = "repetido@correo.com",
+                dni = "12345678",
+            )
+        }
+        assertEquals("EMAIL_DUPLICADO", ex.errorCode)
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `actualizarDatos throws DniDuplicadoException when dni is registered in another account`() {
+        val usuario1 = Usuario(id = 10L, username = "user1")
+        val usuario2 = Usuario(id = 20L, username = "user2", dni = "40123456")
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario1)
+        `when`(usuarioRepository.findByEmailIgnoreCase("libre@correo.com")).thenReturn(null)
+        `when`(usuarioRepository.findByDni("40123456")).thenReturn(usuario2)
+
+        val ex = assertThrows<DniDuplicadoException> {
+            usuarioService.actualizarDatos(
+                username = "user1",
+                nombre = "Juan",
+                apellido = "Pérez",
+                email = "libre@correo.com",
+                dni = "40123456",
+            )
+        }
+        assertEquals("DNI_DUPLICADO", ex.errorCode)
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `actualizarDatos throws EmailInvalidoException when email is not ending in com or com ar`() {
+        val usuario = Usuario(id = 10L, username = "user1")
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario)
+
+        val ex = assertThrows<EmailInvalidoException> {
+            usuarioService.actualizarDatos(
+                username = "user1",
+                nombre = "Juan",
+                apellido = "Pérez",
+                email = "juan@unq.edu.ar",
+                dni = "12345678",
+            )
+        }
+        assertEquals("EMAIL_INVALIDO", ex.errorCode)
+        verify(usuarioRepository, never()).save(any())
+    }
+
+    @Test
+    fun `actualizarDatos throws DniInvalidoException when dni has invalid length`() {
+        val usuario = Usuario(id = 10L, username = "user1")
+        `when`(usuarioRepository.findByUsername("user1")).thenReturn(usuario)
+
+        val ex = assertThrows<DniInvalidoException> {
+            usuarioService.actualizarDatos(
+                username = "user1",
+                nombre = "Juan",
+                apellido = "Pérez",
+                email = "juan@correo.com",
+                dni = "123456",
+            )
+        }
+        assertEquals("DNI_INVALIDO", ex.errorCode)
         verify(usuarioRepository, never()).save(any())
     }
 }

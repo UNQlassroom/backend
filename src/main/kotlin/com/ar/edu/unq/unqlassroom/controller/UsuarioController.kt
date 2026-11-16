@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.controller
 
+import com.ar.edu.unq.unqlassroom.dto.usuario.request.ActualizarDatosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.usuario.request.ActualizarNombreRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.usuario.response.UsuarioResponseDTO
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
@@ -18,6 +19,21 @@ class UsuarioController(
     fun obtenerUsuarioActual(authentication: Authentication): ResponseEntity<UsuarioResponseDTO> {
         val usuario = usuarioService.obtenerUsuario(authentication.name)
         return ResponseEntity.ok(UsuarioResponseDTO.desdeModelo(usuario))
+    }
+
+    @PutMapping("/me/datos")
+    fun actualizarDatos(
+        authentication: Authentication,
+        @RequestBody @Valid request: ActualizarDatosRequestDTO,
+    ): ResponseEntity<UsuarioResponseDTO> {
+        val usuarioActualizado = usuarioService.actualizarDatos(
+            username = authentication.name,
+            nombre = request.nombre,
+            apellido = request.apellido,
+            email = request.email,
+            dni = request.dni,
+        )
+        return ResponseEntity.ok(UsuarioResponseDTO.desdeModelo(usuarioActualizado))
     }
 
     @PutMapping("/me/nombre")

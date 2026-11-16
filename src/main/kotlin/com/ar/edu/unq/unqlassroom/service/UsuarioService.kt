@@ -7,4 +7,11 @@ interface UsuarioService {
     fun obtenerOCrearAlumno(username: String): Usuario
     fun obtenerUsuario(username: String): Usuario
     fun actualizarNombreCompleto(username: String, nombre: String, apellido: String): Usuario
+    fun actualizarDatos(
+        username: String,
+        nombre: String,
+        apellido: String,
+        email: String,
+        dni: String,
+    ): Usuario
 }

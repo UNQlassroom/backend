@@ -1,7 +1,6 @@
 ﻿package com.ar.edu.unq.unqlassroom.service.impl
 
-import com.ar.edu.unq.unqlassroom.exception.UsuarioNoEsDocenteException
-import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
+import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
@@ -39,6 +38,37 @@ class UsuarioServiceImpl(
     override fun actualizarNombreCompleto(username: String, nombre: String, apellido: String): Usuario {
         val usuario = obtenerUsuario(username)
         usuario.actualizarNombreCompleto(nombre = nombre, apellido = apellido)
+        return usuarioRepository.save(usuario)
+    }
+
+    override fun actualizarDatos(
+        username: String,
+        nombre: String,
+        apellido: String,
+        email: String,
+        dni: String,
+    ): Usuario {
+        val usuario = obtenerUsuario(username)
+
+        // Las validaciones de formato y reglas de negocio de los campos se ejecutan en el modelo Usuario
+        usuario.actualizarDatos(
+            nombre = nombre,
+            apellido = apellido,
+            email = email,
+            dni = dni,
+        )
+
+        // La validación de unicidad entre diferentes usuarios pertenece a la capa de servicio
+        val usuarioConEmail = usuarioRepository.findByEmailIgnoreCase(usuario.email!!)
+        if (usuarioConEmail != null && usuarioConEmail.id != usuario.id) {
+            throw EmailDuplicadoException()
+        }
+
+        val usuarioConDni = usuarioRepository.findByDni(usuario.dni!!)
+        if (usuarioConDni != null && usuarioConDni.id != usuario.id) {
+            throw DniDuplicadoException()
+        }
+
         return usuarioRepository.save(usuario)
     }
 }
