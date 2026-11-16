@@ -50,24 +50,25 @@ class UsuarioServiceImpl(
     ): Usuario {
         val usuario = obtenerUsuario(username)
 
-        // Las validaciones de formato y reglas de negocio de los campos se ejecutan en el modelo Usuario
-        usuario.actualizarDatos(
-            nombre = nombre,
-            apellido = apellido,
-            email = email,
-            dni = dni,
-        )
+        val emailTrimmed = email.trim()
+        val dniTrimmed = dni.trim()
 
-        // La validación de unicidad entre diferentes usuarios pertenece a la capa de servicio
-        val usuarioConEmail = usuarioRepository.findByEmailIgnoreCase(usuario.email!!)
+        val usuarioConEmail = usuarioRepository.findByEmailIgnoreCase(emailTrimmed)
         if (usuarioConEmail != null && usuarioConEmail.id != usuario.id) {
             throw EmailDuplicadoException()
         }
 
-        val usuarioConDni = usuarioRepository.findByDni(usuario.dni!!)
+        val usuarioConDni = usuarioRepository.findByDni(dniTrimmed)
         if (usuarioConDni != null && usuarioConDni.id != usuario.id) {
             throw DniDuplicadoException()
         }
+
+        usuario.actualizarDatos(
+            nombre = nombre,
+            apellido = apellido,
+            email = emailTrimmed,
+            dni = dniTrimmed,
+        )
 
         return usuarioRepository.save(usuario)
     }
