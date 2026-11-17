@@ -7,6 +7,8 @@ data class AlumnoResponseDTO(
     val role: String,
     val state: String,
     val nombreCompleto: String? = null,
+    val email: String? = null,
+    val dni: String? = null,
 ) {
     companion object {
         fun desdeModelo(inscripcion: Inscripcion): AlumnoResponseDTO = AlumnoResponseDTO(
@@ -14,6 +16,8 @@ data class AlumnoResponseDTO(
             role = inscripcion.githubRole,
             state = inscripcion.usuario.githubState,
             nombreCompleto = inscripcion.usuario.nombreCompleto,
+            email = inscripcion.usuario.email,
+            dni = inscripcion.usuario.dni,
         )
     }
 }

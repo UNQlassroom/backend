@@ -7,6 +7,7 @@ data class UsuarioResponseDTO(
     val username: String,
     val esDocente: Boolean = false,
     val email: String? = null,
+    val dni: String? = null,
     val nombreCompleto: String? = null,
     val activo: Boolean = true,
 ) {
@@ -16,6 +17,7 @@ data class UsuarioResponseDTO(
             username = usuario.username,
             esDocente = usuario.esDocente,
             email = usuario.email,
+            dni = usuario.dni,
             nombreCompleto = usuario.nombreCompleto,
             activo = activo,
         )

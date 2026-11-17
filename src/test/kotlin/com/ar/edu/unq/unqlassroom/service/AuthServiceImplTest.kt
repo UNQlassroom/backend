@@ -85,7 +85,6 @@ class AuthServiceImplTest {
         assertEquals("alumno_nuevo", response.user?.username)
         assertEquals(false, response.user?.esDocente)
         assertNull(response.user?.nombreCompleto)
-        assertEquals("alumno@unq.edu.ar", response.user?.email)
     }
 
     @Test
@@ -151,7 +150,7 @@ class AuthServiceImplTest {
 
         assertEquals("jwt-token-docente", response.token)
         assertEquals(false, response.user?.esDocente)
-        assertEquals("profe.actualizado@unq.edu.ar", existingDocente.email)
+        assertEquals("profe.viejo@unq.edu.ar", existingDocente.email)
         assertEquals("Profesor", response.user?.nombreCompleto)
         verifyNoInteractions(gitHubOrgService)
     }

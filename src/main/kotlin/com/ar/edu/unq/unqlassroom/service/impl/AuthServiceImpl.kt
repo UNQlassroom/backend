@@ -33,11 +33,9 @@ class AuthServiceImpl(
         val usuario = usuarioExistente ?: Usuario(
             username = perfil.login,
             esDocente = dto.esDocente == true,
-            email = perfil.email,
             githubState = "pending",
         )
 
-        perfil.email?.let { usuario.email = it }
         usuario.esDocente = dto.esDocente == true
 
         val org = properties.organization?.trim().orEmpty()
