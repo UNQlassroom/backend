@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service.impl
 
+import com.ar.edu.unq.unqlassroom.dto.curso.response.ArchivoExportadoDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Curso
@@ -9,6 +10,7 @@ import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.AsyncService
+import com.ar.edu.unq.unqlassroom.service.CursoExportService
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import com.ar.edu.unq.unqlassroom.service.SseNotificationService
 import com.ar.edu.unq.unqlassroom.service.UsuarioService
@@ -27,6 +29,7 @@ class CursoServiceImpl(
     private val usuarioRepository: UsuarioRepository,
     private val inscripcionRepository: InscripcionRepository,
     private val gitHubOrgService: GitHubOrgService,
+    private val cursoExportService: CursoExportService,
     private val sseNotificationService: SseNotificationService? = null,
     private val asyncService: AsyncService? = null,
 ) : CursoService {
@@ -78,9 +81,7 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede agregar alumnos")
-        }
+        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede agregar alumnos")
         curso.validarNoArchivado()
 
         val distinctUsernames = usernames
@@ -155,9 +156,7 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede dar de baja alumnos")
-        }
+        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede dar de baja alumnos")
         curso.validarNoArchivado()
 
         val normalizedUsername = alumnoUsername.trim()
@@ -195,11 +194,17 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede archivarlo")
-        }
+        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede archivarlo")
 
         return ejecutarArchivadoDeCurso(curso)
+    }
+
+    override fun exportarCurso(id: Long, solicitanteUsername: String): ArchivoExportadoDTO {
+        val curso = cursoRepository.findById(id).orElseThrow {
+            CursoNotFoundException()
+        }
+        curso.validarEsOwner(solicitanteUsername)
+        return cursoExportService.exportarPlanillaCurso(curso)
     }
 
     @Scheduled(cron = "\${cursos.archivado-automatico.cron:0 0 3 * * *}")
