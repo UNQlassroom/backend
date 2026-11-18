@@ -27,6 +27,32 @@ class CursoTest {
     }
 
     @Test
+    fun `validarEsOwner throws NoEsDocenteDelCursoException when user is not owner`() {
+        val docente = Usuario(id = 1L, username = "profe_titular", esDocente = true)
+        val curso = Curso(materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        assertThrows<NoEsDocenteDelCursoException> {
+            curso.validarEsOwner("otro_profe")
+        }
+    }
+
+    @Test
+    fun `validarEsOwner does not throw when user is owner`() {
+        val docente = Usuario(id = 1L, username = "profe_titular", esDocente = true)
+        val curso = Curso(materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = docente)
+
+        assertDoesNotThrow {
+            curso.validarEsOwner("profe_titular")
+        }
+    }
+
+    @Test
+    fun `generarNombreArchivoExportacion normalizes accents, spaces and special characters`() {
+        val curso = Curso(materia = "Programación Concurrente & Algoritmos 1", anio = 2026, semestre = 1, comision = 2)
+        assertEquals("curso_programacion_concurrente_algoritmos_1_2026_c2_unqlassroom.xlsx", curso.generarNombreArchivoExportacion())
+    }
+
+    @Test
     fun `asignarOwner sets owner when user is docente and throws when not`() {
         val docente = Usuario(id = 1L, username = "profe_titular", esDocente = true)
         val noDocente = Usuario(id = 2L, username = "alumno", esDocente = false)
