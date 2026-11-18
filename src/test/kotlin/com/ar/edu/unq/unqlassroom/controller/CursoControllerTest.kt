@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.ArchivoExportadoDTO
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import com.ar.edu.unq.unqlassroom.model.Usuario
@@ -24,6 +25,8 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -255,5 +258,25 @@ class CursoControllerTest {
             .andExpect(jsonPath("$.id").value(1))
             .andExpect(jsonPath("$.materia").value("Estructuras"))
             .andExpect(jsonPath("$.ownerUsername").value("profe"))
+    }
+
+    @Test
+    fun `exportarCurso endpoint returns 200 with file headers and content`() {
+        val auth = UsernamePasswordAuthenticationToken("profe", null, listOf(SimpleGrantedAuthority("ROLE_DOCENTE")))
+        val archivo = ArchivoExportadoDTO(
+            nombreArchivo = "curso_estructuras_2026_c1_unqlassroom.xlsx",
+            contenido = "dummy excel bytes".toByteArray()
+        )
+        `when`(cursoService.exportarCurso(1L, "profe")).thenReturn(archivo)
+
+        mockMvc.perform(
+            post("/cursos/1/exportar")
+                .principal(auth)
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().string("Content-Disposition", "attachment; filename=\"curso_estructuras_2026_c1_unqlassroom.xlsx\""))
+            .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .andExpect(header().string("Cache-Control", "no-cache, no-store, must-revalidate"))
+            .andExpect(content().bytes(archivo.contenido))
     }
 }

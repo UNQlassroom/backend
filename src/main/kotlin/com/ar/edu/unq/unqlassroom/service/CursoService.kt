@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.service
 
+import com.ar.edu.unq.unqlassroom.dto.curso.response.ArchivoExportadoDTO
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
 import java.time.LocalDate
@@ -21,4 +22,6 @@ interface CursoService {
     fun archivarCurso(cursoId: Long, solicitanteUsername: String): Curso
 
     fun archivarCursosVencidosAutomaticamente(fechaActual: LocalDate = LocalDate.now())
+
+    fun exportarCurso(id: Long, solicitanteUsername: String): ArchivoExportadoDTO
 }

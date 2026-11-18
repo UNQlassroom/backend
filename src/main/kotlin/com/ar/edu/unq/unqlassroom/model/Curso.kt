@@ -1,6 +1,7 @@
 package com.ar.edu.unq.unqlassroom.model
 
 import com.ar.edu.unq.unqlassroom.exception.*
+import com.ar.edu.unq.unqlassroom.util.toRepoSlug
 import jakarta.persistence.*
 import java.time.LocalDate
 
@@ -59,6 +60,15 @@ class Curso (
     fun esOwner(username: String?): Boolean =
         owner?.username != null && owner?.username == username && (owner?.esDocente == true)
 
+    fun validarEsOwner(
+        username: String?,
+        mensaje: String = "Solo el docente a cargo del curso puede realizar esta acción"
+    ) {
+        if (!esOwner(username)) {
+            throw NoEsDocenteDelCursoException(mensaje)
+        }
+    }
+
     fun asignarOwner(docente: Usuario) {
         if (!docente.esDocente) {
             throw UsuarioNoEsDocenteException(docente.username)
@@ -97,4 +107,7 @@ class Curso (
         }.distinct()
 
     fun generarDescripcion(): String = "Curso de $materia - Año $anio - Semestre $semestre - Comisión $comision"
+
+    fun generarNombreArchivoExportacion(): String =
+        "curso_${materia.toRepoSlug()}_${anio}_c${comision}_unqlassroom.xlsx"
 }

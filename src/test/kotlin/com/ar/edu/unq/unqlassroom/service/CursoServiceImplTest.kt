@@ -2,6 +2,7 @@ package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.ArchivoExportadoDTO
 import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgMembershipResponse
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
@@ -16,6 +17,7 @@ import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
 import com.ar.edu.unq.unqlassroom.service.impl.CursoServiceImpl
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -56,6 +58,9 @@ class CursoServiceImplTest {
     @Mock
     private lateinit var asyncService: AsyncService
 
+    @Mock
+    private lateinit var cursoExportService: CursoExportService
+
     private lateinit var cursoService: CursoServiceImpl
 
     @BeforeEach
@@ -66,6 +71,7 @@ class CursoServiceImplTest {
             usuarioRepository = usuarioRepository,
             inscripcionRepository = inscripcionRepository,
             gitHubOrgService = gitHubOrgService,
+            cursoExportService = cursoExportService,
             sseNotificationService = sseNotificationService,
             asyncService = asyncService,
         )
@@ -741,5 +747,43 @@ class CursoServiceImplTest {
         assertEquals(1, resultado.size)
         assertTrue(resultado[0].activa)
         assertEquals(5L, resultado[0].id)
+    }
+
+    @Test
+    fun `exportarCurso throws CursoNotFoundException when curso does not exist`() {
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.empty())
+
+        assertThrows<CursoNotFoundException> {
+            cursoService.exportarCurso(1L, "profe_test")
+        }
+    }
+
+    @Test
+    fun `exportarCurso throws NoEsDocenteDelCursoException when caller is not owner`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+
+        assertThrows<NoEsDocenteDelCursoException> {
+            cursoService.exportarCurso(1L, "otro_profe")
+        }
+    }
+
+    @Test
+    fun `exportarCurso returns ArchivoExportadoDTO when caller is owner`() {
+        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val esperado = ArchivoExportadoDTO(
+            nombreArchivo = "curso_estructuras_2026_c1_unqlassroom.xlsx",
+            contenido = byteArrayOf(1, 2, 3)
+        )
+        `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
+        `when`(cursoExportService.exportarPlanillaCurso(curso)).thenReturn(esperado)
+
+        val resultado = cursoService.exportarCurso(1L, "profe_test")
+
+        assertEquals(esperado.nombreArchivo, resultado.nombreArchivo)
+        assertArrayEquals(esperado.contenido, resultado.contenido)
+        verify(cursoExportService).exportarPlanillaCurso(curso)
     }
 }
