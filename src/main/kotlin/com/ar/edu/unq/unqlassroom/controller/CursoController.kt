@@ -6,6 +6,8 @@ import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoAlumnosResponseDTO
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.validation.Valid
+import org.springframework.core.io.ByteArrayResource
+import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -92,5 +94,21 @@ class CursoController(
         val inscripciones = cursoService.obtenerAlumnos(id, authentication.name)
         val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
         return ResponseEntity.ok(response)
+    }
+
+    @PostMapping("/{id}/exportar")
+    fun exportarCurso(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<ByteArrayResource> {
+        val archivo = cursoService.exportarCurso(id, authentication.name)
+        val resource = ByteArrayResource(archivo.contenido)
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${archivo.nombreArchivo}\"")
+            .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+            .contentLength(archivo.contenido.size.toLong())
+            .body(resource)
     }
 }

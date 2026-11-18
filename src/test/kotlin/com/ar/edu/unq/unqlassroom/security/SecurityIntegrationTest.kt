@@ -3,6 +3,7 @@ package com.ar.edu.unq.unqlassroom.security
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.CalificarAsignacionRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.AsignacionResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.ArchivoExportadoDTO
 import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
@@ -294,6 +295,41 @@ class SecurityIntegrationTest {
                 .header("Authorization", "Bearer $token")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
+        )
+            .andExpect(status().isOk)
+    }
+
+    @Test
+    fun `POST exportar curso without token returns 401 Unauthorized`() {
+        mockMvc.perform(
+            post("/cursos/10/exportar")
+        )
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `POST exportar curso with alumno token returns 403 Forbidden`() {
+        val token = jwtService.generateToken(alumno)
+
+        mockMvc.perform(
+            post("/cursos/10/exportar")
+                .header("Authorization", "Bearer $token")
+        )
+            .andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `POST exportar curso with docente token returns 200 OK`() {
+        val token = jwtService.generateToken(docente)
+        val archivo = ArchivoExportadoDTO(
+            nombreArchivo = "curso_so_2026_c1_unqlassroom.xlsx",
+            contenido = byteArrayOf(1, 2, 3)
+        )
+        `when`(cursoService.exportarCurso(10L, "profe")).thenReturn(archivo)
+
+        mockMvc.perform(
+            post("/cursos/10/exportar")
+                .header("Authorization", "Bearer $token")
         )
             .andExpect(status().isOk)
     }
