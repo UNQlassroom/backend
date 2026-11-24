@@ -9,8 +9,8 @@ data class CursoResponseDTO(
     val semestre: Int,
     val comision: Int,
     val descripcion: String? = null,
-    val ownerUsername: String? = null,
     val archivado: Boolean = false,
+    val docentes: List<DocenteResponseDTO> = emptyList(),
 ) {
     companion object {
         fun desdeModelo(curso: Curso): CursoResponseDTO {
@@ -21,8 +21,8 @@ data class CursoResponseDTO(
                 semestre = curso.semestre,
                 comision = curso.comision,
                 descripcion = curso.descripcion,
-                ownerUsername = curso.owner?.username,
                 archivado = curso.archivado,
+                docentes = curso.docentes.map { DocenteResponseDTO.desdeModelo(it) },
             )
         }
     }
