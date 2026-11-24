@@ -5,7 +5,7 @@ import com.ar.edu.unq.unqlassroom.exception.*
 import com.ar.edu.unq.unqlassroom.integration.github.service.GitHubOrgService
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
-import com.ar.edu.unq.unqlassroom.model.TipoAsignacion
+import com.ar.edu.unq.unqlassroom.model.Usuario
 import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -36,10 +36,9 @@ class CursoServiceImpl(
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    override fun crearCurso(curso: Curso, ownerUsername: String): Curso {
-        val docente = usuarioService.obtenerDocente(ownerUsername)
-        if (cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
-                docente.username,
+    override fun crearCurso(curso: Curso, creadorUsername: String): Curso {
+        val docente = usuarioService.obtenerDocente(creadorUsername)
+        if (cursoRepository.existsByMateriaIgnoreCaseAndAnioAndSemestreAndComision(
                 curso.materia,
                 curso.anio,
                 curso.semestre,
@@ -48,7 +47,7 @@ class CursoServiceImpl(
         ) {
             throw CursoDuplicadoException(curso.materia, curso.anio, curso.semestre, curso.comision)
         }
-        curso.asignarOwner(docente)
+        curso.agregarDocente(docente)
         return cursoRepository.save(curso)
     }
 
@@ -72,6 +71,112 @@ class CursoServiceImpl(
         return curso
     }
 
+    override fun agregarDocentes(
+        cursoId: Long,
+        usernames: List<String>,
+        solicitanteUsername: String
+    ): List<Usuario> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden agregar docentes")
+        curso.validarNoArchivado()
+
+        val distinctUsernames = usernames
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+
+        val docentesDuplicados = distinctUsernames.filter { rawUsername ->
+            curso.esDocente(rawUsername)
+        }
+        if (docentesDuplicados.isNotEmpty()) {
+            throw DocenteDuplicadoException(docentesDuplicados)
+        }
+
+        val alumnosInscriptosActivos = inscripcionRepository.findByCursoIdAndActivaTrue(cursoId)
+            .map { it.usuario.username.lowercase() }
+            .toSet()
+        val docentesQueSonAlumnos = distinctUsernames.filter { rawUsername ->
+            alumnosInscriptosActivos.contains(rawUsername.lowercase())
+        }
+        if (docentesQueSonAlumnos.isNotEmpty()) {
+            throw DocenteEsAlumnoDelCursoException(docentesQueSonAlumnos)
+        }
+
+        val usernamesCanonicos = distinctUsernames.associateWith { gitHubOrgService.obtenerUsernameCanonico(it) }
+        val usuariosInexistentes = usernamesCanonicos.filterValues { it == null }.keys.toList()
+        if (usuariosInexistentes.isNotEmpty()) {
+            throw UsuariosGitHubNoEncontradosException(usuariosInexistentes)
+        }
+
+        val docentesAgregados = distinctUsernames.map { rawUsername ->
+            val username = usernamesCanonicos.getValue(rawUsername)!!
+            val docente = usuarioService.obtenerOCrearDocente(username)
+
+            val membership = gitHubOrgService.invitarMiembro(username, role = "member")
+            if (docente.githubState != membership.state) {
+                docente.githubState = membership.state
+                usuarioRepository.save(docente)
+            }
+
+            curso.agregarDocente(docente)
+            docente
+        }
+
+        cursoRepository.save(curso)
+
+        val docentesUsernames = curso.docentes.map { it.username }
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarMiembroCursoActualizado(
+                cursoId = cursoId,
+                docentesUsernames = docentesUsernames,
+                alumnosUsernames = emptyList()
+            )
+        }
+
+        return curso.docentes
+    }
+
+    override fun obtenerDocentes(cursoId: Long, solicitanteUsername: String): List<Usuario> {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        verificarAccesoACurso(curso, solicitanteUsername) {
+            SinPermisoAccesoCursoException("No tiene permisos para ver los docentes de este curso")
+        }
+
+        return curso.docentes
+    }
+
+    override fun darDeBajaDocente(
+        cursoId: Long,
+        docenteUsername: String,
+        solicitanteUsername: String
+    ): Unit {
+        val curso = cursoRepository.findById(cursoId).orElseThrow {
+            CursoNotFoundException()
+        }
+
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden dar de baja docentes")
+        curso.validarNoArchivado()
+
+        val normalizedUsername = docenteUsername.trim()
+        curso.removerDocente(normalizedUsername)
+        cursoRepository.save(curso)
+
+        val docentesUsernames = curso.docentes.map { it.username }
+        ejecutarDespuesDeCommit {
+            sseNotificationService?.notificarMiembroCursoActualizado(
+                cursoId = cursoId,
+                docentesUsernames = docentesUsernames,
+                alumnosUsernames = listOf(normalizedUsername)
+            )
+        }
+    }
+
     override fun agregarAlumnos(
         cursoId: Long,
         usernames: List<String>,
@@ -81,13 +186,20 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede agregar alumnos")
+        curso.validarEsDocente(solicitanteUsername, "Solo el docente a cargo del curso puede agregar alumnos")
         curso.validarNoArchivado()
 
         val distinctUsernames = usernames
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase() }
+
+        val alumnosQueSonDocentes = distinctUsernames.filter { rawUsername ->
+            curso.esDocente(rawUsername)
+        }
+        if (alumnosQueSonDocentes.isNotEmpty()) {
+            throw AlumnoEsDocenteDelCursoException(alumnosQueSonDocentes)
+        }
 
         val inscripcionesExistentes = inscripcionRepository.findByCursoId(cursoId)
         val inscriptosPorLowercase = inscripcionesExistentes.associateBy { it.usuario.username.lowercase() }
@@ -136,10 +248,11 @@ class CursoServiceImpl(
         }
 
         val alumnosUsernames = inscripciones.map { it.usuario.username }
+        val docentesUsernames = curso.docentes.map { it.username }
         ejecutarDespuesDeCommit {
             sseNotificationService?.notificarMiembroCursoActualizado(
                 cursoId = cursoId,
-                docenteUsername = curso.owner?.username,
+                docentesUsernames = docentesUsernames,
                 alumnosUsernames = alumnosUsernames
             )
         }
@@ -151,12 +264,12 @@ class CursoServiceImpl(
         cursoId: Long,
         alumnoUsername: String,
         solicitanteUsername: String
-    ) {
+    ): Unit {
         val curso = cursoRepository.findById(cursoId).orElseThrow {
             CursoNotFoundException()
         }
 
-        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede dar de baja alumnos")
+        curso.validarEsDocente(solicitanteUsername, "Solo el docente a cargo del curso puede dar de baja alumnos")
         curso.validarNoArchivado()
 
         val normalizedUsername = alumnoUsername.trim()
@@ -168,10 +281,11 @@ class CursoServiceImpl(
         inscripcion.darDeBaja()
         inscripcionRepository.save(inscripcion)
 
+        val docentesUsernames = curso.docentes.map { it.username }
         ejecutarDespuesDeCommit {
             sseNotificationService?.notificarMiembroCursoActualizado(
                 cursoId = cursoId,
-                docenteUsername = curso.owner?.username,
+                docentesUsernames = docentesUsernames,
                 alumnosUsernames = listOf(inscripcion.usuario.username)
             )
         }
@@ -194,7 +308,7 @@ class CursoServiceImpl(
             CursoNotFoundException()
         }
 
-        curso.validarEsOwner(solicitanteUsername, "Solo el docente a cargo del curso puede archivarlo")
+        curso.validarEsDocente(solicitanteUsername, "Solo el docente a cargo del curso puede archivarlo")
 
         return ejecutarArchivadoDeCurso(curso)
     }
@@ -203,7 +317,7 @@ class CursoServiceImpl(
         val curso = cursoRepository.findById(id).orElseThrow {
             CursoNotFoundException()
         }
-        curso.validarEsOwner(solicitanteUsername)
+        curso.validarEsDocente(solicitanteUsername)
         return cursoExportService.exportarPlanillaCurso(curso)
     }
 
@@ -249,13 +363,13 @@ class CursoServiceImpl(
         excepcionSiFalla: () -> RuntimeException,
     ): Boolean {
         val cursoId = curso.id ?: throw CursoNotFoundException()
-        val esOwner = curso.esOwner(solicitanteUsername)
+        val esDocente = curso.esDocente(solicitanteUsername)
         val inscripcion = inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername)
         val estaInscripto = !curso.archivado && inscripcion != null && inscripcion.activa
 
-        if (!esOwner && !estaInscripto) {
+        if (!esDocente && !estaInscripto) {
             throw excepcionSiFalla()
         }
-        return esOwner
+        return esDocente
     }
 }
