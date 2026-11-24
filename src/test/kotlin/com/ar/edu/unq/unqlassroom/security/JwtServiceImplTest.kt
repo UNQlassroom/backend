@@ -25,9 +25,9 @@ class JwtServiceImplTest {
 
     @Test
     fun `generateToken generates valid token with correct username and role for alumno`() {
-        val alumno = Usuario(id = 1L, username = "alumno1", esDocente = false)
+        val alumno = Usuario(id = 1L, username = "alumno1")
 
-        val token = jwtService.generateToken(alumno)
+        val token = jwtService.generateToken(alumno, esDocente = false)
 
         assertNotNull(token)
         assertTrue(token.isNotBlank())
@@ -46,9 +46,9 @@ class JwtServiceImplTest {
 
     @Test
     fun `generateToken generates valid token with correct role for docente`() {
-        val docente = Usuario(id = 2L, username = "docente1", esDocente = true)
+        val docente = Usuario(id = 2L, username = "docente1")
 
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
 
         assertNotNull(token)
         assertEquals("docente1", jwtService.extractUsername(token))
@@ -59,8 +59,8 @@ class JwtServiceImplTest {
 
     @Test
     fun `isTokenValid returns false when username does not match userDetails`() {
-        val alumno = Usuario(id = 1L, username = "alumno1", esDocente = false)
-        val token = jwtService.generateToken(alumno)
+        val alumno = Usuario(id = 1L, username = "alumno1")
+        val token = jwtService.generateToken(alumno, esDocente = false)
 
         val otherUserDetails = User.builder()
             .username("otro_alumno")
@@ -77,8 +77,8 @@ class JwtServiceImplTest {
             jwtSecret = mockSecretKey,
             jwtExpiration = -1000L
         )
-        val alumno = Usuario(id = 1L, username = "alumno1", esDocente = false)
-        val token = expiredJwtService.generateToken(alumno)
+        val alumno = Usuario(id = 1L, username = "alumno1")
+        val token = expiredJwtService.generateToken(alumno, esDocente = false)
 
         val userDetails = User.builder()
             .username("alumno1")

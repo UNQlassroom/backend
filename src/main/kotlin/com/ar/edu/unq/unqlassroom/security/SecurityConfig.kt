@@ -38,6 +38,8 @@ class SecurityConfig(
                 auth.requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
                 auth.requestMatchers(HttpMethod.POST, "/cursos").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/alumnos").hasRole("DOCENTE")
+                auth.requestMatchers(HttpMethod.POST, "/cursos/*/docentes").hasRole("DOCENTE")
+                auth.requestMatchers(HttpMethod.DELETE, "/cursos/*/docentes/*").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/archivar").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/exportar").hasRole("DOCENTE")
                 auth.requestMatchers(HttpMethod.POST, "/cursos/*/asignaciones/*/entregar").authenticated()
