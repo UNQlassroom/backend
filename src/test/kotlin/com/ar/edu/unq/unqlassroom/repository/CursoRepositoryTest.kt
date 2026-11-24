@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.repository
+﻿package com.ar.edu.unq.unqlassroom.repository
 
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
@@ -24,12 +24,12 @@ class CursoRepositoryTest {
 
     @Test
     fun `findCursosParaDocente returns only courses owned by specified docente`() {
-        val docente1 = usuarioRepository.save(Usuario(username = "profe_alberto", esDocente = true))
-        val docente2 = usuarioRepository.save(Usuario(username = "profe_beatriz", esDocente = true))
+        val docente1 = usuarioRepository.save(Usuario(username = "profe_alberto"))
+        val docente2 = usuarioRepository.save(Usuario(username = "profe_beatriz"))
 
-        cursoRepository.save(Curso(materia = "Estructuras de Datos", anio = 2026, semestre = 2, comision = 1, owner = docente1))
-        cursoRepository.save(Curso(materia = "Bases de Datos", anio = 2026, semestre = 2, comision = 2, owner = docente1))
-        cursoRepository.save(Curso(materia = "Sistemas Operativos", anio = 2026, semestre = 2, comision = 1, owner = docente2))
+        cursoRepository.save(Curso(materia = "Estructuras de Datos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente1)))
+        cursoRepository.save(Curso(materia = "Bases de Datos", anio = 2026, semestre = 2, comision = 2, docentes = mutableListOf(docente1)))
+        cursoRepository.save(Curso(materia = "Sistemas Operativos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente2)))
 
         val cursosDocente1 = cursoRepository.findCursosParaDocente("profe_alberto")
 
@@ -41,21 +41,21 @@ class CursoRepositoryTest {
 
     @Test
     fun `findCursosParaAlumno returns courses where student is enrolled and not the owner`() {
-        val docente = usuarioRepository.save(Usuario(username = "profe_titular", esDocente = true))
-        val alumno = usuarioRepository.save(Usuario(username = "alumno_lucas", esDocente = false))
+        val docente = usuarioRepository.save(Usuario(username = "profe_titular"))
+        val alumno = usuarioRepository.save(Usuario(username = "alumno_lucas"))
 
         // Curso 1: alumno inscripto, owner docente -> DEBE retornar
-        val curso1 = cursoRepository.save(Curso(materia = "Redes de Computadoras", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        val curso1 = cursoRepository.save(Curso(materia = "Redes de Computadoras", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
         val inscripcion1 = inscripcionRepository.save(Inscripcion(curso = curso1, usuario = alumno))
         curso1.inscripciones.add(inscripcion1)
 
         // Curso 2: alumno inscripto pero es el owner -> NO DEBE retornar en cursos para alumno
-        val curso2 = cursoRepository.save(Curso(materia = "Laboratorio", anio = 2026, semestre = 2, comision = 1, owner = alumno))
+        val curso2 = cursoRepository.save(Curso(materia = "Laboratorio", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(alumno)))
         val inscripcion2 = inscripcionRepository.save(Inscripcion(curso = curso2, usuario = alumno))
         curso2.inscripciones.add(inscripcion2)
 
         // Curso 3: alumno NO inscripto -> NO DEBE retornar
-        cursoRepository.save(Curso(materia = "Matemática", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        cursoRepository.save(Curso(materia = "Matemática", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
 
         val cursosAlumno = cursoRepository.findCursosParaAlumno("alumno_lucas")
 

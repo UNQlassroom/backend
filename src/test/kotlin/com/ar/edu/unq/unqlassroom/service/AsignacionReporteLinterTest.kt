@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.controller.AsignacionController
 import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
@@ -73,9 +73,9 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `obtenerReporteLinter devuelve el reporte persistido con sus incidencias para el alumno de la asignacion`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -155,9 +155,9 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `obtenerReporteLinter devuelve objeto vacio sinReporte cuando aun no se recibio ningun reporte`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -188,8 +188,8 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `obtenerReporteLinter exige grupoId cuando consulta el docente owner`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -208,9 +208,9 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `obtenerReporteLinter impide que un alumno consulte el reporte de otro grupo`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -239,9 +239,9 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `endpoint GET linter retorna 200 OK con el JSON de ReporteLinterResponseDTO`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -309,8 +309,8 @@ class AsignacionReporteLinterTest {
 
     @Test
     fun `eliminarAsignacion invoca deleteAllByRepositorioIdIn en reporteLinterRepository`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",

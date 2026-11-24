@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.repository
+﻿package com.ar.edu.unq.unqlassroom.repository
 
 import com.ar.edu.unq.unqlassroom.model.*
 import org.junit.jupiter.api.Assertions.*
@@ -31,8 +31,8 @@ class AdvertenciaGitRepositoryTest {
 
     @Test
     fun `persiste y consulta advertencias asociadas a repositorio, asignacion, grupo y alumno`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_git", esDocente = true))
-        val alumno = usuarioRepository.save(Usuario(username = "alumno_git", esDocente = false))
+        val docente = usuarioRepository.save(Usuario(username = "docente_git"))
+        val alumno = usuarioRepository.save(Usuario(username = "alumno_git"))
 
         val curso = cursoRepository.save(
             Curso(
@@ -40,7 +40,7 @@ class AdvertenciaGitRepositoryTest {
                 anio = 2026,
                 semestre = 2,
                 comision = 1,
-                owner = docente
+                docentes = mutableListOf(docente)
             )
         )
 

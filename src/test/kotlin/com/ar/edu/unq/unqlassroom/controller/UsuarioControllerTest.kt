@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.dto.usuario.request.ActualizarDatosRequestDTO
@@ -52,7 +52,6 @@ class UsuarioControllerTest {
         val usuario = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@unq.com.ar",
             dni = "12345678",
             nombreCompleto = "García Lorca, Juan Manuel",
@@ -85,7 +84,6 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@correo.com",
             dni = "35123456",
             nombreCompleto = "García Lorca, Juan Manuel",
@@ -218,7 +216,6 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@unq.com.ar",
             nombreCompleto = "García Lorca, Juan Manuel",
         )
@@ -248,7 +245,6 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@unq.com.ar",
             nombreCompleto = nombreEsperado,
         )
@@ -277,7 +273,6 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@unq.edu.ar",
             nombreCompleto = nombreEsperado,
         )

@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.controller.AsignacionController
 import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
@@ -74,9 +74,9 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `obtenerMetricasCI devuelve las metricas persistidas para el alumno de la asignacion`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -139,9 +139,9 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `obtenerMetricasCI devuelve resumen vacio sinMetricas cuando aun no se registraron corridas`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -171,8 +171,8 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `obtenerMetricasCI lanza GrupoIdRequeridoParaDocenteException cuando el docente no envia grupoId`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -191,9 +191,9 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `obtenerMetricasCI lanza SinPermisoAccesoAsignacionException cuando un alumno pide metricas de otro grupo`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -222,9 +222,9 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `endpoint GET metricas retorna 200 OK con el JSON de MetricasCIResponseDTO`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 100L, nombre = "repo-alumno1", htmlUrl = "https://github.com/org/repo-alumno1")
         val asignacion = Asignacion(
             id = 50L,
@@ -283,8 +283,8 @@ class AsignacionMetricasCITest {
 
     @Test
     fun `eliminarAsignacion invoca deleteAllByRepositorioIdIn en metricaCIRepository`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "IS", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",

@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.model
+﻿package com.ar.edu.unq.unqlassroom.model
 
 import com.ar.edu.unq.unqlassroom.exception.CalificacionInvalidaException
 import org.junit.jupiter.api.Assertions
@@ -57,7 +57,7 @@ class GrupoAsignacionTest {
             curso = Curso(materia = "BD", anio = 2026, semestre = 2, comision = 1)
         )
         val repo = Repositorio(nombre = "repo-grupo", htmlUrl = "https://github.com/repo-grupo")
-        val alumno = Usuario(id = 1L, username = "alumno1", esDocente = false)
+        val alumno = Usuario(id = 1L, username = "alumno1")
 
         val ahora = LocalDateTime.now()
         val grupo = GrupoAsignacion(

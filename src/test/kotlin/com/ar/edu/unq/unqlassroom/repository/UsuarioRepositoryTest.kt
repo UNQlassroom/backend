@@ -21,7 +21,6 @@ class UsuarioRepositoryTest {
             nombreCompleto = "Juan Perez",
             email = "juan@unq.com.ar",
             dni = "12345678",
-            esDocente = true
         )
         usuarioRepository.save(user)
 
@@ -30,7 +29,6 @@ class UsuarioRepositoryTest {
         assertEquals("docente_juan", found?.username)
         assertEquals("Juan Perez", found?.nombreCompleto)
         assertEquals("12345678", found?.dni)
-        assertTrue(found?.esDocente == true)
     }
 
     @Test
@@ -41,7 +39,7 @@ class UsuarioRepositoryTest {
 
     @Test
     fun `existsByUsername returns true when user exists and false otherwise`() {
-        val user = Usuario(username = "alumno_maria", esDocente = false)
+        val user = Usuario(username = "alumno_maria")
         usuarioRepository.save(user)
 
         assertTrue(usuarioRepository.existsByUsername("alumno_maria"))
@@ -54,7 +52,6 @@ class UsuarioRepositoryTest {
             username = "alumno_carlos",
             email = "carlos@correo.com",
             dni = "40123456",
-            esDocente = false
         )
         usuarioRepository.save(user)
 
@@ -70,7 +67,6 @@ class UsuarioRepositoryTest {
             username = "alumno_lucas",
             email = "lucas@correo.com.ar",
             dni = "38999888",
-            esDocente = false
         )
         usuarioRepository.save(user)
 
