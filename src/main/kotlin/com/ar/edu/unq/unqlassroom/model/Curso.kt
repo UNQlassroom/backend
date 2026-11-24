@@ -7,7 +7,7 @@ import java.time.LocalDate
 
 @Entity
 @Table(name = "cursos")
-class Curso (
+class Curso(
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,9 +31,13 @@ class Curso (
     @Column(nullable = false, columnDefinition = "boolean default false")
     var archivado: Boolean = false,
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = true)
-    var owner: Usuario? = null,
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "cursos_docentes",
+        joinColumns = [JoinColumn(name = "curso_id")],
+        inverseJoinColumns = [JoinColumn(name = "usuario_id")]
+    )
+    var docentes: MutableList<Usuario> = mutableListOf(),
 
     @OneToMany(mappedBy = "curso", cascade = [CascadeType.ALL], orphanRemoval = true)
     var inscripciones: MutableList<Inscripcion> = mutableListOf(),
@@ -57,23 +61,39 @@ class Curso (
         }
     }
 
-    fun esOwner(username: String?): Boolean =
-        owner?.username != null && owner?.username == username && (owner?.esDocente == true)
+    fun esDocente(username: String?): Boolean {
+        if (username.isNullOrBlank()) return false
+        return docentes.any { it.username.equals(username, ignoreCase = true) }
+    }
 
-    fun validarEsOwner(
+    fun validarEsDocente(
         username: String?,
-        mensaje: String = "Solo el docente a cargo del curso puede realizar esta acción"
+        mensaje: String = "Solo los docentes del curso pueden realizar esta acción"
     ) {
-        if (!esOwner(username)) {
+        if (!esDocente(username)) {
             throw NoEsDocenteDelCursoException(mensaje)
         }
     }
 
-    fun asignarOwner(docente: Usuario) {
-        if (!docente.esDocente) {
-            throw UsuarioNoEsDocenteException(docente.username)
+    fun agregarDocente(docente: Usuario) {
+        validarNoArchivado()
+        if (esDocente(docente.username)) {
+            throw DocenteDuplicadoException(listOf(docente.username))
         }
-        this.owner = docente
+        docentes.add(docente)
+    }
+
+    fun removerDocente(username: String) {
+        validarNoArchivado()
+        val normalized = username.trim()
+        if (!esDocente(normalized)) {
+            throw DocenteNoAsignadoException(normalized)
+        }
+        val docentesActivos = docentes.distinctBy { it.username.lowercase() }
+        if (docentesActivos.size <= 1) {
+            throw CursoSinDocentesException()
+        }
+        docentes.removeIf { it.username.equals(normalized, ignoreCase = true) }
     }
 
     fun validarNoArchivado() {

@@ -137,8 +137,8 @@ class Asignacion(
         grupos.find { it.tieneIntegrante(username) }
             ?: throw UsuarioNoPerteneceAGrupoException()
 
-    fun paraVisualizacionDe(username: String, esOwner: Boolean): Asignacion {
-        val gruposVisibles = if (esOwner) {
+    fun paraVisualizacionDe(username: String, esDocente: Boolean): Asignacion {
+        val gruposVisibles = if (esDocente) {
             this.grupos
         } else {
             this.grupos.filter { it.tieneIntegrante(username) }
