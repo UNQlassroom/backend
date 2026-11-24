@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.*
 import com.ar.edu.unq.unqlassroom.exception.AsignacionConEntregasOCalificacionesException
@@ -140,14 +140,14 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion INDIVIDUAL persists assignment with CREANDO state, enrolled student groups and triggers async repo creation`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 1L, username = "profe_test")
         val curso = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
@@ -200,14 +200,14 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion GRUPAL persists assignment with CREANDO state, configured groups and triggers async repo creation`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 1L, username = "profe_test")
         val curso = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
@@ -265,8 +265,8 @@ class AsignacionServiceImplTest {
         verify(gitHubRepoService, never()).createRepositoryFromTemplate(anyString(), anyString(), anyNullable(String::class.java), anyBoolean(), anyNullable(String::class.java))
     }
     fun `crearAsignacion GRUPAL throws BadRequestException when a student is repeated across groups`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
 
@@ -291,8 +291,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion GRUPAL throws BadRequestException when a student is not enrolled`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno1 = Usuario(id = 2L, username = "alumno1")
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -318,8 +318,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion throws TemplateRepoNoExisteException when template repo does not exist`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(gitHubRepoService.repositoryExists("template-inexistente")).thenReturn(false)
@@ -338,8 +338,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion throws ForbiddenException when user is not the teacher`() {
-        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+        val docenteOwner = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docenteOwner))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
@@ -371,8 +371,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerAsignaciones returns all groups when requested by teacher`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
 
@@ -409,8 +409,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerAsignaciones filters groups to only student's own group`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
 
@@ -451,8 +451,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerAsignacion throws ForbiddenException when student is not enrolled and not owner`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "intruso")).thenReturn(null)
@@ -464,8 +464,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerAsignacion returns repository info from database without querying github`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno = Usuario(id = 2L, username = "alumno1")
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -499,8 +499,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion assigns nota and feedback to specified group and persists`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno = Usuario(id = 2L, username = "alumno1")
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -531,8 +531,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion updates calificacion and observaciones`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno = Usuario(id = 2L, username = "alumno1")
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -563,8 +563,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion updates the specified group when multiple groups exist`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
 
@@ -596,8 +596,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion throws BadRequestException when nota is outside 1 to 10`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -625,15 +625,15 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion throws ForbiddenException when solicitante is not course owner docente`() {
-        val docenteOwner = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+        val docenteOwner = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docenteOwner))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
         val ex = assertThrows<ForbiddenException> {
             asignacionService.calificarAsignacion(10L, 50L, 101L, 8, null, "otro_docente")
         }
-        assertEquals("Solo el docente a cargo del curso puede calificar asignaciones", ex.message)
+        assertEquals("Solo los docentes del curso pueden calificar asignaciones", ex.message)
     }
 
     @Test
@@ -647,8 +647,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion throws AsignacionNotFoundException when asignacion does not exist`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(99L, 10L)).thenReturn(null)
@@ -660,8 +660,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion throws BadRequestException when grupo does not belong to asignacion`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -682,8 +682,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `calificarAsignacion throws AsignacionNoListaException when asignacion is in CREANDO or ERROR state`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -710,9 +710,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones calculates ACTUALIZADO when commit is after issue createdAt`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -766,9 +766,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones calculates PENDIENTE when no commit after and no comments`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -819,9 +819,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones calculates RESUELTO when issue is closed`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -871,8 +871,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones throws ForbiddenException when user has no permissions`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "Objetos", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "extranio")).thenReturn(null)
@@ -946,8 +946,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada throws ForbiddenException when user is not owner and not enrolled`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -969,8 +969,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada as owner throws BadRequestException when grupoId is null`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -991,8 +991,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada as owner throws BadRequestException when grupoId not in asignacion`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -1013,8 +1013,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada as student throws BadRequestException when student in no group`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 50L,
             titulo = "TP1",
@@ -1024,7 +1024,7 @@ class AsignacionServiceImplTest {
             estado = EstadoAsignacion.LISTA,
             curso = curso
         )
-        val alumno = Usuario(id = 2L, username = "alumno_sin_grupo", esDocente = false)
+        val alumno = Usuario(id = 2L, username = "alumno_sin_grupo")
         val inscripcion = Inscripcion(id = 100L, curso = curso, usuario = alumno)
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
@@ -1039,9 +1039,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada as student throws ForbiddenException when specifying another grupoId`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
@@ -1069,9 +1069,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada by student successfully delivers and creates release`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
@@ -1116,9 +1116,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada succeeds even when createRelease throws exception`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", estadoCI = "success")
         val asignacion = Asignacion(
             id = 50L,
@@ -1160,10 +1160,10 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `marcarAsignacionComoEntregada by owner returns all groups`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo1 = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
         val repo2 = Repositorio(id = 2L, nombre = "repo2", htmlUrl = "https://github.com/repo2")
         val asignacion = Asignacion(
@@ -1195,7 +1195,7 @@ class AsignacionServiceImplTest {
             asignacionService.obtenerAsignacion(999L, 50L, "profe")
         }
 
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe", esDocente = true))
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(Usuario(username = "profe")))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
 
@@ -1206,9 +1206,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerAsignacion preserves existing repo data when gitHubRepoService fails`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1", ultimoCommit = "prev commit", estadoCI = "pending")
         val asignacion = Asignacion(
             id = 50L,
@@ -1237,7 +1237,7 @@ class AsignacionServiceImplTest {
             asignacionService.obtenerCorrecciones(999L, 50L, "profe")
         }
 
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = Usuario(username = "profe", esDocente = true))
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(Usuario(username = "profe")))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
 
@@ -1248,10 +1248,10 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones by student only returns student group corrections`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo1 = Repositorio(id = 1L, nombre = "repo1", htmlUrl = "https://github.com/repo1")
         val repo2 = Repositorio(id = 2L, nombre = "repo2", htmlUrl = "https://github.com/repo2")
         val asignacion = Asignacion(
@@ -1280,9 +1280,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones calculates ACTUALIZADO when issue has comments even if commit is before`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(
             id = 1L,
             nombre = "repo1",
@@ -1325,9 +1325,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerCorrecciones calculates PENDIENTE when commit date is null or invalid format`() {
-        val docente = Usuario(id = 1L, username = "profe_owner", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_owner")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         val repo = Repositorio(
             id = 1L,
             nombre = "repo1",
@@ -1370,8 +1370,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion throws AsignacionDuplicadaException when asignacion with same titulo already exists in curso`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         val existing = Asignacion(id = 1L, titulo = "TP1", tipo = TipoAsignacion.INDIVIDUAL, templateRepoName = "tmpl", curso = curso)
@@ -1387,8 +1387,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion throws BadRequestException when fechaLimite is in the past`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
@@ -1408,8 +1408,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion INDIVIDUAL throws BadRequestException when grupos are specified`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
@@ -1431,8 +1431,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion GRUPAL throws BadRequestException when a group has no members`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
@@ -1454,8 +1454,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `crearAsignacion GRUPAL throws NombreGrupoDuplicadoException when duplicate group names exist`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_test")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByCursoIdAndTituloIgnoreCase(10L, "TP1")).thenReturn(null)
@@ -1491,9 +1491,9 @@ class AsignacionServiceImplTest {
     }
 
     @Test
-    fun `obtenerAsignaciones throws SinPermisoAccesoAsignacionException when owner user is no longer docente and not enrolled`() {
-        val exDocente = Usuario(id = 1L, username = "profe_cambiado_a_alumno", esDocente = false)
-        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, owner = exDocente)
+    fun `obtenerAsignaciones throws SinPermisoAccesoAsignacionException when user is not docente and not enrolled`() {
+        val exDocente = Usuario(id = 1L, username = "profe_cambiado_a_alumno")
+        val curso = Curso(id = 10L, materia = "BD", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf())
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(10L, "profe_cambiado_a_alumno")).thenReturn(null)
@@ -1514,8 +1514,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion throws NoEsDocenteDelCursoException when user is not owner`() {
-        val docente = Usuario(id = 1L, username = "profe_titular", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe_titular")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
         assertThrows<NoEsDocenteDelCursoException> {
@@ -1525,8 +1525,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion throws AsignacionNotFoundException when assignment does not exist in course`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(1L, 10L)).thenReturn(null)
 
@@ -1537,8 +1537,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion throws AsignacionEnCreacionException when assignment is in CREANDO state`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1561,8 +1561,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion allows deleting assignment in ERROR state`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1583,8 +1583,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion throws AsignacionConEntregasOCalificacionesException when assignment has deliveries`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1610,8 +1610,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `eliminarAsignacion triggers async deletion with repo names when assignment is clean`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1638,8 +1638,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `modificarAsignacion with owner docente updates descripcion and fechaLimite successfully and returns saved entity`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1674,8 +1674,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `modificarAsignacion throws AsignacionNoListaException when asignacion is not in LISTA state`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1719,8 +1719,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `modificarAsignacion throws NoEsDocenteDelCursoException when solicitante is not course owner`() {
-        val docenteOwner = Usuario(id = 1L, username = "profeOwner", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docenteOwner)
+        val docenteOwner = Usuario(id = 1L, username = "profeOwner")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docenteOwner))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
 
@@ -1733,15 +1733,15 @@ class AsignacionServiceImplTest {
                 solicitanteUsername = "otroDocente"
             )
         }
-        assertEquals("Solo el docente a cargo del curso puede modificar asignaciones", ex.message)
+        assertEquals("Solo los docentes del curso pueden modificar asignaciones", ex.message)
         assertEquals("NO_ES_DOCENTE_DEL_CURSO", ex.errorCode)
         verify(asignacionRepository, never()).save(any(Asignacion::class.java))
     }
 
     @Test
     fun `modificarAsignacion throws AsignacionNotFoundException when asignacion not found in curso`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
 
         `when`(cursoRepository.findById(10L)).thenReturn(Optional.of(curso))
         `when`(asignacionRepository.findByIdAndCursoId(999L, 10L)).thenReturn(null)
@@ -1761,8 +1761,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `modificarAsignacion preserves immutable fields even if called multiple times`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1795,8 +1795,8 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `modificarAsignacion throws FechaLimiteInvalidaException when changing deadline to the past`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1826,9 +1826,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerDiagnosticoCI returns persisted CI failure details for enrolled student`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,
@@ -1872,9 +1872,9 @@ class AsignacionServiceImplTest {
 
     @Test
     fun `obtenerDiagnosticoCI fetches from GitHub on demand when estadoCI is failure and details are missing`() {
-        val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, owner = docente)
+        val docente = Usuario(id = 1L, username = "profe")
+        val alumno = Usuario(id = 2L, username = "alumno1")
+        val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(docente))
         val asignacion = Asignacion(
             id = 1L,
             curso = curso,

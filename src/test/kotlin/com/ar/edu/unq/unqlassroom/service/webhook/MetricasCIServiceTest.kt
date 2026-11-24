@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service.webhook
+﻿package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.service.MetricasCIService
 import com.ar.edu.unq.unqlassroom.service.impl.MetricasCIServiceImpl
@@ -67,7 +67,7 @@ class MetricasCIServiceTest {
 
     @Test
     fun `procesarMetricasDeEvento calcula porcentaje de cobertura desde contadores JaCoCo y registra tests JUnit`() {
-        val alumno = Usuario(id = 10L, username = "juanperez", esDocente = false)
+        val alumno = Usuario(id = 10L, username = "juanperez")
         val asignacion = Asignacion(
             id = 20L,
             titulo = "TP1",
@@ -128,7 +128,7 @@ class MetricasCIServiceTest {
 
     @Test
     fun `procesarMetricasDeEvento parsea reportes XML de JaCoCo y JUnit correctamente`() {
-        val alumno = Usuario(id = 11L, username = "maria", esDocente = false)
+        val alumno = Usuario(id = 11L, username = "maria")
         val repo = Repositorio(id = 2L, nombre = "tp1-maria", htmlUrl = "https://github.com/org/tp1-maria")
         val grupo = GrupoAsignacion(id = 31L, repositorio = repo, integrantes = mutableListOf(alumno))
 
@@ -233,8 +233,8 @@ class MetricasCIServiceTest {
 
     @Test
     fun `procesarMetricasDeEvento resuelve el alumno integrante del grupo por autor del workflow_run`() {
-        val a1 = Usuario(id = 1L, username = "integrante1", esDocente = false)
-        val a2 = Usuario(id = 2L, username = "integrante2", esDocente = false)
+        val a1 = Usuario(id = 1L, username = "integrante1")
+        val a2 = Usuario(id = 2L, username = "integrante2")
         val repo = Repositorio(id = 10L, nombre = "tp-grupal-g1", htmlUrl = "https://github.com/org/tp-grupal-g1")
         val grupo = GrupoAsignacion(
             id = 40L,

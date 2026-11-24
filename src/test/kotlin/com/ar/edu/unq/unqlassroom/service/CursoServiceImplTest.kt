@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
@@ -87,20 +87,20 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos invites students to github org and creates inscripcion with org membership state`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         `when`(usuarioService.obtenerOCrearAlumno(Mockito.anyString())).thenAnswer { invocation ->
             val u = invocation.getArgument<String>(0)
-            Usuario(id = 1L, username = u, esDocente = false, githubState = "pending")
+            Usuario(id = 1L, username = u, githubState = "pending")
         }
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
 
@@ -133,19 +133,19 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos saves student with canonical GitHub username when invited with different casing`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(gitHubOrgService.obtenerUsernameCanonico("THIAGOdePRUEBA")).thenReturn("thiagoDePrueba")
         `when`(usuarioService.obtenerOCrearAlumno("thiagoDePrueba")).thenReturn(
-            Usuario(id = 1L, username = "thiagoDePrueba", esDocente = false, githubState = "pending")
+            Usuario(id = 1L, username = "thiagoDePrueba", githubState = "pending")
         )
         `when`(inscripcionRepository.save(Mockito.any(Inscripcion::class.java))).thenAnswer { it.getArgument(0) }
         `when`(gitHubOrgService.invitarMiembro("thiagoDePrueba")).thenReturn(
@@ -162,16 +162,16 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos throws AlumnoDuplicadoException without calling GitHub when student is already enrolled`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
-        val alumnoExistente = Usuario(id = 2L, username = "alumno1", esDocente = false, githubState = "active")
+        val alumnoExistente = Usuario(id = 2L, username = "alumno1", githubState = "active")
         val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente, activa = true)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
@@ -189,16 +189,16 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos fails atomically and throws AlumnoDuplicadoException when any student in batch is already enrolled`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
-        val alumnoExistente = Usuario(id = 2L, username = "alumno_viejo", esDocente = false, githubState = "active")
+        val alumnoExistente = Usuario(id = 2L, username = "alumno_viejo", githubState = "active")
         val inscripcionExistente = Inscripcion(id = 5L, curso = curso, usuario = alumnoExistente, activa = true)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
@@ -217,14 +217,14 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos throws UsuariosGitHubNoEncontradosException when a username does not exist on GitHub`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(gitHubOrgService.obtenerUsernameCanonico("alumno_fantasma")).thenReturn(null)
@@ -254,14 +254,14 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos throws NoEsDocenteDelCursoException when solicitante is not the owner`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -274,19 +274,19 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerAlumnos returns enrolled members from DB without calling github`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_test")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
-        val usuario1 = Usuario(id = 1L, username = "alumno1", esDocente = false, githubState = "pending")
-        val usuario2 = Usuario(id = 2L, username = "alumno2", esDocente = false, githubState = "active")
+        val usuario1 = Usuario(id = 1L, username = "alumno1", githubState = "pending")
+        val usuario2 = Usuario(id = 2L, username = "alumno2", githubState = "active")
         val inscripcion1 = Inscripcion(usuario = usuario1, curso = curso, activa = true)
         val inscripcion2 = Inscripcion(usuario = usuario2, curso = curso, activa = true)
 
@@ -345,17 +345,17 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerAlumnos returns members when solicitante is enrolled alumno`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
-        val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
+        val alumno = Usuario(id = 2L, username = "alumno_inscripto")
         val inscripcion = Inscripcion(curso = curso, usuario = alumno, activa = true)
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
         `when`(inscripcionRepository.findByCursoIdAndActivaTrue(1L)).thenReturn(emptyList())
@@ -367,14 +367,14 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerAlumnos throws SinPermisoAccesoCursoException when solicitante is neither owner nor enrolled alumno`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
@@ -426,7 +426,7 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerCurso returns curso when solicitante is owner`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -434,7 +434,7 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -443,12 +443,12 @@ class CursoServiceImplTest {
         assertNotNull(result)
         assertEquals(1L, result.id)
         assertEquals("Estructuras de Datos", result.materia)
-        assertEquals("profe_owner", result.owner?.username)
+        assertEquals("profe_owner", result.docentes.firstOrNull()?.username)
     }
 
     @Test
     fun `obtenerCurso returns curso when solicitante is enrolled alumno`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -456,10 +456,10 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
-        val alumno = Usuario(id = 2L, username = "alumno_inscripto", esDocente = false)
+        val alumno = Usuario(id = 2L, username = "alumno_inscripto")
         val inscripcion = Inscripcion(curso = curso, usuario = alumno, activa = true)
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_inscripto")).thenReturn(inscripcion)
 
@@ -472,7 +472,7 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerCurso throws SinPermisoAccesoCursoException when curso is archived and solicitante is enrolled alumno`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
@@ -480,7 +480,7 @@ class CursoServiceImplTest {
             semestre = 1,
             comision = 1,
             archivado = true,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
@@ -502,14 +502,14 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerCurso throws SinPermisoAccesoCursoException when solicitante is neither owner nor enrolled alumno`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
         val curso = Curso(
             id = 1L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = owner
+            docentes = mutableListOf(owner)
         )
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "infiltrado")).thenReturn(null)
@@ -522,10 +522,10 @@ class CursoServiceImplTest {
 
     @Test
     fun `crearCurso throws CursoDuplicadoException when duplicate curso exists for owner`() {
-        val docente = Usuario(id = 10L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 10L, username = "profe_test")
         `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
-        `when`(cursoRepository.existsByOwnerUsernameAndMateriaIgnoreCaseAndAnioAndSemestreAndComision(
-            "profe_test", "Estructuras de Datos", 2026, 1, 1
+        `when`(cursoRepository.existsByMateriaIgnoreCaseAndAnioAndSemestreAndComision(
+            "Estructuras de Datos", 2026, 1, 1
         )).thenReturn(true)
 
         val requestDTO = CursoRequestDTO(
@@ -559,8 +559,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `archivarCurso marks curso as archived and triggers async GitHub repository archiving`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         val asignacion = Asignacion(
             id = 5L,
             titulo = "TP1",
@@ -588,8 +588,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `archivarCurso throws CursoArchivadoException when already archived and NoEsDocenteDelCursoException when not owner`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         assertThrows<NoEsDocenteDelCursoException> {
@@ -620,9 +620,9 @@ class CursoServiceImplTest {
 
     @Test
     fun `darDeBajaAlumno marks inscripcion as inactive and sets fechaBaja`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
+        val alumno = Usuario(id = 2L, username = "alumno1")
         val inscripcion = Inscripcion(id = 5L, curso = curso, usuario = alumno, activa = true)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
@@ -635,17 +635,17 @@ class CursoServiceImplTest {
         verify(inscripcionRepository).save(inscripcion)
         verify(sseNotificationService).notificarMiembroCursoActualizado(
             cursoId = 1L,
-            docenteUsername = "profe_owner",
+            docentesUsernames = listOf("profe_owner"),
             alumnosUsernames = listOf("alumno1")
         )
     }
 
     @Test
     fun `darDeBajaAlumno marks inscripcion as inactive preserving group integrantes`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
-        val alumno1 = Usuario(id = 2L, username = "alumno1", esDocente = false)
-        val alumno2 = Usuario(id = 3L, username = "alumno2", esDocente = false)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
+        val alumno1 = Usuario(id = 2L, username = "alumno1")
+        val alumno2 = Usuario(id = 3L, username = "alumno2")
         val inscripcion = Inscripcion(id = 5L, curso = curso, usuario = alumno1, activa = true)
 
         val asignacionGrupal = Asignacion(
@@ -677,8 +677,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `darDeBajaAlumno throws NoEsDocenteDelCursoException when caller is not owner`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         assertThrows<NoEsDocenteDelCursoException> {
@@ -688,8 +688,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `darDeBajaAlumno throws CursoArchivadoException when curso is archived`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner, archivado = true)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner), archivado = true)
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         assertThrows<CursoArchivadoException> {
@@ -699,8 +699,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `darDeBajaAlumno throws AlumnoNoInscriptoException when student is not active or enrolled`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
         `when`(inscripcionRepository.findByCursoIdAndUsuarioUsername(1L, "alumno_no_inscripto")).thenReturn(null)
 
@@ -713,8 +713,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `obtenerAlumnos returns only active inscripciones`() {
-        val owner = Usuario(id = 10L, username = "profe_owner", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_owner")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         val alumnoActivo = Usuario(id = 2L, username = "alumno_activo")
         val alumnoInactivo = Usuario(id = 3L, username = "alumno_inactivo")
         val inscripcionActiva = Inscripcion(id = 1L, curso = curso, usuario = alumnoActivo, activa = true)
@@ -732,9 +732,9 @@ class CursoServiceImplTest {
 
     @Test
     fun `agregarAlumnos reactivates existing inactive inscripcion instead of throwing duplicate`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
-        val alumno = Usuario(id = 2L, username = "alumno_inactivo", esDocente = false, githubState = "active")
+        val owner = Usuario(id = 10L, username = "profe_test")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
+        val alumno = Usuario(id = 2L, username = "alumno_inactivo", githubState = "active")
         val inscripcionInactiva = Inscripcion(id = 5L, curso = curso, usuario = alumno, activa = false)
 
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
@@ -760,8 +760,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `exportarCurso throws NoEsDocenteDelCursoException when caller is not owner`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_test")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         `when`(cursoRepository.findById(1L)).thenReturn(Optional.of(curso))
 
         assertThrows<NoEsDocenteDelCursoException> {
@@ -771,8 +771,8 @@ class CursoServiceImplTest {
 
     @Test
     fun `exportarCurso returns ArchivoExportadoDTO when caller is owner`() {
-        val owner = Usuario(id = 10L, username = "profe_test", esDocente = true)
-        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, owner = owner)
+        val owner = Usuario(id = 10L, username = "profe_test")
+        val curso = Curso(id = 1L, materia = "Estructuras", anio = 2026, semestre = 1, comision = 1, docentes = mutableListOf(owner))
         val esperado = ArchivoExportadoDTO(
             nombreArchivo = "curso_estructuras_2026_c1_unqlassroom.xlsx",
             contenido = byteArrayOf(1, 2, 3)

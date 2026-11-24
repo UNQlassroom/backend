@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.exception.GitHubApiException
 import com.ar.edu.unq.unqlassroom.exception.GitHubNotFoundException
@@ -55,14 +55,14 @@ class AsyncServiceImplTest {
 
     @Test
     fun `crearRepositoriosAsignacionAsincronicamente INDIVIDUAL creates repos, adds collaborators and marks asignacion as LISTA`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 1L, username = "profe_test")
         val curso = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
@@ -149,14 +149,14 @@ class AsyncServiceImplTest {
 
     @Test
     fun `crearRepositoriosAsignacionAsincronicamente GRUPAL creates shared repo, adds members and marks asignacion as LISTA`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 1L, username = "profe_test")
         val curso = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
@@ -213,14 +213,14 @@ class AsyncServiceImplTest {
 
     @Test
     fun `crearRepositoriosAsignacionAsincronicamente rolls back created repos and sets estado ERROR when GitHub fails`() {
-        val docente = Usuario(id = 1L, username = "profe_test", esDocente = true)
+        val docente = Usuario(id = 1L, username = "profe_test")
         val curso = Curso(
             id = 10L,
             materia = "Estructuras de Datos",
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")

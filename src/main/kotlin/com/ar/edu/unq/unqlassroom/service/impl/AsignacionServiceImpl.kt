@@ -48,9 +48,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede crear asignaciones")
-        }
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden crear asignaciones")
         curso.validarNoArchivado()
 
         if (asignacionRepository.findByCursoIdAndTituloIgnoreCase(cursoId, asignacion.titulo.trim()) != null) {
@@ -69,7 +67,7 @@ class AsignacionServiceImpl(
         asignacion.validarEstructuraGrupos()
         asignacion.estado = EstadoAsignacion.CREANDO
 
-        val docenteUsername = curso.owner?.username ?: solicitanteUsername
+        val docenteUsername = curso.docentes.firstOrNull()?.username ?: solicitanteUsername
         val inscripcionesCurso = inscripcionRepository.findByCursoIdAndActivaTrue(cursoId)
         val alumnosInscriptosUsernames = inscripcionesCurso.map { it.usuario.username }.toSet()
 
@@ -127,9 +125,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede modificar asignaciones")
-        }
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden modificar asignaciones")
         curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -151,12 +147,12 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+        val esDocente = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoAccesoAsignacionException("No tiene permisos para ver las asignaciones de este curso")
         }
 
         val asignaciones = asignacionRepository.findByCursoId(cursoId)
-        return asignaciones.map { it.paraVisualizacionDe(solicitanteUsername, esOwner) }
+        return asignaciones.map { it.paraVisualizacionDe(solicitanteUsername, esDocente) }
     }
 
     override fun obtenerAsignacion(
@@ -168,14 +164,14 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+        val esDocente = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoAccesoAsignacionException("No tiene permisos para ver esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        return asignacion.paraVisualizacionDe(solicitanteUsername, esOwner)
+        return asignacion.paraVisualizacionDe(solicitanteUsername, esDocente)
     }
 
     override fun marcarAsignacionComoEntregada(
@@ -194,12 +190,12 @@ class AsignacionServiceImpl(
         asignacion.validarEstadoLista()
         asignacion.validarVencimiento()
 
-        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+        val esDocente = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoEntregaException("No tiene permisos para entregar esta asignación")
         }
         curso.validarNoArchivado()
 
-        val grupo = if (esOwner) {
+        val grupo = if (esDocente) {
             if (grupoId != null) {
                 asignacion.buscarGrupo(grupoId)
             } else {
@@ -231,8 +227,6 @@ class AsignacionServiceImpl(
             } catch (_: Exception) {
                 // Si falla la creación del release en GitHub puntual, continuar registrando la entrega
             }
-
-
         }
 
         val guardada = asignacionRepository.save(asignacion)
@@ -246,7 +240,7 @@ class AsignacionServiceImpl(
             }
         }
 
-        return guardada.paraVisualizacionDe(solicitanteUsername, esOwner)
+        return guardada.paraVisualizacionDe(solicitanteUsername, esDocente)
     }
 
     override fun calificarAsignacion(
@@ -261,9 +255,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede calificar asignaciones")
-        }
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden calificar asignaciones")
         curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -292,14 +284,14 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+        val esDocente = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoAccesoCorreccionesException()
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val gruposAMostrar = asignacion.paraVisualizacionDe(solicitanteUsername, esOwner).grupos
+        val gruposAMostrar = asignacion.paraVisualizacionDe(solicitanteUsername, esDocente).grupos
         val inscripcionesPorUsuarioId = curso.inscripciones.associateBy { it.usuario.id }
 
         return gruposAMostrar.map { grupo ->
@@ -431,14 +423,14 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        val esOwner = verificarAccesoACurso(curso, solicitanteUsername) {
+        val esDocente = verificarAccesoACurso(curso, solicitanteUsername) {
             SinPermisoAccesoAsignacionException("No tiene permisos para ver $recursoDescripcion de esta asignación")
         }
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
             ?: throw AsignacionNotFoundException()
 
-        val grupo = if (esOwner) {
+        val grupo = if (esDocente) {
             if (grupoId != null) {
                 asignacion.buscarGrupo(grupoId)
             } else {
@@ -467,9 +459,7 @@ class AsignacionServiceImpl(
             CursoNotFoundException()
         }
 
-        if (!curso.esOwner(solicitanteUsername)) {
-            throw NoEsDocenteDelCursoException("Solo el docente a cargo del curso puede eliminar asignaciones")
-        }
+        curso.validarEsDocente(solicitanteUsername, "Solo los docentes del curso pueden eliminar asignaciones")
         curso.validarNoArchivado()
 
         val asignacion = asignacionRepository.findByIdAndCursoId(asignacionId, cursoId)
@@ -502,12 +492,12 @@ class AsignacionServiceImpl(
         excepcionSiFalla: () -> RuntimeException,
     ): Boolean {
         val cursoId = curso.id ?: throw CursoNotFoundException()
-        val esOwner = curso.esOwner(solicitanteUsername)
+        val esDocente = curso.esDocente(solicitanteUsername)
         val estaInscripto = !curso.archivado && inscripcionRepository.findByCursoIdAndUsuarioUsername(cursoId, solicitanteUsername) != null
 
-        if (!esOwner && !estaInscripto) {
+        if (!esDocente && !estaInscripto) {
             throw excepcionSiFalla()
         }
-        return esOwner
+        return esDocente
     }
 }

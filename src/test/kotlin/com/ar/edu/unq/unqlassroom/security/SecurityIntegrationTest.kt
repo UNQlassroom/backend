@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.security
+﻿package com.ar.edu.unq.unqlassroom.security
 
 import com.ar.edu.unq.unqlassroom.dto.asignacion.request.CalificarAsignacionRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.asignacion.response.AsignacionResponseDTO
@@ -62,8 +62,8 @@ class SecurityIntegrationTest {
 
     private val objectMapper = ObjectMapper()
 
-    private val docente = Usuario(id = 1L, username = "profe", esDocente = true)
-    private val alumno = Usuario(id = 2L, username = "alumno", esDocente = false)
+    private val docente = Usuario(id = 1L, username = "profe")
+    private val alumno = Usuario(id = 2L, username = "alumno")
 
     private fun anyCalificarModel(): GrupoAsignacion {
         Mockito.any(GrupoAsignacion::class.java)
@@ -139,7 +139,7 @@ class SecurityIntegrationTest {
 
     @Test
     fun `crear curso returns 201 when user has role DOCENTE`() {
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
         val requestDTO = CursoRequestDTO(
             materia = "Estructuras de Datos",
             anio = 2026,
@@ -153,7 +153,7 @@ class SecurityIntegrationTest {
             semestre = 1,
             comision = 1,
             descripcion = "desc",
-            owner = docente
+            docentes = mutableListOf(docente)
         )
 
         `when`(cursoService.crearCurso(anyCurso(), eqString("profe"))).thenReturn(cursoGuardado)
@@ -183,7 +183,7 @@ class SecurityIntegrationTest {
 
     @Test
     fun `calificar asignacion returns 200 when user has role DOCENTE`() {
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
         val request = CalificarAsignacionRequestDTO(grupoId = 1L, calificacion = 8, observaciones = "Buen trabajo")
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
         val asignacion = Asignacion(
@@ -236,7 +236,7 @@ class SecurityIntegrationTest {
 
     @Test
     fun `DELETE asignacion with docente token returns 202 Accepted`() {
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
 
         Mockito.doNothing().`when`(asignacionService).eliminarAsignacion(10L, 5L, "profe")
 
@@ -272,7 +272,7 @@ class SecurityIntegrationTest {
 
     @Test
     fun `PUT asignacion with docente token returns 200 OK`() {
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
         val curso = Curso(id = 10L, materia = "SO", anio = 2026, semestre = 1, comision = 1)
         val asignacion = Asignacion(
             id = 5L,
@@ -320,7 +320,7 @@ class SecurityIntegrationTest {
 
     @Test
     fun `POST exportar curso with docente token returns 200 OK`() {
-        val token = jwtService.generateToken(docente)
+        val token = jwtService.generateToken(docente, esDocente = true)
         val archivo = ArchivoExportadoDTO(
             nombreArchivo = "curso_so_2026_c1_unqlassroom.xlsx",
             contenido = byteArrayOf(1, 2, 3)

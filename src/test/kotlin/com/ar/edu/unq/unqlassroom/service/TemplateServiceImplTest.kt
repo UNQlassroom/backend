@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.exception.GitHubNotFoundException
 import com.ar.edu.unq.unqlassroom.exception.RepositorioExternoNoEncontradoException
@@ -66,7 +66,7 @@ class TemplateServiceImplTest {
             templateAprobado = false,
         )
 
-        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test", esDocente = true))
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test"))
         `when`(gitHubRepoService.createTemplateRepository("template-base-kotlin", "Template base para ejercicios Kotlin")).thenReturn(repoResponse)
         `when`(repositorioRepository.save(anyRepositorio())).thenReturn(savedRepo)
 
@@ -119,7 +119,7 @@ class TemplateServiceImplTest {
             templateAprobado = false,
         )
 
-        val docente = Usuario(username = "profe_test", esDocente = true)
+        val docente = Usuario(username = "profe_test")
 
         `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(docente)
         `when`(gitHubRepoService.parsearOwnerYRepo(sourceUrl)).thenReturn(Pair("profe", "tp1-publico"))
@@ -169,7 +169,7 @@ class TemplateServiceImplTest {
             private = true,
         )
 
-        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test", esDocente = true))
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test"))
         `when`(gitHubRepoService.parsearOwnerYRepo(sourceUrl)).thenReturn(Pair("profe", "tp1-privado"))
         `when`(gitHubRepoService.getPublicRepoDetails("profe", "tp1-privado")).thenReturn(privateRepoDetails)
 
@@ -193,7 +193,7 @@ class TemplateServiceImplTest {
     fun `crearTemplateRepository throws RepositorioExternoNoEncontradoException when external repo is not found`() {
         val sourceUrl = "https://github.com/profe/inexistente"
 
-        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test", esDocente = true))
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test"))
         `when`(gitHubRepoService.parsearOwnerYRepo(sourceUrl)).thenReturn(Pair("profe", "inexistente"))
         `when`(gitHubRepoService.getPublicRepoDetails("profe", "inexistente")).thenThrow(GitHubNotFoundException("Not found"))
 
@@ -231,7 +231,7 @@ class TemplateServiceImplTest {
             esTemplate = true,
             descripcion = "Template 1"
         )
-        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test", esDocente = true))
+        `when`(usuarioService.obtenerDocente("profe_test")).thenReturn(Usuario(username = "profe_test"))
         `when`(repositorioRepository.findByEsTemplateTrueAndEliminadoFalseOrderByNombreAsc()).thenReturn(listOf(repo1))
 
         val result = templateService.listarTemplates("profe_test")

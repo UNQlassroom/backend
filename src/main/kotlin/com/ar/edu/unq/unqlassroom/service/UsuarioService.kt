@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.model.Usuario
 
 interface UsuarioService {
     fun obtenerDocente(username: String): Usuario
+    fun obtenerOCrearDocente(username: String): Usuario
     fun obtenerOCrearAlumno(username: String): Usuario
     fun obtenerUsuario(username: String): Usuario
     fun actualizarNombreCompleto(username: String, nombre: String, apellido: String): Usuario

@@ -9,10 +9,10 @@ data class GitHubLoginResponseDTO(
     val nombreCompleto: String?,
 ) {
     companion object {
-        fun desdeModelo(usuario: Usuario): GitHubLoginResponseDTO = GitHubLoginResponseDTO(
+        fun desdeModelo(usuario: Usuario, esDocente: Boolean = false): GitHubLoginResponseDTO = GitHubLoginResponseDTO(
             id = usuario.id!!,
             username = usuario.username,
-            esDocente = usuario.esDocente,
+            esDocente = esDocente,
             nombreCompleto = usuario.nombreCompleto,
         )
     }

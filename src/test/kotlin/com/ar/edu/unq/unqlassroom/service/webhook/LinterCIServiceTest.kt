@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.service.webhook
+﻿package com.ar.edu.unq.unqlassroom.service.webhook
 
 import com.ar.edu.unq.unqlassroom.service.LinterCIService
 import com.ar.edu.unq.unqlassroom.service.impl.LinterCIServiceImpl
@@ -43,7 +43,7 @@ class LinterCIServiceTest {
 
     @Test
     fun `procesarReporteDeEvento extrae y persiste incidencias desde JSON directo asociando alumno grupo y asignacion`() {
-        val alumno = Usuario(id = 10L, username = "juanperez", esDocente = false)
+        val alumno = Usuario(id = 10L, username = "juanperez")
         val repo = Repositorio(
             id = 5L,
             nombre = "tp1-juanperez",

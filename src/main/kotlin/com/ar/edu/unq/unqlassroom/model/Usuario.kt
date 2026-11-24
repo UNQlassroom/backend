@@ -15,9 +15,6 @@ class Usuario(
     @Column(nullable = false, unique = true)
     var username: String,
 
-    @Column(nullable = false)
-    var esDocente: Boolean = false,
-
     @Column(nullable = true, unique = true)
     var email: String? = null,
 

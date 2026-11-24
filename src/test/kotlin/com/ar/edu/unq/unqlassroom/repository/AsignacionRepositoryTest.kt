@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.repository
+﻿package com.ar.edu.unq.unqlassroom.repository
 
 import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.Curso
@@ -26,10 +26,10 @@ class AsignacionRepositoryTest {
 
     @Test
     fun `findByCursoId returns all assignments for the given course`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_owner", esDocente = true))
+        val docente = usuarioRepository.save(Usuario(username = "docente_owner"))
 
-        val curso1 = cursoRepository.save(Curso(materia = "Curso Alpha", anio = 2026, semestre = 2, comision = 1, owner = docente))
-        val curso2 = cursoRepository.save(Curso(materia = "Curso Beta", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        val curso1 = cursoRepository.save(Curso(materia = "Curso Alpha", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
+        val curso2 = cursoRepository.save(Curso(materia = "Curso Beta", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
 
         val tp1 = Asignacion(titulo = "TP 1", tipo = TipoAsignacion.INDIVIDUAL, templateRepoName = "tmpl1", curso = curso1)
         val tp2 = Asignacion(titulo = "TP 2", tipo = TipoAsignacion.GRUPAL, templateRepoName = "tmpl2", curso = curso1)
@@ -47,10 +47,10 @@ class AsignacionRepositoryTest {
 
     @Test
     fun `findByIdAndCursoId returns assignment only when both assignment id and course id match`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_owner", esDocente = true))
+        val docente = usuarioRepository.save(Usuario(username = "docente_owner"))
 
-        val curso1 = cursoRepository.save(Curso(materia = "Curso 1", anio = 2026, semestre = 2, comision = 1, owner = docente))
-        val curso2 = cursoRepository.save(Curso(materia = "Curso 2", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        val curso1 = cursoRepository.save(Curso(materia = "Curso 1", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
+        val curso2 = cursoRepository.save(Curso(materia = "Curso 2", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
 
         val tp = asignacionRepository.save(
             Asignacion(
