@@ -15,18 +15,17 @@ class UsuarioServiceImpl(
 
     @Transactional(readOnly = true)
     override fun obtenerDocente(username: String): Usuario {
-        val usuario = obtenerUsuario(username)
+        return obtenerUsuario(username)
+    }
 
-        if (!usuario.esDocente) {
-            throw UsuarioNoEsDocenteException(username)
-        }
-
-        return usuario
+    override fun obtenerOCrearDocente(username: String): Usuario {
+        return usuarioRepository.findByUsername(username)
+            ?: usuarioRepository.save(Usuario(username = username))
     }
 
     override fun obtenerOCrearAlumno(username: String): Usuario {
         return usuarioRepository.findByUsername(username)
-            ?: usuarioRepository.save(Usuario(username = username, esDocente = false))
+            ?: usuarioRepository.save(Usuario(username = username))
     }
 
     @Transactional(readOnly = true)

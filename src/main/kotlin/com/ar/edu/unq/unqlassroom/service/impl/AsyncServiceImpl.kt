@@ -71,12 +71,19 @@ class AsyncServiceImpl(
                     )
                 }
 
-                if (grupo.integrantes.none { it.username == docenteUsername }) {
-                    gitHubCollaboratorService.addCollaborator(
-                        repoName = repoName,
-                        username = docenteUsername,
-                        permission = "push",
-                    )
+                val docentesDelCurso = asignacion.curso?.docentes?.map { it.username }.orEmpty()
+                val docentesParaColaborar = (docentesDelCurso + docenteUsername)
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase() }
+
+                for (docente in docentesParaColaborar) {
+                    if (grupo.integrantes.none { it.username.equals(docente, ignoreCase = true) }) {
+                        gitHubCollaboratorService.addCollaborator(
+                            repoName = repoName,
+                            username = docente,
+                            permission = "push",
+                        )
+                    }
                 }
 
                 val info = gitHubRepoService.obtenerInformacionRepositorio(repoName)

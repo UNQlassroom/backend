@@ -4,6 +4,7 @@ import com.ar.edu.unq.unqlassroom.dto.sse.SseEventDTO
 import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.Asignacion
 import com.ar.edu.unq.unqlassroom.model.GrupoAsignacion
+import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -21,6 +22,7 @@ class SseNotificationServiceImpl(
     private val grupoAsignacionRepository: GrupoAsignacionRepository,
     private val inscripcionRepository: InscripcionRepository,
     private val usuarioRepository: UsuarioRepository,
+    private val cursoRepository: CursoRepository? = null,
 ) : SseNotificationService {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -110,7 +112,7 @@ class SseNotificationServiceImpl(
         )
 
         val destinatarios = mutableSetOf<String>()
-        curso?.owner?.username?.let { destinatarios.add(it) }
+        curso?.docentes?.forEach { destinatarios.add(it.username) }
         grupo.integrantes.forEach { destinatarios.add(it.username) }
 
         enviarAUsuarios(destinatarios, evento)
@@ -126,7 +128,7 @@ class SseNotificationServiceImpl(
         )
 
         val destinatarios = mutableSetOf<String>()
-        curso?.owner?.username?.let { destinatarios.add(it) }
+        curso?.docentes?.forEach { destinatarios.add(it.username) }
 
         if (grupoEspecifico != null) {
             grupoEspecifico.integrantes.forEach { destinatarios.add(it.username) }
@@ -141,7 +143,7 @@ class SseNotificationServiceImpl(
 
     override fun notificarMiembroCursoActualizado(
         cursoId: Long,
-        docenteUsername: String?,
+        docentesUsernames: Collection<String>,
         alumnosUsernames: Collection<String>
     ) {
         val evento = SseEventDTO(
@@ -150,32 +152,62 @@ class SseNotificationServiceImpl(
         )
 
         val destinatarios = mutableSetOf<String>()
-        docenteUsername?.let { destinatarios.add(it) }
+        destinatarios.addAll(docentesUsernames)
         destinatarios.addAll(alumnosUsernames)
 
         enviarAUsuarios(destinatarios, evento)
     }
 
-    override fun notificarMiembroActivadoGlobal(alumnoUsername: String) {
+    override fun notificarMiembroActivadoGlobal(username: String) {
+        val cursosIdsNotificados = mutableSetOf<Long>()
+
+        // 1. Cursos donde el usuario es alumno
         val inscripciones = try {
-            inscripcionRepository.findByUsuarioUsernameIgnoreCase(alumnoUsername)
+            inscripcionRepository.findByUsuarioUsernameIgnoreCase(username)
         } catch (e: Exception) {
-            logger.warn("Error buscando inscripciones de alumno {}: {}", alumnoUsername, e.message)
+            logger.warn("Error buscando inscripciones de alumno {}: {}", username, e.message)
             emptyList()
         }
 
         for (inscripcion in inscripciones) {
             val curso = inscripcion.curso
-            val evento = SseEventDTO(
-                type = SseEventType.MIEMBRO_ACTIVADO,
-                cursoId = curso.id,
-            )
+            val cursoId = curso.id
+            if (cursoId != null && cursosIdsNotificados.add(cursoId)) {
+                val evento = SseEventDTO(
+                    type = SseEventType.MIEMBRO_ACTIVADO,
+                    cursoId = cursoId,
+                )
 
-            val destinatarios = mutableSetOf<String>()
-            curso.owner?.username?.let { destinatarios.add(it) }
-            destinatarios.add(alumnoUsername)
+                val destinatarios = mutableSetOf<String>()
+                curso.docentes.forEach { destinatarios.add(it.username) }
+                destinatarios.add(username)
 
-            enviarAUsuarios(destinatarios, evento)
+                enviarAUsuarios(destinatarios, evento)
+            }
+        }
+
+        // 2. Cursos donde el usuario es docente
+        val cursosDocente = try {
+            cursoRepository?.findCursosParaDocente(username.trim(), archivado = false) ?: emptyList()
+        } catch (e: Exception) {
+            logger.warn("Error buscando cursos de docente {}: {}", username, e.message)
+            emptyList()
+        }
+
+        for (curso in cursosDocente) {
+            val cursoId = curso.id
+            if (cursoId != null && cursosIdsNotificados.add(cursoId)) {
+                val evento = SseEventDTO(
+                    type = SseEventType.MIEMBRO_ACTIVADO,
+                    cursoId = cursoId,
+                )
+
+                val destinatarios = mutableSetOf<String>()
+                curso.docentes.forEach { destinatarios.add(it.username) }
+                destinatarios.add(username)
+
+                enviarAUsuarios(destinatarios, evento)
+            }
         }
     }
 
@@ -186,7 +218,7 @@ class SseNotificationServiceImpl(
         )
 
         val docentes = try {
-            usuarioRepository.findByEsDocenteTrue().map { it.username }
+            cursoRepository?.findDocentesUsernames() ?: emptyList()
         } catch (e: Exception) {
             logger.warn("Error buscando docentes para notificar templates: {}", e.message)
             emptyList()
@@ -218,4 +250,3 @@ class SseNotificationServiceImpl(
         }
     }
 }
-

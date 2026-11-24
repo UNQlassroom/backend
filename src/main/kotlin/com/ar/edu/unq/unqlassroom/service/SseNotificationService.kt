@@ -9,8 +9,11 @@ interface SseNotificationService {
     fun suscribir(username: String): SseEmitter
     fun notificarEventoDeRepositorio(repoNombre: String, tipo: SseEventType)
     fun notificarAsignacionActualizada(asignacion: Asignacion, grupoEspecifico: GrupoAsignacion? = null)
-    fun notificarMiembroCursoActualizado(cursoId: Long, docenteUsername: String?, alumnosUsernames: Collection<String>)
-    fun notificarMiembroActivadoGlobal(alumnoUsername: String)
+    fun notificarMiembroCursoActualizado(
+        cursoId: Long,
+        docentesUsernames: Collection<String>,
+        alumnosUsernames: Collection<String> = emptyList()
+    )
+    fun notificarMiembroActivadoGlobal(username: String)
     fun notificarTemplatesActualizados(repoNombre: String)
 }
-
