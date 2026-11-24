@@ -52,6 +52,11 @@ class AuthServiceImplTest {
         return ""
     }
 
+    private fun anyBoolean(): Boolean {
+        Mockito.anyBoolean()
+        return false
+    }
+
     @Test
     fun `loginConGitHub creates new alumno when user does not exist`() {
         val dto = GitHubLoginRequestDTO(code = "oauth-code-123", esDocente = false)
@@ -71,12 +76,11 @@ class AuthServiceImplTest {
             Usuario(
                 id = 10L,
                 username = u.username,
-                esDocente = u.esDocente,
                 email = u.email,
                 nombreCompleto = u.nombreCompleto
             )
         }
-        `when`(jwtService.generateToken(anyUsuario())).thenReturn("jwt-token-xyz")
+        `when`(jwtService.generateToken(anyUsuario(), anyBoolean())).thenReturn("jwt-token-xyz")
 
         val response = authService.loginConGitHub(dto)
 
@@ -106,12 +110,11 @@ class AuthServiceImplTest {
             Usuario(
                 id = 20L,
                 username = u.username,
-                esDocente = u.esDocente,
                 email = u.email,
                 nombreCompleto = u.nombreCompleto
             )
         }
-        `when`(jwtService.generateToken(anyUsuario())).thenReturn("jwt-docente-token")
+        `when`(jwtService.generateToken(anyUsuario(), anyBoolean())).thenReturn("jwt-docente-token")
 
         val response = authService.loginConGitHub(dto)
 
@@ -121,7 +124,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    fun `loginConGitHub does not preserves existing role for existing user`() {
+    fun `loginConGitHub returns user with esDocente according to login request`() {
         val dto = GitHubLoginRequestDTO(code = "oauth-code-existing", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "profe_existente",
@@ -134,7 +137,6 @@ class AuthServiceImplTest {
         val existingDocente = Usuario(
             id = 5L,
             username = "profe_existente",
-            esDocente = true,
             email = "profe.viejo@unq.edu.ar",
             nombreCompleto = "Profesor",
             githubState = "active"
@@ -144,33 +146,25 @@ class AuthServiceImplTest {
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_existing")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("profe_existente")).thenReturn(existingDocente)
         `when`(usuarioRepository.save(existingDocente)).thenReturn(existingDocente)
-        `when`(jwtService.generateToken(existingDocente)).thenReturn("jwt-token-docente")
+        `when`(jwtService.generateToken(anyUsuario(), anyBoolean())).thenReturn("jwt-token-docente")
 
         val response = authService.loginConGitHub(dto)
 
         assertEquals("jwt-token-docente", response.token)
         assertEquals(false, response.user?.esDocente)
-        assertEquals("profe.viejo@unq.edu.ar", existingDocente.email)
         assertEquals("Profesor", response.user?.nombreCompleto)
         verifyNoInteractions(gitHubOrgService)
     }
 
     @Test
-    fun `loadUserByUsername returns UserDetails with correct authority`() {
-        val docente = Usuario(id = 1L, username = "docente1", esDocente = true)
-        val alumno = Usuario(id = 2L, username = "alumno1", esDocente = false)
-
-        `when`(usuarioRepository.findByUsername("docente1")).thenReturn(docente)
-        `when`(usuarioRepository.findByUsername("alumno1")).thenReturn(alumno)
+    fun `loadUserByUsername returns UserDetails with username`() {
+        val usuario = Usuario(id = 1L, username = "docente1")
+        `when`(usuarioRepository.findByUsername("docente1")).thenReturn(usuario)
 
         val userDetailsDocente = authService.loadUserByUsername("docente1")
-        val userDetailsAlumno = authService.loadUserByUsername("alumno1")
 
         assertEquals("docente1", userDetailsDocente.username)
-        assertTrue(userDetailsDocente.authorities.any { it.authority == "ROLE_DOCENTE" })
-
-        assertEquals("alumno1", userDetailsAlumno.username)
-        assertTrue(userDetailsAlumno.authorities.any { it.authority == "ROLE_ALUMNO" })
+        assertTrue(userDetailsDocente.authorities.any { it.authority == "ROLE_USER" })
     }
 
     @Test
@@ -204,7 +198,6 @@ class AuthServiceImplTest {
             Usuario(
                 id = 99L,
                 username = u.username,
-                esDocente = u.esDocente,
                 email = u.email,
                 nombreCompleto = u.nombreCompleto,
                 githubState = u.githubState
@@ -222,7 +215,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    fun `loginConGitHub invites user as admin when user is new docente and not member of org`() {
+    fun `loginConGitHub invites user as member when user is new docente and not member of org`() {
         val dto = GitHubLoginRequestDTO(code = "code-admin-no-org", esDocente = true)
         val profile = GitHubUserProfileResponse(
             login = "docente_sin_org",
@@ -236,14 +229,13 @@ class AuthServiceImplTest {
         `when`(gitHubOAuthClient.intercambiarCodePorToken("code-admin-no-org")).thenReturn("gho_admin_sin_org")
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_admin_sin_org")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("docente_sin_org")).thenReturn(null)
-        `when`(gitHubOrgService.invitarMiembro(username = "docente_sin_org", role = "admin"))
-            .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "admin"))
+        `when`(gitHubOrgService.invitarMiembro(username = "docente_sin_org", role = "member"))
+            .thenReturn(GitHubOrgMembershipResponse(state = "pending", role = "member"))
         `when`(usuarioRepository.save(anyUsuario())).thenAnswer { invocation ->
             val u = invocation.getArgument<Usuario>(0)
             Usuario(
                 id = 100L,
                 username = u.username,
-                esDocente = u.esDocente,
                 email = u.email,
                 nombreCompleto = u.nombreCompleto,
                 githubState = u.githubState
@@ -257,7 +249,7 @@ class AuthServiceImplTest {
         assertEquals("https://github.com/orgs/UNQlassroom/invitation", response.redirectUrl)
         assertNull(response.token)
         assertNull(response.user)
-        verify(gitHubOrgService).invitarMiembro(username = "docente_sin_org", role = "admin")
+        verify(gitHubOrgService).invitarMiembro(username = "docente_sin_org", role = "member")
     }
 
     @Test
@@ -272,36 +264,34 @@ class AuthServiceImplTest {
         )
 
         Mockito.lenient().`when`(properties.organization).thenReturn("UNQlassroom")
-        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-active-immediate")).thenReturn("gho_token_nuevo_activo")
-        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_token_nuevo_activo")).thenReturn(profile)
+        `when`(gitHubOAuthClient.intercambiarCodePorToken("code-active-immediate")).thenReturn("gho_active_immediate")
+        `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_active_immediate")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("usuario_nuevo_activo")).thenReturn(null)
         `when`(gitHubOrgService.invitarMiembro(username = "usuario_nuevo_activo", role = "member"))
             .thenReturn(GitHubOrgMembershipResponse(state = "active", role = "member"))
         `when`(usuarioRepository.save(anyUsuario())).thenAnswer { invocation ->
             val u = invocation.getArgument<Usuario>(0)
             Usuario(
-                id = 30L,
+                id = 88L,
                 username = u.username,
-                esDocente = u.esDocente,
                 email = u.email,
                 nombreCompleto = u.nombreCompleto,
                 githubState = u.githubState
             )
         }
-        `when`(jwtService.generateToken(anyUsuario())).thenReturn("jwt-token-nuevo-activo")
+        `when`(jwtService.generateToken(anyUsuario(), anyBoolean())).thenReturn("jwt-active-token")
 
         val response = authService.loginConGitHub(dto)
 
         assertNotNull(response)
+        assertEquals("jwt-active-token", response.token)
         assertFalse(response.requiereUnirseAOrg)
         assertNull(response.redirectUrl)
-        assertEquals("jwt-token-nuevo-activo", response.token)
-        assertEquals("usuario_nuevo_activo", response.user?.username)
         verify(gitHubOrgService).invitarMiembro(username = "usuario_nuevo_activo", role = "member")
     }
 
     @Test
-    fun `loginConGitHub does not call gitHubOrgService when user already exists in DB with active state`() {
+    fun `loginConGitHub does not call gitHubOrgService when user exists in DB and is active`() {
         val dto = GitHubLoginRequestDTO(code = "oauth-code-existing", esDocente = false)
         val profile = GitHubUserProfileResponse(
             login = "usuario_existente",
@@ -313,7 +303,6 @@ class AuthServiceImplTest {
         val existingUser = Usuario(
             id = 1L,
             username = "usuario_existente",
-            esDocente = false,
             email = "existente@unq.edu.ar",
             nombreCompleto = "Usuario Existente",
             githubState = "active"
@@ -324,7 +313,7 @@ class AuthServiceImplTest {
         `when`(gitHubOAuthClient.obtenerPerfilGitHub("gho_existing")).thenReturn(profile)
         `when`(usuarioRepository.findByUsername("usuario_existente")).thenReturn(existingUser)
         `when`(usuarioRepository.save(existingUser)).thenReturn(existingUser)
-        `when`(jwtService.generateToken(existingUser)).thenReturn("jwt-existing")
+        `when`(jwtService.generateToken(anyUsuario(), anyBoolean())).thenReturn("jwt-existing")
 
         val response = authService.loginConGitHub(dto)
 
@@ -348,7 +337,6 @@ class AuthServiceImplTest {
         val existingStudent = Usuario(
             id = 2L,
             username = "alumno_pendiente",
-            esDocente = false,
             email = "pendiente@unq.edu.ar",
             nombreCompleto = "Alumno Pendiente",
             githubState = "pending"
@@ -367,6 +355,6 @@ class AuthServiceImplTest {
         assertNull(response.token)
         verifyNoInteractions(gitHubOrgService)
         verify(usuarioRepository).save(existingStudent)
-        verify(jwtService, never()).generateToken(anyUsuario())
+        verify(jwtService, never()).generateToken(anyUsuario(), anyBoolean())
     }
 }

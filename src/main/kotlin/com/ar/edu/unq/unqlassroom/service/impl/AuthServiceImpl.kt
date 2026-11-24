@@ -32,17 +32,13 @@ class AuthServiceImpl(
         val usuarioExistente = usuarioRepository.findByUsername(perfil.login)
         val usuario = usuarioExistente ?: Usuario(
             username = perfil.login,
-            esDocente = dto.esDocente == true,
             githubState = "pending",
         )
-
-        usuario.esDocente = dto.esDocente == true
 
         val org = properties.organization?.trim().orEmpty()
         if (org.isNotEmpty() && usuario.githubState != "active") {
             if (usuarioExistente == null) {
-                val rolOrg = if (dto.esDocente == true) "admin" else "member"
-                val invitacion = gitHubOrgService.invitarMiembro(username = perfil.login, role = rolOrg)
+                val invitacion = gitHubOrgService.invitarMiembro(username = perfil.login, role = "member")
                 if (invitacion.state == "active") {
                     usuario.githubState = "active"
                 }
@@ -61,11 +57,12 @@ class AuthServiceImpl(
         }
 
         val usuarioGuardado = usuarioRepository.save(usuario)
-        val token = jwtService.generateToken(usuarioGuardado)
+        val esDocente = dto.esDocente == true
+        val token = jwtService.generateToken(usuarioGuardado, esDocente = esDocente)
 
         return AuthResponseDTO(
             token = token,
-            user = GitHubLoginResponseDTO.desdeModelo(usuarioGuardado)
+            user = GitHubLoginResponseDTO.desdeModelo(usuarioGuardado, esDocente = esDocente)
         )
     }
 
@@ -74,11 +71,10 @@ class AuthServiceImpl(
         val usuario = usuarioRepository.findByUsername(username)
             ?: throw UsernameNotFoundException("Usuario no encontrado: $username")
 
-        val rol = if (usuario.esDocente) "ROLE_DOCENTE" else "ROLE_ALUMNO"
         return org.springframework.security.core.userdetails.User.builder()
             .username(usuario.username)
             .password("")
-            .authorities(rol)
+            .authorities("ROLE_USER")
             .build()
     }
 }
