@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.repository
+﻿package com.ar.edu.unq.unqlassroom.repository
 
 import com.ar.edu.unq.unqlassroom.model.*
 import org.junit.jupiter.api.Assertions.*
@@ -33,10 +33,10 @@ class ReporteLinterRepositoryTest {
 
     @Test
     fun `persiste correctamente reporte e incidencias de linter asociados a alumno repositorio grupo y asignacion`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_linter", esDocente = true))
-        val alumno = usuarioRepository.save(Usuario(username = "alumno_linter", esDocente = false))
+        val docente = usuarioRepository.save(Usuario(username = "docente_linter"))
+        val alumno = usuarioRepository.save(Usuario(username = "alumno_linter"))
         val curso = cursoRepository.save(
-            Curso(materia = "Ingeniería de Software", anio = 2026, semestre = 2, comision = 1, owner = docente)
+            Curso(materia = "Ingeniería de Software", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente))
         )
         val asignacion = asignacionRepository.save(
             Asignacion(

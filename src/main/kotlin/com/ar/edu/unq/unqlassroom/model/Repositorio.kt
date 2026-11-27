@@ -21,6 +21,9 @@ class Repositorio(
     @Column(nullable = true)
     var fechaUltimoCommit: String? = null,
 
+    @Column(name = "rama_ultimo_commit", nullable = true)
+    var ramaUltimoCommit: String? = null,
+
     @Column(nullable = true)
     var estadoCI: String? = null,
 
@@ -54,10 +57,13 @@ class Repositorio(
     @Column(name = "github_repo_id", nullable = true)
     var githubRepoId: Long? = null,
 ) {
-    fun actualizarInfo(ultimoCommit: String?, fechaUltimoCommit: String?, estadoCI: String?) {
+    fun actualizarInfo(ultimoCommit: String?, fechaUltimoCommit: String?, estadoCI: String?, rama: String? = null) {
         this.ultimoCommit = ultimoCommit
         this.fechaUltimoCommit = fechaUltimoCommit
         this.estadoCI = estadoCI
+        if (!rama.isNullOrBlank()) {
+            this.ramaUltimoCommit = rama
+        }
         if (estadoCI == "success" || estadoCI == "sin_ci") {
             limpiarFallaCI()
         }
@@ -85,9 +91,12 @@ class Repositorio(
         this.ciRunUrl = null
     }
 
-    fun actualizarUltimoCommit(ultimoCommit: String?, fechaUltimoCommit: String?) {
+    fun actualizarUltimoCommit(ultimoCommit: String?, fechaUltimoCommit: String?, rama: String? = null) {
         this.ultimoCommit = ultimoCommit
         this.fechaUltimoCommit = fechaUltimoCommit
+        if (!rama.isNullOrBlank()) {
+            this.ramaUltimoCommit = rama
+        }
     }
 
     fun marcarComoTemplate(descripcion: String? = this.descripcion) {

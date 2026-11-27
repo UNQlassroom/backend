@@ -203,11 +203,11 @@ class AsignacionTest {
         val g2 = GrupoAsignacion(id = 20L, nombre = "Beta", integrantes = mutableListOf(u2))
         asignacion.grupos.addAll(listOf(g1, g2))
 
-        val paraOwner = asignacion.paraVisualizacionDe("profe", esOwner = true)
+        val paraOwner = asignacion.paraVisualizacionDe("profe", esDocente = true)
         assertEquals(2, paraOwner.grupos.size)
         assertEquals(EstadoAsignacion.LISTA, paraOwner.estado)
 
-        val paraAlumno = asignacion.paraVisualizacionDe("alumno1", esOwner = false)
+        val paraAlumno = asignacion.paraVisualizacionDe("alumno1", esDocente = false)
         assertEquals(1, paraAlumno.grupos.size)
         assertEquals("Alfa", paraAlumno.grupos[0].nombre)
         assertEquals(EstadoAsignacion.LISTA, paraAlumno.estado)

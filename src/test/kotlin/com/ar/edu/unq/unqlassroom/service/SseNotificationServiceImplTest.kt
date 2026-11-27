@@ -1,7 +1,8 @@
-package com.ar.edu.unq.unqlassroom.service
+﻿package com.ar.edu.unq.unqlassroom.service
 
 import com.ar.edu.unq.unqlassroom.dto.sse.SseEventType
 import com.ar.edu.unq.unqlassroom.model.*
+import com.ar.edu.unq.unqlassroom.repository.CursoRepository
 import com.ar.edu.unq.unqlassroom.repository.GrupoAsignacionRepository
 import com.ar.edu.unq.unqlassroom.repository.InscripcionRepository
 import com.ar.edu.unq.unqlassroom.repository.UsuarioRepository
@@ -26,6 +27,9 @@ class SseNotificationServiceImplTest {
     @Mock
     private lateinit var usuarioRepository: UsuarioRepository
 
+    @Mock
+    private lateinit var cursoRepository: CursoRepository
+
     private lateinit var sseNotificationService: SseNotificationServiceImpl
 
     @BeforeEach
@@ -34,6 +38,7 @@ class SseNotificationServiceImplTest {
             grupoAsignacionRepository = grupoAsignacionRepository,
             inscripcionRepository = inscripcionRepository,
             usuarioRepository = usuarioRepository,
+            cursoRepository = cursoRepository,
         )
     }
 
@@ -44,8 +49,8 @@ class SseNotificationServiceImplTest {
     }
 
     @Test
-    fun `notificarEventoDeRepositorio encuentra grupo y notifica a docente owner y alumnos`() {
-        val docente = Usuario(id = 1L, username = "docente1", esDocente = true)
+    fun `notificarEventoDeRepositorio encuentra grupo y notifica a docentes y alumnos`() {
+        val docente = Usuario(id = 1L, username = "docente1")
         val alumno1 = Usuario(id = 2L, username = "alumno1")
         val alumno2 = Usuario(id = 3L, username = "alumno2")
 
@@ -55,7 +60,7 @@ class SseNotificationServiceImplTest {
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
 
         val asignacion = Asignacion(
@@ -97,7 +102,7 @@ class SseNotificationServiceImplTest {
 
     @Test
     fun `notificarMiembroActivadoGlobal notifica a los cursos donde esta inscripto el alumno`() {
-        val docente = Usuario(id = 1L, username = "docente1", esDocente = true)
+        val docente = Usuario(id = 1L, username = "docente1")
         val alumno = Usuario(id = 2L, username = "alumno1")
 
         val curso = Curso(
@@ -106,7 +111,7 @@ class SseNotificationServiceImplTest {
             anio = 2026,
             semestre = 1,
             comision = 1,
-            owner = docente,
+            docentes = mutableListOf(docente),
         )
 
         val inscripcion = Inscripcion(
@@ -117,6 +122,8 @@ class SseNotificationServiceImplTest {
 
         `when`(inscripcionRepository.findByUsuarioUsernameIgnoreCase("alumno1"))
             .thenReturn(listOf(inscripcion))
+        `when`(cursoRepository.findCursosParaDocente("alumno1", archivado = false))
+            .thenReturn(emptyList())
 
         sseNotificationService.suscribir("docente1")
         sseNotificationService.suscribir("alumno1")
@@ -127,12 +134,51 @@ class SseNotificationServiceImplTest {
     }
 
     @Test
-    fun `notificarTemplatesActualizados notifica a todos los docentes`() {
-        val docente1 = Usuario(id = 1L, username = "docente1", esDocente = true)
-        val docente2 = Usuario(id = 2L, username = "docente2", esDocente = true)
+    fun `notificarMiembroActivadoGlobal notifica a los cursos donde el usuario es docente`() {
+        val docente1 = Usuario(id = 1L, username = "docente1")
+        val docente2 = Usuario(id = 2L, username = "docente2")
 
-        `when`(usuarioRepository.findByEsDocenteTrue())
-            .thenReturn(listOf(docente1, docente2))
+        val curso = Curso(
+            id = 10L,
+            materia = "Objetos 1",
+            anio = 2026,
+            semestre = 1,
+            comision = 1,
+            docentes = mutableListOf(docente1, docente2),
+        )
+
+        `when`(inscripcionRepository.findByUsuarioUsernameIgnoreCase("docente1"))
+            .thenReturn(emptyList())
+        `when`(cursoRepository.findCursosParaDocente("docente1", archivado = false))
+            .thenReturn(listOf(curso))
+
+        sseNotificationService.suscribir("docente1")
+        sseNotificationService.suscribir("docente2")
+
+        assertDoesNotThrow {
+            sseNotificationService.notificarMiembroActivadoGlobal("docente1")
+        }
+    }
+
+    @Test
+    fun `notificarMiembroCursoActualizado notifica a todos los docentes y alumnos indicados`() {
+        sseNotificationService.suscribir("docente1")
+        sseNotificationService.suscribir("docente2")
+        sseNotificationService.suscribir("alumno1")
+
+        assertDoesNotThrow {
+            sseNotificationService.notificarMiembroCursoActualizado(
+                cursoId = 1L,
+                docentesUsernames = listOf("docente1", "docente2"),
+                alumnosUsernames = listOf("alumno1")
+            )
+        }
+    }
+
+    @Test
+    fun `notificarTemplatesActualizados notifica a todos los docentes`() {
+        `when`(cursoRepository.findDocentesUsernames())
+            .thenReturn(listOf("docente1", "docente2"))
 
         sseNotificationService.suscribir("docente1")
 
@@ -154,4 +200,3 @@ class SseNotificationServiceImplTest {
         }
     }
 }
-

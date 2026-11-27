@@ -7,15 +7,21 @@ data class UsuarioResponseDTO(
     val username: String,
     val esDocente: Boolean = false,
     val email: String? = null,
+    val dni: String? = null,
     val nombreCompleto: String? = null,
     val activo: Boolean = true,
 ) {
     companion object {
-        fun desdeModelo(usuario: Usuario, activo: Boolean = true): UsuarioResponseDTO = UsuarioResponseDTO(
+        fun desdeModelo(
+            usuario: Usuario,
+            activo: Boolean = true,
+            esDocente: Boolean = false,
+        ): UsuarioResponseDTO = UsuarioResponseDTO(
             id = usuario.id,
             username = usuario.username,
-            esDocente = usuario.esDocente,
+            esDocente = esDocente,
             email = usuario.email,
+            dni = usuario.dni,
             nombreCompleto = usuario.nombreCompleto,
             activo = activo,
         )

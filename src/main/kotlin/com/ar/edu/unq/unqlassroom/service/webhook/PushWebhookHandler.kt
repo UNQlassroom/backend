@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional
  * Handler de eventos de Webhook para 'push' de GitHub.
  *
  * Se encarga de procesar los eventos de tipo PUSH, extraer del payload la información
- * del commit (mensaje y fecha) para actualizar la entidad Repositorio, y ejecutar de forma
+ * del commit (mensaje, fecha y rama) para actualizar la entidad Repositorio, y ejecutar de forma
  * secundaria el análisis de calidad de commits sin interrumpir el flujo principal.
  */
 @Component
@@ -50,10 +50,12 @@ class PushWebhookHandler(
         val commitMessage = extraerCommitMessage(rootNode)
         val commitDate = extraerCommitDate(rootNode)
         val commitSha = extraerCommitSha(rootNode)
+        val branch = extraerBranch(rootNode)
 
         repositorio.actualizarUltimoCommit(
             ultimoCommit = commitMessage ?: repositorio.ultimoCommit,
             fechaUltimoCommit = commitDate ?: repositorio.fechaUltimoCommit,
+            rama = branch ?: repositorio.ramaUltimoCommit,
         )
 
         if (repositorio.esTemplate) {
@@ -62,10 +64,11 @@ class PushWebhookHandler(
 
         val repositorioGuardado = repositorioRepository.save(repositorio)
         logger.info(
-            "Repositorio '{}' actualizado por push. Ultimo commit: '{}', fecha: '{}'",
+            "Repositorio '{}' actualizado por push. Ultimo commit: '{}', fecha: '{}', rama: '{}'",
             repoName,
             repositorioGuardado.ultimoCommit,
             repositorioGuardado.fechaUltimoCommit,
+            repositorioGuardado.ramaUltimoCommit,
         )
 
         try {
@@ -94,6 +97,18 @@ class PushWebhookHandler(
         if (!name.isNullOrBlank()) return name
         val repoName = rootNode.path("repo_name").asText(null)
         if (!repoName.isNullOrBlank()) return repoName
+        return null
+    }
+
+    private fun extraerBranch(rootNode: JsonNode): String? {
+        val ref = rootNode.path("ref").asText(null)
+        if (!ref.isNullOrBlank()) {
+            return ref.removePrefix("refs/heads/")
+        }
+        val branch = rootNode.path("branch").asText(null)
+        if (!branch.isNullOrBlank()) return branch
+        val refName = rootNode.path("ref_name").asText(null)
+        if (!refName.isNullOrBlank()) return refName
         return null
     }
 

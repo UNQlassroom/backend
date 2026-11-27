@@ -1,5 +1,6 @@
 package com.ar.edu.unq.unqlassroom.controller
 
+import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
 import com.ar.edu.unq.unqlassroom.dto.auth.request.GitHubLoginRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.auth.response.AuthResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.auth.response.GitHubLoginResponseDTO
@@ -33,7 +34,10 @@ class AuthControllerTest {
 
     @BeforeEach
     fun setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(authController).build()
+        mockMvc = MockMvcBuilders
+            .standaloneSetup(authController)
+            .setControllerAdvice(RestExceptionHandler())
+            .build()
     }
 
     @Test
@@ -45,7 +49,6 @@ class AuthControllerTest {
                 id = 1L,
                 username = "alumno1",
                 esDocente = false,
-                email = "alumno1@unq.edu.ar",
                 nombreCompleto = "Alumno Uno"
             )
         )
@@ -61,29 +64,28 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.token").value("jwt-test-token"))
             .andExpect(jsonPath("$.user.username").value("alumno1"))
             .andExpect(jsonPath("$.user.esDocente").value(false))
+            .andExpect(jsonPath("$.user.nombreCompleto").value("Alumno Uno"))
     }
 
     @Test
-    fun `loginConGitHub returns 200 with redirectUrl when user requires joining org`() {
-        val requestDTO = GitHubLoginRequestDTO(code = "github-code-org-required", esDocente = false)
-        val responseDTO = AuthResponseDTO(
-            token = null,
-            user = null,
-            requiereUnirseAOrg = true,
-            redirectUrl = "https://github.com/orgs/UNQlassroom/invitation"
+    fun `loginConGitHub returns 400 when request body is empty`() {
+        mockMvc.perform(
+            post("/auth/github")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
         )
+            .andExpect(status().isBadRequest)
+    }
 
-        `when`(authService.loginConGitHub(requestDTO)).thenReturn(responseDTO)
+    @Test
+    fun `loginConGitHub returns 400 when code is blank`() {
+        val requestDTO = GitHubLoginRequestDTO(code = "   ", esDocente = false)
 
         mockMvc.perform(
             post("/auth/github")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(requestDTO))
         )
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.requiereUnirseAOrg").value(true))
-            .andExpect(jsonPath("$.redirectUrl").value("https://github.com/orgs/UNQlassroom/invitation"))
-            .andExpect(jsonPath("$.token").doesNotExist())
-            .andExpect(jsonPath("$.user").doesNotExist())
+            .andExpect(status().isBadRequest)
     }
 }

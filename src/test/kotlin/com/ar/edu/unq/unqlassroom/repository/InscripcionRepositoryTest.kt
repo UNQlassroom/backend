@@ -1,4 +1,4 @@
-package com.ar.edu.unq.unqlassroom.repository
+﻿package com.ar.edu.unq.unqlassroom.repository
 
 import com.ar.edu.unq.unqlassroom.model.Curso
 import com.ar.edu.unq.unqlassroom.model.Inscripcion
@@ -24,13 +24,13 @@ class InscripcionRepositoryTest {
 
     @Test
     fun `findByCursoId returns all inscriptions for a given course`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_test", esDocente = true))
-        val alumno1 = usuarioRepository.save(Usuario(username = "alumno_uno", esDocente = false))
-        val alumno2 = usuarioRepository.save(Usuario(username = "alumno_dos", esDocente = false))
-        val alumno3 = usuarioRepository.save(Usuario(username = "alumno_tres", esDocente = false))
+        val docente = usuarioRepository.save(Usuario(username = "docente_test"))
+        val alumno1 = usuarioRepository.save(Usuario(username = "alumno_uno"))
+        val alumno2 = usuarioRepository.save(Usuario(username = "alumno_dos"))
+        val alumno3 = usuarioRepository.save(Usuario(username = "alumno_tres"))
 
-        val curso1 = cursoRepository.save(Curso(materia = "Materia 1", anio = 2026, semestre = 2, comision = 1, owner = docente))
-        val curso2 = cursoRepository.save(Curso(materia = "Materia 2", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        val curso1 = cursoRepository.save(Curso(materia = "Materia 1", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
+        val curso2 = cursoRepository.save(Curso(materia = "Materia 2", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
 
         inscripcionRepository.save(Inscripcion(curso = curso1, usuario = alumno1))
         inscripcionRepository.save(Inscripcion(curso = curso1, usuario = alumno2))
@@ -45,10 +45,10 @@ class InscripcionRepositoryTest {
 
     @Test
     fun `findByCursoIdAndUsuarioUsername returns inscription when match exists and null otherwise`() {
-        val docente = usuarioRepository.save(Usuario(username = "docente_test", esDocente = true))
-        val alumno = usuarioRepository.save(Usuario(username = "alumno_inscripto", esDocente = false, githubState = "active"))
+        val docente = usuarioRepository.save(Usuario(username = "docente_test"))
+        val alumno = usuarioRepository.save(Usuario(username = "alumno_inscripto", githubState = "active"))
 
-        val curso = cursoRepository.save(Curso(materia = "Materia A", anio = 2026, semestre = 2, comision = 1, owner = docente))
+        val curso = cursoRepository.save(Curso(materia = "Materia A", anio = 2026, semestre = 2, comision = 1, docentes = mutableListOf(docente)))
 
         inscripcionRepository.save(Inscripcion(curso = curso, usuario = alumno, githubRole = "write"))
 

@@ -19,8 +19,8 @@ class UsuarioRepositoryTest {
         val user = Usuario(
             username = "docente_juan",
             nombreCompleto = "Juan Perez",
-            email = "juan@unq.edu.ar",
-            esDocente = true
+            email = "juan@unq.com.ar",
+            dni = "12345678",
         )
         usuarioRepository.save(user)
 
@@ -28,7 +28,7 @@ class UsuarioRepositoryTest {
         assertNotNull(found)
         assertEquals("docente_juan", found?.username)
         assertEquals("Juan Perez", found?.nombreCompleto)
-        assertTrue(found?.esDocente == true)
+        assertEquals("12345678", found?.dni)
     }
 
     @Test
@@ -39,10 +39,40 @@ class UsuarioRepositoryTest {
 
     @Test
     fun `existsByUsername returns true when user exists and false otherwise`() {
-        val user = Usuario(username = "alumno_maria", esDocente = false)
+        val user = Usuario(username = "alumno_maria")
         usuarioRepository.save(user)
 
         assertTrue(usuarioRepository.existsByUsername("alumno_maria"))
         assertFalse(usuarioRepository.existsByUsername("alumno_desconocido"))
+    }
+
+    @Test
+    fun `findByEmailIgnoreCase returns user case-insensitively`() {
+        val user = Usuario(
+            username = "alumno_carlos",
+            email = "carlos@correo.com",
+            dni = "40123456",
+        )
+        usuarioRepository.save(user)
+
+        val found = usuarioRepository.findByEmailIgnoreCase("CARLOS@CORREO.COM")
+        assertNotNull(found)
+        assertEquals("alumno_carlos", found?.username)
+        assertEquals("carlos@correo.com", found?.email)
+    }
+
+    @Test
+    fun `findByDni returns user when exists`() {
+        val user = Usuario(
+            username = "alumno_lucas",
+            email = "lucas@correo.com.ar",
+            dni = "38999888",
+        )
+        usuarioRepository.save(user)
+
+        val found = usuarioRepository.findByDni("38999888")
+        assertNotNull(found)
+        assertEquals("alumno_lucas", found?.username)
+        assertEquals("38999888", found?.dni)
     }
 }

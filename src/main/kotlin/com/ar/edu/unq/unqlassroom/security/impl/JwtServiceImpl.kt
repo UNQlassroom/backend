@@ -20,11 +20,11 @@ class JwtServiceImpl(
     private val jwtExpiration: Long
 ) : JwtService {
 
-    override fun generateToken(usuario: Usuario): String {
-        val rol = if (usuario.esDocente) "ROLE_DOCENTE" else "ROLE_ALUMNO"
+    override fun generateToken(usuario: Usuario, esDocente: Boolean): String {
+        val rol = if (esDocente) "ROLE_DOCENTE" else "ROLE_ALUMNO"
         val claims = mapOf(
             "roles" to listOf(rol),
-            "esDocente" to usuario.esDocente
+            "esDocente" to esDocente
         )
 
         val now = System.currentTimeMillis()

@@ -1,11 +1,16 @@
 package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarAlumnosRequestDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.request.AgregarDocentesRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.request.CursoRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoResponseDTO
 import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoAlumnosResponseDTO
+import com.ar.edu.unq.unqlassroom.dto.curso.response.CursoDocentesResponseDTO
+import com.ar.edu.unq.unqlassroom.security.esDocente
 import com.ar.edu.unq.unqlassroom.service.CursoService
 import jakarta.validation.Valid
+import org.springframework.core.io.ByteArrayResource
+import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -56,6 +61,37 @@ class CursoController(
         return ResponseEntity.noContent().build()
     }
 
+    @PostMapping("/{id}/docentes")
+    fun agregarDocentes(
+        @PathVariable id: Long,
+        @RequestBody @Valid request: AgregarDocentesRequestDTO,
+        authentication: Authentication,
+    ): ResponseEntity<CursoDocentesResponseDTO> {
+        val docentes = cursoService.agregarDocentes(id, request.usernames, authentication.name)
+        val response = CursoDocentesResponseDTO.desdeModelo(id, docentes)
+        return ResponseEntity.ok(response)
+    }
+
+    @GetMapping("/{id}/docentes")
+    fun obtenerDocentes(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<CursoDocentesResponseDTO> {
+        val docentes = cursoService.obtenerDocentes(id, authentication.name)
+        val response = CursoDocentesResponseDTO.desdeModelo(id, docentes)
+        return ResponseEntity.ok(response)
+    }
+
+    @DeleteMapping("/{id}/docentes/{username}")
+    fun darDeBajaDocente(
+        @PathVariable id: Long,
+        @PathVariable username: String,
+        authentication: Authentication,
+    ): ResponseEntity<Void> {
+        cursoService.darDeBajaDocente(id, username, authentication.name)
+        return ResponseEntity.noContent().build()
+    }
+
     @PostMapping("/{id}/archivar")
     fun archivarCurso(
         @PathVariable id: Long,
@@ -70,8 +106,7 @@ class CursoController(
         @RequestParam(name = "archivados", required = false, defaultValue = "false") archivados: Boolean = false,
         authentication: Authentication,
     ): ResponseEntity<List<CursoResponseDTO>> {
-        val esDocente = authentication.authorities.any { it.authority == "ROLE_DOCENTE" }
-        val cursos = cursoService.obtenerCursos(authentication.name, esDocente, archivados)
+        val cursos = cursoService.obtenerCursos(authentication.name, authentication.esDocente(), archivados)
         return ResponseEntity.ok(cursos.map { CursoResponseDTO.desdeModelo(it) })
     }
 
@@ -92,5 +127,21 @@ class CursoController(
         val inscripciones = cursoService.obtenerAlumnos(id, authentication.name)
         val response = CursoAlumnosResponseDTO.desdeModelo(id, inscripciones)
         return ResponseEntity.ok(response)
+    }
+
+    @PostMapping("/{id}/exportar")
+    fun exportarCurso(
+        @PathVariable id: Long,
+        authentication: Authentication,
+    ): ResponseEntity<ByteArrayResource> {
+        val archivo = cursoService.exportarCurso(id, authentication.name)
+        val resource = ByteArrayResource(archivo.contenido)
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"${archivo.nombreArchivo}\"")
+            .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+            .contentLength(archivo.contenido.size.toLong())
+            .body(resource)
     }
 }

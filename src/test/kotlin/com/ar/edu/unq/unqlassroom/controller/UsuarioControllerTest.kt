@@ -1,7 +1,10 @@
-package com.ar.edu.unq.unqlassroom.controller
+﻿package com.ar.edu.unq.unqlassroom.controller
 
 import com.ar.edu.unq.unqlassroom.controller.advice.RestExceptionHandler
+import com.ar.edu.unq.unqlassroom.dto.usuario.request.ActualizarDatosRequestDTO
 import com.ar.edu.unq.unqlassroom.dto.usuario.request.ActualizarNombreRequestDTO
+import com.ar.edu.unq.unqlassroom.exception.DniDuplicadoException
+import com.ar.edu.unq.unqlassroom.exception.EmailDuplicadoException
 import com.ar.edu.unq.unqlassroom.exception.NombreUsuarioInvalidoException
 import com.ar.edu.unq.unqlassroom.exception.UsuarioNotFoundException
 import com.ar.edu.unq.unqlassroom.model.Usuario
@@ -44,13 +47,13 @@ class UsuarioControllerTest {
     }
 
     @Test
-    fun `obtenerUsuarioActual returns 200 and user data`() {
+    fun `obtenerUsuarioActual returns 200 and user data including email and dni`() {
         val auth = UsernamePasswordAuthenticationToken("juanperez", null)
         val usuario = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
-            email = "juan@unq.edu.ar",
+            email = "juan@unq.com.ar",
+            dni = "12345678",
             nombreCompleto = "García Lorca, Juan Manuel",
         )
 
@@ -64,8 +67,143 @@ class UsuarioControllerTest {
             .andExpect(jsonPath("$.id").value(10))
             .andExpect(jsonPath("$.username").value("juanperez"))
             .andExpect(jsonPath("$.esDocente").value(false))
-            .andExpect(jsonPath("$.email").value("juan@unq.edu.ar"))
+            .andExpect(jsonPath("$.email").value("juan@unq.com.ar"))
+            .andExpect(jsonPath("$.dni").value("12345678"))
             .andExpect(jsonPath("$.nombreCompleto").value("García Lorca, Juan Manuel"))
+    }
+
+    @Test
+    fun `actualizarDatos returns 200 and updated user data`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarDatosRequestDTO(
+            nombre = "Juan Manuel",
+            apellido = "García Lorca",
+            email = "juan@correo.com",
+            dni = "35123456",
+        )
+        val usuarioActualizado = Usuario(
+            id = 10L,
+            username = "juanperez",
+            email = "juan@correo.com",
+            dni = "35123456",
+            nombreCompleto = "García Lorca, Juan Manuel",
+        )
+
+        `when`(usuarioService.actualizarDatos(
+            username = "juanperez",
+            nombre = "Juan Manuel",
+            apellido = "García Lorca",
+            email = "juan@correo.com",
+            dni = "35123456",
+        )).thenReturn(usuarioActualizado)
+
+        mockMvc.perform(
+            put("/usuarios/me/datos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.email").value("juan@correo.com"))
+            .andExpect(jsonPath("$.dni").value("35123456"))
+            .andExpect(jsonPath("$.nombreCompleto").value("García Lorca, Juan Manuel"))
+            .andExpect(jsonPath("$.username").value("juanperez"))
+    }
+
+    @Test
+    fun `actualizarDatos returns 400 when email format does not end with com or com ar`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarDatosRequestDTO(
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "juan@unq.edu.ar",
+            dni = "12345678",
+        )
+
+        mockMvc.perform(
+            put("/usuarios/me/datos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
+    }
+
+    @Test
+    fun `actualizarDatos returns 400 when dni has invalid length`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarDatosRequestDTO(
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "juan@correo.com",
+            dni = "123456",
+        )
+
+        mockMvc.perform(
+            put("/usuarios/me/datos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
+    }
+
+    @Test
+    fun `actualizarDatos returns 409 when email is already registered in another account`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarDatosRequestDTO(
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "repetido@correo.com",
+            dni = "12345678",
+        )
+
+        `when`(usuarioService.actualizarDatos(
+            username = "juanperez",
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "repetido@correo.com",
+            dni = "12345678",
+        )).thenThrow(EmailDuplicadoException())
+
+        mockMvc.perform(
+            put("/usuarios/me/datos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("EMAIL_DUPLICADO"))
+    }
+
+    @Test
+    fun `actualizarDatos returns 409 when dni is already registered in another account`() {
+        val auth = UsernamePasswordAuthenticationToken("juanperez", null)
+        val request = ActualizarDatosRequestDTO(
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "libre@correo.com",
+            dni = "40123456",
+        )
+
+        `when`(usuarioService.actualizarDatos(
+            username = "juanperez",
+            nombre = "Juan",
+            apellido = "Pérez",
+            email = "libre@correo.com",
+            dni = "40123456",
+        )).thenThrow(DniDuplicadoException())
+
+        mockMvc.perform(
+            put("/usuarios/me/datos")
+                .principal(auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isConflict)
+            .andExpect(jsonPath("$.errorCode").value("DNI_DUPLICADO"))
     }
 
     @Test
@@ -78,8 +216,7 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
-            email = "juan@unq.edu.ar",
+            email = "juan@unq.com.ar",
             nombreCompleto = "García Lorca, Juan Manuel",
         )
 
@@ -108,8 +245,7 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
-            email = "juan@unq.edu.ar",
+            email = "juan@unq.com.ar",
             nombreCompleto = nombreEsperado,
         )
 
@@ -137,7 +273,6 @@ class UsuarioControllerTest {
         val usuarioActualizado = Usuario(
             id = 10L,
             username = "juanperez",
-            esDocente = false,
             email = "juan@unq.edu.ar",
             nombreCompleto = nombreEsperado,
         )
